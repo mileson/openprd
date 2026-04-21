@@ -91,7 +91,7 @@ function hasValue(value) {
   return true;
 }
 
-function renderShell({ lang = 'en', title, subtitle, svgMarkup, summaryCards, sidePanels, footer }) {
+function renderShell({ lang = 'en', title, subtitle, projectName, svgMarkup, summaryCards, sidePanels, footer }) {
   const cards = summaryCards.map((card) => {
     const cardTheme = theme(card.color);
     const items = (card.items ?? []).map((item) => `<li>${escapeHtml(trimText(item, 132))}</li>`).join('');
@@ -149,6 +149,7 @@ function renderShell({ lang = 'en', title, subtitle, svgMarkup, summaryCards, si
       }
       .page { max-width: 1240px; margin: 0 auto; padding: 32px 24px 48px; }
       .header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+      .header-copy { display: flex; flex-direction: column; gap: 4px; }
       .pulse {
         width: 12px; height: 12px; border-radius: 999px; background: #22d3ee;
         box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.7); animation: pulse 2s infinite;
@@ -157,6 +158,18 @@ function renderShell({ lang = 'en', title, subtitle, svgMarkup, summaryCards, si
         0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.7); }
         70% { box-shadow: 0 0 0 10px rgba(34, 211, 238, 0); }
         100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+      }
+      .project-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        width: fit-content;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        background: rgba(15, 23, 42, 0.72);
+        color: #cbd5e1;
+        font-size: 11px;
       }
       h1 { margin: 0; font-size: 28px; }
       .subtitle-block { margin: 6px 0 0 24px; color: var(--muted); font-size: 13px; }
@@ -185,7 +198,8 @@ function renderShell({ lang = 'en', title, subtitle, svgMarkup, summaryCards, si
     <div class="page">
       <div class="header">
         <div class="pulse"></div>
-        <div>
+        <div class="header-copy">
+          <div class="project-chip">Project · ${escapeHtml(projectName ?? title)}</div>
           <h1>${escapeHtml(title)}</h1>
           <p class="subtitle-block">${escapeHtml(subtitle)}</p>
         </div>
@@ -352,6 +366,7 @@ export function buildArchitectureDiagramModel(snapshot) {
       },
     ],
     metadata: {
+      projectName: snapshot.title,
       productType: snapshot.productType ?? 'unclassified',
       owner: snapshot.owner,
       versionId: snapshot.versionId,
@@ -420,6 +435,7 @@ export function renderArchitectureDiagramHtml(model) {
     lang: model.locale ?? 'en',
     title: model.title,
     subtitle: model.subtitle,
+    projectName: model.metadata?.projectName ?? model.title,
     svgMarkup,
     summaryCards: model.summaryCards,
     sidePanels: model.sidePanels,
@@ -541,6 +557,7 @@ export function buildProductFlowDiagramModel(snapshot) {
       },
     ],
     metadata: {
+      projectName: snapshot.title,
       productType: snapshot.productType ?? 'unclassified',
       owner: snapshot.owner,
       versionId: snapshot.versionId,
@@ -614,6 +631,7 @@ export function renderProductFlowDiagramHtml(model) {
     lang: model.locale ?? 'en',
     title: model.title,
     subtitle: model.subtitle,
+    projectName: model.metadata?.projectName ?? model.title,
     svgMarkup,
     summaryCards: model.summaryCards,
     sidePanels: model.sidePanels,

@@ -1,5 +1,7 @@
 # OpenPrd
 
+[简体中文](./README_CN.md) | English
+
 > AI-native PRD workspace and lifecycle CLI for requirement clarification, review gates, diagram confirmation, and handoff.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
