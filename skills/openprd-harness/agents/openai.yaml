@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenPrd Harness"
+  short_description: "Run the full OpenPrd workflow with safe defaults"
+  default_prompt: "Use $openprd-harness to drive an OpenPrd workspace from clarification through handoff."

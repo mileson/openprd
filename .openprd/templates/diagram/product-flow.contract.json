@@ -1,0 +1,76 @@
+{
+  "type": "product-flow",
+  "locale": "en",
+  "title": "Example Product Flow Review",
+  "subtitle": "Explain the intended user/system sequence for confirmation",
+  "actors": [
+    "User",
+    "System"
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "name": "User enters flow",
+      "type": "user_action",
+      "lane": "User",
+      "description": "The flow starts here"
+    },
+    {
+      "id": "step-2",
+      "name": "System processes request",
+      "type": "system_process",
+      "lane": "System",
+      "details": [
+        "Core system response"
+      ]
+    },
+    {
+      "id": "step-3",
+      "name": "Decision point",
+      "type": "decision",
+      "lane": "System",
+      "description": "Branch based on outcome"
+    },
+    {
+      "id": "step-4",
+      "name": "Successful completion",
+      "type": "success",
+      "lane": "System",
+      "description": "Happy path outcome"
+    }
+  ],
+  "transitions": [
+    {
+      "from_step_id": "step-1",
+      "to_step_id": "step-2",
+      "label": "Start"
+    },
+    {
+      "from_step_id": "step-2",
+      "to_step_id": "step-3",
+      "label": "Continue"
+    },
+    {
+      "from_step_id": "step-3",
+      "to_step_id": "step-4",
+      "label": "Success",
+      "type": "standard"
+    }
+  ],
+  "summaryCards": [
+    {
+      "title": "Review Focus",
+      "color": "decision",
+      "items": [
+        "Confirm the step order",
+        "Confirm missing recovery paths"
+      ]
+    }
+  ],
+  "reviewInstructions": [
+    "Confirm missing steps, decisions, and error paths."
+  ],
+  "metadata": {
+    "reviewStatus": "pending-confirmation"
+  }
+}

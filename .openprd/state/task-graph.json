@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "generatedAt": "2026-04-15T00:00:00.000Z",
+  "nextReadyNode": "classify",
+  "workflow": [
+    {
+      "id": "classify",
+      "label": "classify",
+      "kind": "workflow-step",
+      "status": "ready",
+      "dependsOn": []
+    },
+    {
+      "id": "interview",
+      "label": "interview",
+      "kind": "workflow-step",
+      "status": "blocked",
+      "dependsOn": ["classify"]
+    },
+    {
+      "id": "synthesize",
+      "label": "synthesize",
+      "kind": "workflow-step",
+      "status": "blocked",
+      "dependsOn": ["classify", "interview"]
+    },
+    {
+      "id": "validate",
+      "label": "validate",
+      "kind": "workflow-step",
+      "status": "blocked",
+      "dependsOn": ["synthesize"]
+    },
+    {
+      "id": "freeze",
+      "label": "freeze",
+      "kind": "workflow-step",
+      "status": "blocked",
+      "dependsOn": ["validate"]
+    },
+    {
+      "id": "handoff",
+      "label": "handoff",
+      "kind": "workflow-step",
+      "status": "blocked",
+      "dependsOn": ["freeze"]
+    },
+    {
+      "id": "archive",
+      "label": "archive",
+      "kind": "workflow-step",
+      "status": "blocked",
+      "dependsOn": ["handoff"]
+    }
+  ],
+  "edges": [
+    { "from": "classify", "to": "interview", "relation": "enables" },
+    { "from": "interview", "to": "synthesize", "relation": "enables" },
+    { "from": "synthesize", "to": "validate", "relation": "enables" },
+    { "from": "validate", "to": "freeze", "relation": "guards" },
+    { "from": "freeze", "to": "handoff", "relation": "enables" },
+    { "from": "handoff", "to": "archive", "relation": "enables" },
+    { "from": "interview", "to": "open-questions", "relation": "updates" },
+    { "from": "synthesize", "to": "prd", "relation": "produces" },
+    { "from": "synthesize", "to": "flows", "relation": "produces" },
+    { "from": "synthesize", "to": "roles", "relation": "produces" },
+    { "from": "freeze", "to": "verification", "relation": "produces" },
+    { "from": "freeze", "to": "handoff", "relation": "produces" }
+  ],
+  "artifacts": [
+    {
+      "id": "decision-log",
+      "label": "decision-log.md",
+      "kind": "record",
+      "status": "ready",
+      "dependsOn": []
+    },
+    {
+      "id": "open-questions",
+      "label": "open-questions.md",
+      "kind": "record",
+      "status": "ready",
+      "dependsOn": ["interview"]
+    },
+    {
+      "id": "progress",
+      "label": "progress.md",
+      "kind": "record",
+      "status": "ready",
+      "dependsOn": ["classify"]
+    },
+    {
+      "id": "verification",
+      "label": "verification.md",
+      "kind": "record",
+      "status": "ready",
+      "dependsOn": ["freeze"]
+    },
+    {
+      "id": "prd",
+      "label": "prd.md",
+      "kind": "artifact",
+      "status": "ready",
+      "dependsOn": ["synthesize"]
+    },
+    {
+      "id": "flows",
+      "label": "flows.md",
+      "kind": "artifact",
+      "status": "ready",
+      "dependsOn": ["synthesize"]
+    },
+    {
+      "id": "roles",
+      "label": "roles.md",
+      "kind": "artifact",
+      "status": "ready",
+      "dependsOn": ["synthesize"]
+    },
+    {
+      "id": "handoff",
+      "label": "handoff.md",
+      "kind": "artifact",
+      "status": "blocked",
+      "dependsOn": ["freeze"]
+    }
+  ],
+  "blockers": []
+}

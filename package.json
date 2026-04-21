@@ -1,0 +1,27 @@
+{
+  "name": "@openprd/cli",
+  "version": "0.1.0",
+  "description": "AI-native PRD workspace and lifecycle CLI",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "openprd": "./bin/openprd.js"
+  },
+  "files": [
+    "AGENTS.md",
+    "bin",
+    "src",
+    ".openprd",
+    "skills"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "start": "node ./bin/openprd.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "yaml": "^2.8.2"
+  }
+}

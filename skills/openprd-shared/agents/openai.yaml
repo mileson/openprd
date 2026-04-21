@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenPrd Shared"
+  short_description: "Shared rules for OpenPrd agent workflows"
+  default_prompt: "Use $openprd-shared to follow the shared guardrails for operating an OpenPrd workspace."

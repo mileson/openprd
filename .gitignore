@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# macOS
+.DS_Store
+
+# local tooling state
+.omx/
+.playwright-mcp/
+
+# local demo artifacts
+openprd-architecture-diagram-demo.png
+
+# temp / logs
+*.log
+coverage/

@@ -1,0 +1,53 @@
+{
+  "type": "architecture",
+  "locale": "en",
+  "title": "Example Architecture Review",
+  "subtitle": "Explain the intended system shape for user confirmation",
+  "components": [
+    {
+      "id": "frontend",
+      "name": "Frontend Experience",
+      "type": "frontend",
+      "subtitle": "User-facing layer",
+      "details": [
+        "Main entry surface"
+      ]
+    },
+    {
+      "id": "backend",
+      "name": "Core Product Logic",
+      "type": "backend",
+      "subtitle": "Core orchestration",
+      "details": [
+        "Business rules"
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "source": "frontend",
+      "target": "backend",
+      "label": "Primary interaction",
+      "type": "standard"
+    }
+  ],
+  "summaryCards": [
+    {
+      "title": "Scope",
+      "color": "frontend",
+      "items": [
+        "What is in scope",
+        "What is out of scope"
+      ]
+    }
+  ],
+  "reviewInstructions": [
+    "Confirm missing systems, boundaries, and dependencies."
+  ],
+  "metadata": {
+    "versionId": "v0001",
+    "owner": "PM",
+    "targetSystem": "OpenSpec",
+    "reviewStatus": "pending-confirmation"
+  }
+}

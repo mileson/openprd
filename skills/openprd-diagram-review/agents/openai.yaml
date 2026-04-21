@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenPrd Diagram Review"
+  short_description: "Generate and review OpenPrd diagrams before freeze"
+  default_prompt: "Use $openprd-diagram-review to generate a diagram artifact and get user confirmation before freeze."

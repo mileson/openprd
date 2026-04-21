@@ -1,0 +1,38 @@
+version: 1
+schema: prd-core
+activeTemplatePack: base
+
+supportedProductTypes:
+  - consumer
+  - b2b
+  - agent
+
+templateInheritance:
+  - base
+  - industry
+  - company
+  - project
+  - session
+
+workflow:
+  discovery:
+    steps:
+      - classify
+      - interview
+      - synthesize
+      - validate
+      - freeze
+  handoff:
+    target: openspec
+
+qualityGates:
+  freezeRequires:
+    - meta
+    - problem
+    - users
+    - goals
+    - scope
+    - scenarios
+    - requirements
+    - constraints
+    - risks
