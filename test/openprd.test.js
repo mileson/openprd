@@ -211,7 +211,7 @@ test('diagram creates reviewable architecture artifacts', async () => {
   const model = JSON.parse(await fs.readFile(result.jsonPath, 'utf8'));
 
   assert.ok(html.includes('Architecture Review'));
-  assert.ok(html.includes('Project · AI 操作导师'));
+  assert.ok(html.includes('AI 操作导师'));
   assert.equal(result.type, 'architecture');
   assert.equal(model.metadata.versionId, 'v0001');
   assert.equal(Array.isArray(model.components), true);
@@ -261,7 +261,7 @@ test('diagram creates reviewable product flow artifacts', async () => {
   const model = JSON.parse(await fs.readFile(result.jsonPath, 'utf8'));
 
   assert.ok(html.includes('Product Flow Review'));
-  assert.ok(html.includes('Project · AI 操作导师'));
+  assert.ok(html.includes('AI 操作导师'));
   assert.equal(result.type, 'product-flow');
   assert.equal(Array.isArray(model.steps), true);
   assert.equal(model.steps.length >= 4, true);

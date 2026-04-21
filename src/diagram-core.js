@@ -199,7 +199,7 @@ function renderShell({ lang = 'en', title, subtitle, projectName, svgMarkup, sum
       <div class="header">
         <div class="pulse"></div>
         <div class="header-copy">
-          <div class="project-chip">Project · ${escapeHtml(projectName ?? title)}</div>
+          <div class="project-chip">${escapeHtml(projectName ?? title)}</div>
           <h1>${escapeHtml(title)}</h1>
           <p class="subtitle-block">${escapeHtml(subtitle)}</p>
         </div>
@@ -312,8 +312,8 @@ export function buildArchitectureDiagramModel(snapshot) {
     version: 1,
     generatedAt: new Date().toISOString(),
     locale: 'en',
-    title: `${snapshot.title} · Architecture Review`,
-    subtitle: `${snapshot.productType ?? 'unclassified'} product · generated from OpenPrd`,
+    title: 'Architecture Review',
+    subtitle: 'Review the proposed system boundaries, dependencies, and handoff shape before freeze.',
     components: buildArchitectureComponents(snapshot),
     flows: [
       { source: 'users', target: 'experience', label: trimText(primaryFlows[0] ?? 'User enters the product flow', 40), type: 'standard' },
@@ -505,8 +505,8 @@ export function buildProductFlowDiagramModel(snapshot) {
     version: 1,
     generatedAt: new Date().toISOString(),
     locale: 'en',
-    title: `${snapshot.title} · Product Flow Review`,
-    subtitle: `${snapshot.productType ?? 'unclassified'} journey · generated from OpenPrd`,
+    title: 'Product Flow Review',
+    subtitle: 'Review the primary journey, decision points, and recovery paths before freeze.',
     actors: primaryUsers,
     steps,
     transitions: [
