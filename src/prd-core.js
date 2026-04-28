@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { buildArchitectureDiagramModel, buildProductFlowDiagramModel, renderDiagramMermaidFromModel } from './diagram-core.js';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -231,6 +232,34 @@ function renderSection(title, fields) {
   return `## ${title}\n\n${fields.map(([label, value]) => renderField(label, value)).join('\n')}\n`;
 }
 
+function renderMermaidSection(snapshot) {
+  const productFlow = renderDiagramMermaidFromModel(
+    'product-flow',
+    buildProductFlowDiagramModel(snapshot)
+  );
+  const architecture = renderDiagramMermaidFromModel(
+    'architecture',
+    buildArchitectureDiagramModel(snapshot)
+  );
+
+  return [
+    '## Visual Diagrams',
+    '',
+    '### Product Flow',
+    '',
+    '```mermaid',
+    productFlow,
+    '```',
+    '',
+    '### Architecture',
+    '',
+    '```mermaid',
+    architecture,
+    '```',
+    '',
+  ].join('\n');
+}
+
 export function renderPrdMarkdown(snapshot) {
   const { sections } = snapshot;
   const lines = [
@@ -275,6 +304,7 @@ export function renderPrdMarkdown(snapshot) {
       ['Edge cases', sections.scenarios.edgeCases],
       ['Failure modes', sections.scenarios.failureModes],
     ]),
+    renderMermaidSection(snapshot),
     renderSection('Requirements', [
       ['Functional requirements', sections.requirements.functional],
       ['Non-functional requirements', sections.requirements.nonFunctional],

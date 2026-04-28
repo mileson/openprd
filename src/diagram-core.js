@@ -13,6 +13,52 @@ function trimText(value, max = 96) {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }
 
+function mermaidId(value, fallback = 'node') {
+  const text = `${value ?? ''}`.trim();
+  const normalized = text
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_+/g, '_');
+  const id = normalized || fallback;
+  return /^[a-zA-Z_]/.test(id) ? id : `${fallback}_${id}`;
+}
+
+function mermaidText(value, max = 64) {
+  return trimText(value, max)
+    .replace(/["`]/g, "'")
+    .replace(/[|<>]/g, ' ')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function mermaidNodeLabel(primary, secondary) {
+  const title = mermaidText(primary, 34);
+  const subtitle = mermaidText(secondary, 64);
+  return subtitle && subtitle !== 'TBD' ? `${title}<br/>${subtitle}` : title;
+}
+
+function mermaidNodeDeclaration(id, label, type) {
+  if (type === 'decision') {
+    return `  ${id}{"${label}"}`;
+  }
+  if (type === 'success') {
+    return `  ${id}(["${label}"])`;
+  }
+  if (type === 'error_path') {
+    return `  ${id}[["${label}"]]`;
+  }
+  return `  ${id}["${label}"]`;
+}
+
+function mermaidEdge(source, target, label, type = 'standard') {
+  const cleanLabel = mermaidText(label, 42);
+  const arrow = type === 'security' || type === 'error_path' ? '-.->' : '-->';
+  return cleanLabel && cleanLabel !== 'TBD'
+    ? `  ${source} ${arrow}|"${cleanLabel}"| ${target}`
+    : `  ${source} ${arrow} ${target}`;
+}
+
 function normalizeList(value, fallback = []) {
   if (Array.isArray(value)) {
     const items = value.map((item) => `${item ?? ''}`.trim()).filter(Boolean);
@@ -637,6 +683,71 @@ export function renderProductFlowDiagramHtml(model) {
     sidePanels: model.sidePanels,
     footer: `Owner: ${model.metadata.owner} · Version: ${model.metadata.versionId} · Target: ${model.metadata.targetSystem} · Generated: ${model.generatedAt}`,
   });
+}
+
+export function renderProductFlowMermaid(model) {
+  const steps = Array.isArray(model.steps) ? model.steps : [];
+  const idMap = new Map();
+  const declarations = steps.map((step, index) => {
+    const id = mermaidId(step.id, `step_${index + 1}`);
+    idMap.set(step.id, id);
+    const label = mermaidNodeLabel(step.name, step.subtitle ?? step.description);
+    return mermaidNodeDeclaration(id, label, step.type);
+  });
+  const edges = (Array.isArray(model.transitions) ? model.transitions : [])
+    .map((transition) => {
+      const from = idMap.get(transition.from) ?? mermaidId(transition.from, 'from');
+      const to = idMap.get(transition.to) ?? mermaidId(transition.to, 'to');
+      return mermaidEdge(from, to, transition.label, transition.type);
+    });
+
+  return [
+    'flowchart LR',
+    ...declarations,
+    ...edges,
+  ].join('\n');
+}
+
+export function renderArchitectureMermaid(model) {
+  const components = Array.isArray(model.components) ? model.components : [];
+  const idMap = new Map();
+  const external = [];
+  const internal = [];
+
+  for (const [index, component] of components.entries()) {
+    const id = mermaidId(component.id, `component_${index + 1}`);
+    idMap.set(component.id, id);
+    const label = mermaidNodeLabel(component.name, component.subtitle ?? component.description);
+    const declaration = mermaidNodeDeclaration(id, label, component.type === 'security' ? 'error_path' : 'system_process');
+    if (component.type === 'external') {
+      external.push(declaration);
+    } else {
+      internal.push(declaration);
+    }
+  }
+
+  const edges = (Array.isArray(model.flows) ? model.flows : [])
+    .map((flow) => {
+      const source = idMap.get(flow.source) ?? mermaidId(flow.source, 'source');
+      const target = idMap.get(flow.target) ?? mermaidId(flow.target, 'target');
+      return mermaidEdge(source, target, flow.label, flow.type);
+    });
+
+  return [
+    'flowchart LR',
+    ...external,
+    '  subgraph solution["Proposed Solution Boundary"]',
+    ...internal.map((line) => `  ${line}`),
+    '  end',
+    ...edges,
+  ].join('\n');
+}
+
+export function renderDiagramMermaidFromModel(type, model) {
+  if (type === 'product-flow') {
+    return renderProductFlowMermaid(model);
+  }
+  return renderArchitectureMermaid(model);
 }
 
 export function buildDiagramArtifact(snapshot, options = {}) {

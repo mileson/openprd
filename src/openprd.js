@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { analyzePrdSnapshot, buildPrdSnapshot, diffSnapshots, formatVersionId, getRequiredFieldDescriptors, renderPrdMarkdown, summarizeSnapshot } from './prd-core.js';
-import { buildDiagramArtifact, renderDiagramArtifactFromModel, validateDiagramContract } from './diagram-core.js';
+import { buildDiagramArtifact, renderDiagramArtifactFromModel, renderDiagramMermaidFromModel, validateDiagramContract } from './diagram-core.js';
 
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SEED_WORKSPACE = path.join(PACKAGE_ROOT, '.openprd');
@@ -436,8 +436,10 @@ async function loadWorkspace(projectRoot) {
     activeHandoff: cjoin(workspaceRoot, 'engagements', 'active', 'handoff.md'),
     activeArchitectureDiagramHtml: cjoin(workspaceRoot, 'engagements', 'active', 'architecture-diagram.html'),
     activeArchitectureDiagramJson: cjoin(workspaceRoot, 'engagements', 'active', 'architecture-diagram.json'),
+    activeArchitectureDiagramMermaid: cjoin(workspaceRoot, 'engagements', 'active', 'architecture-diagram.mmd'),
     activeProductFlowDiagramHtml: cjoin(workspaceRoot, 'engagements', 'active', 'product-flow-diagram.html'),
     activeProductFlowDiagramJson: cjoin(workspaceRoot, 'engagements', 'active', 'product-flow-diagram.json'),
+    activeProductFlowDiagramMermaid: cjoin(workspaceRoot, 'engagements', 'active', 'product-flow-diagram.mmd'),
     decisionLog: cjoin(workspaceRoot, 'engagements', 'active', 'decision-log.md'),
     openQuestionsLog: cjoin(workspaceRoot, 'engagements', 'active', 'open-questions.md'),
     progressLog: cjoin(workspaceRoot, 'engagements', 'active', 'progress.md'),
@@ -1152,7 +1154,9 @@ function renderBulletList(items) {
 
 function renderFlowDoc(snapshot) {
   const { scenarios } = snapshot.sections;
-  return `# Flows\n\n## Primary Flow\n\n${renderBulletList(scenarios.primaryFlows)}\n\n## Edge Cases\n\n${renderBulletList(scenarios.edgeCases)}\n\n## Failure Modes\n\n${renderBulletList(scenarios.failureModes)}\n`;
+  const productFlow = buildDiagramArtifact(snapshot, { type: 'product-flow' });
+  const mermaid = renderDiagramMermaidFromModel('product-flow', productFlow.model);
+  return `# Flows\n\n## Primary Flow\n\n${renderBulletList(scenarios.primaryFlows)}\n\n## Mermaid Flow\n\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n\n## Edge Cases\n\n${renderBulletList(scenarios.edgeCases)}\n\n## Failure Modes\n\n${renderBulletList(scenarios.failureModes)}\n`;
 }
 
 function renderRolesDoc(snapshot) {
@@ -1193,6 +1197,7 @@ function resolveDiagramPaths(ws, type = 'architecture') {
     return {
       htmlPath: ws.paths.activeProductFlowDiagramHtml,
       jsonPath: ws.paths.activeProductFlowDiagramJson,
+      mermaidPath: ws.paths.activeProductFlowDiagramMermaid,
       label: 'product flow',
     };
   }
@@ -1200,6 +1205,7 @@ function resolveDiagramPaths(ws, type = 'architecture') {
   return {
     htmlPath: ws.paths.activeArchitectureDiagramHtml,
     jsonPath: ws.paths.activeArchitectureDiagramJson,
+    mermaidPath: ws.paths.activeArchitectureDiagramMermaid,
     label: 'architecture',
   };
 }
@@ -1298,7 +1304,7 @@ async function diagramWorkspace(projectRoot, options = {}) {
     throw new Error(`Unsupported diagram review status: ${options.mark}`);
   }
 
-  const { htmlPath, jsonPath, label } = resolveDiagramPaths(ws, type);
+  const { htmlPath, jsonPath, mermaidPath, label } = resolveDiagramPaths(ws, type);
   if (options.mark && !options.input && await exists(jsonPath)) {
     const model = await readJson(jsonPath);
     model.metadata = {
@@ -1306,12 +1312,15 @@ async function diagramWorkspace(projectRoot, options = {}) {
       reviewStatus: options.mark,
     };
     const html = renderDiagramArtifactFromModel(type, model);
+    const mermaid = renderDiagramMermaidFromModel(type, model);
     await writeJson(jsonPath, model);
     await writeText(htmlPath, html);
+    await writeText(mermaidPath, `${mermaid}\n`);
     await appendWorkflowEvent(ws, 'diagram_marked', {
       diagramType: type,
       reviewStatus: options.mark,
       htmlPath,
+      mermaidPath,
     });
     await appendDecision(ws, [
       `Marked ${label} diagram as ${options.mark}.`,
@@ -1327,6 +1336,7 @@ async function diagramWorkspace(projectRoot, options = {}) {
       inputPath: null,
       htmlPath,
       jsonPath,
+      mermaidPath,
       opened: Boolean(options.open),
       marked: options.mark,
     };
@@ -1366,18 +1376,22 @@ async function diagramWorkspace(projectRoot, options = {}) {
     artifact.html = renderDiagramArtifactFromModel(type, artifact.model);
   }
 
+  const mermaid = renderDiagramMermaidFromModel(type, artifact.model);
   await writeJson(jsonPath, artifact.model);
   await writeText(htmlPath, artifact.html);
+  await writeText(mermaidPath, `${mermaid}\n`);
   await appendWorkflowEvent(ws, 'diagram_generated', {
     versionId: snapshot.versionId,
     productType: snapshot.productType,
     diagramType: type,
     inputPath: options.input ? path.resolve(options.input) : null,
     htmlPath,
+    mermaidPath,
   });
   await appendProgress(ws, [
     `Generated ${label} diagram artifact for ${snapshot.title}.`,
     `HTML: ${htmlPath}`,
+    `Mermaid: ${mermaidPath}`,
     ...(options.input ? [`Input contract: ${path.resolve(options.input)}`] : []),
   ]);
   await appendDecision(ws, [
@@ -1399,6 +1413,7 @@ async function diagramWorkspace(projectRoot, options = {}) {
     inputPath: options.input ? path.resolve(options.input) : null,
     htmlPath,
     jsonPath,
+    mermaidPath,
     opened: Boolean(options.open),
     marked: options.mark ?? null,
   };
@@ -2104,8 +2119,10 @@ async function handoffWorkspace(projectRoot, target) {
       ...CORE_TEMPLATE_FILES,
       ...((await exists(ws.paths.activeArchitectureDiagramHtml)) ? ['engagements/active/architecture-diagram.html'] : []),
       ...((await exists(ws.paths.activeArchitectureDiagramJson)) ? ['engagements/active/architecture-diagram.json'] : []),
+      ...((await exists(ws.paths.activeArchitectureDiagramMermaid)) ? ['engagements/active/architecture-diagram.mmd'] : []),
       ...((await exists(ws.paths.activeProductFlowDiagramHtml)) ? ['engagements/active/product-flow-diagram.html'] : []),
       ...((await exists(ws.paths.activeProductFlowDiagramJson)) ? ['engagements/active/product-flow-diagram.json'] : []),
+      ...((await exists(ws.paths.activeProductFlowDiagramMermaid)) ? ['engagements/active/product-flow-diagram.mmd'] : []),
     ],
     nextStep: target === 'openspec'
       ? 'Import the PRD snapshot into an OpenSpec change and continue with specs/design/tasks.'
@@ -2120,11 +2137,17 @@ async function handoffWorkspace(projectRoot, target) {
   if (await exists(ws.paths.activeArchitectureDiagramJson)) {
     await fs.copyFile(ws.paths.activeArchitectureDiagramJson, cjoin(exportDir, 'architecture-diagram.json'));
   }
+  if (await exists(ws.paths.activeArchitectureDiagramMermaid)) {
+    await fs.copyFile(ws.paths.activeArchitectureDiagramMermaid, cjoin(exportDir, 'architecture-diagram.mmd'));
+  }
   if (await exists(ws.paths.activeProductFlowDiagramHtml)) {
     await fs.copyFile(ws.paths.activeProductFlowDiagramHtml, cjoin(exportDir, 'product-flow-diagram.html'));
   }
   if (await exists(ws.paths.activeProductFlowDiagramJson)) {
     await fs.copyFile(ws.paths.activeProductFlowDiagramJson, cjoin(exportDir, 'product-flow-diagram.json'));
+  }
+  if (await exists(ws.paths.activeProductFlowDiagramMermaid)) {
+    await fs.copyFile(ws.paths.activeProductFlowDiagramMermaid, cjoin(exportDir, 'product-flow-diagram.mmd'));
   }
   await appendWorkflowEvent(ws, 'handoff', {
     target,
@@ -2522,6 +2545,7 @@ function printDiagramResult(result, json) {
   }
   console.log(`HTML: ${result.htmlPath}`);
   console.log(`JSON: ${result.jsonPath}`);
+  console.log(`Mermaid: ${result.mermaidPath}`);
   if (result.inputPath) {
     console.log(`Input contract: ${result.inputPath}`);
   }

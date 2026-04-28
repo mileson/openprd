@@ -146,6 +146,12 @@ test('synthesize creates versioned PRD snapshots and diff detects changes', asyn
   });
   assert.equal(first.snapshot.versionId, 'v0001');
   assert.ok(first.snapshot.content.includes('Growth Notes'));
+  assert.ok(first.snapshot.content.includes('## Visual Diagrams'));
+  assert.ok(first.snapshot.content.includes('```mermaid'));
+  assert.ok(first.snapshot.content.includes('flowchart LR'));
+  const flows = await fs.readFile(path.join(project, '.openprd', 'engagements', 'active', 'flows.md'), 'utf8');
+  assert.ok(flows.includes('## Mermaid Flow'));
+  assert.ok(flows.includes('```mermaid'));
 
   const second = await synthesizeWorkspace(project, {
     title: 'Growth Notes',
@@ -209,9 +215,12 @@ test('diagram creates reviewable architecture artifacts', async () => {
   const result = await diagramWorkspace(project, { open: false, type: 'architecture' });
   const html = await fs.readFile(result.htmlPath, 'utf8');
   const model = JSON.parse(await fs.readFile(result.jsonPath, 'utf8'));
+  const mermaid = await fs.readFile(result.mermaidPath, 'utf8');
 
   assert.ok(html.includes('Architecture Review'));
   assert.ok(html.includes('AI 操作导师'));
+  assert.ok(mermaid.includes('flowchart LR'));
+  assert.ok(mermaid.includes('Proposed Solution Boundary'));
   assert.equal(result.type, 'architecture');
   assert.equal(model.metadata.versionId, 'v0001');
   assert.equal(Array.isArray(model.components), true);
@@ -259,9 +268,12 @@ test('diagram creates reviewable product flow artifacts', async () => {
   const result = await diagramWorkspace(project, { open: false, type: 'product-flow' });
   const html = await fs.readFile(result.htmlPath, 'utf8');
   const model = JSON.parse(await fs.readFile(result.jsonPath, 'utf8'));
+  const mermaid = await fs.readFile(result.mermaidPath, 'utf8');
 
   assert.ok(html.includes('Product Flow Review'));
   assert.ok(html.includes('AI 操作导师'));
+  assert.ok(mermaid.includes('flowchart LR'));
+  assert.ok(mermaid.includes('Decision Point'));
   assert.equal(result.type, 'product-flow');
   assert.equal(Array.isArray(model.steps), true);
   assert.equal(model.steps.length >= 4, true);
@@ -315,9 +327,11 @@ test('diagram can render from an explicit contract input', async () => {
   const result = await diagramWorkspace(project, { open: false, type: 'product-flow', input: contractPath });
   const html = await fs.readFile(result.htmlPath, 'utf8');
   const model = JSON.parse(await fs.readFile(result.jsonPath, 'utf8'));
+  const mermaid = await fs.readFile(result.mermaidPath, 'utf8');
 
   assert.equal(result.inputPath, contractPath);
   assert.ok(html.includes('首次上手流程图'));
+  assert.ok(mermaid.includes('首次上手流程图') || mermaid.includes('打开产品'));
   assert.equal(model.locale, 'zh-CN');
   assert.equal(model.steps[0].name, '打开产品');
 });
@@ -373,7 +387,9 @@ test('diagram mark updates review status on existing artifact', async () => {
   assert.equal(marked.marked, 'confirmed');
 
   const model = JSON.parse(await fs.readFile(marked.jsonPath, 'utf8'));
+  const mermaid = await fs.readFile(marked.mermaidPath, 'utf8');
   assert.equal(model.metadata.reviewStatus, 'confirmed');
+  assert.ok(mermaid.includes('flowchart LR'));
 });
 
 test('next suggests classify for a fresh workspace', async () => {
