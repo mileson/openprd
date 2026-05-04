@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const OPENPRD_AGENT_TOOLS = ['codex', 'claude', 'cursor'];
@@ -13,6 +14,7 @@ const OPENPRD_HARNESS_EVENTS = cjoin(OPENPRD_HARNESS_DIR, 'events.jsonl');
 const OPENPRD_HARNESS_HOOK_STATE = cjoin(OPENPRD_HARNESS_DIR, 'hook-state.json');
 const OPENPRD_HARNESS_MANIFEST = cjoin(OPENPRD_HARNESS_DIR, 'install-manifest.json');
 const OPENPRD_HARNESS_DRIFT = cjoin(OPENPRD_HARNESS_DIR, 'drift-report.json');
+const LEGACY_CODEX_HOOK_OUTPUT_FIELDS = ['should_stop', 'additional_contexts', 'should_block', 'block_reason'];
 
 const CANONICAL_SKILLS = [
   {
@@ -1273,6 +1275,107 @@ async function collectDoctorCheckAbsolute(checks, pathName, absolutePath, predic
   checks.push({ path: pathName, ok, message: ok ? 'ok' : message });
 }
 
+function codexHookSmokePayload(projectRoot, eventName, smokeId) {
+  if (eventName === 'SessionStart') {
+    return { cwd: projectRoot, session_id: smokeId };
+  }
+  if (eventName === 'UserPromptSubmit') {
+    return { cwd: projectRoot, prompt: `OpenPrd doctor hook smoke ${smokeId}` };
+  }
+  if (eventName === 'PreToolUse') {
+    return {
+      cwd: projectRoot,
+      tool_name: 'Read',
+      tool_input: {
+        file_path: '.openprd/state/current.json',
+      },
+    };
+  }
+  if (eventName === 'PostToolUse') {
+    return {
+      cwd: projectRoot,
+      tool_name: 'Read',
+      tool_input: {
+        file_path: '.openprd/state/current.json',
+      },
+      tool_response: {},
+    };
+  }
+  return { cwd: projectRoot };
+}
+
+function validateCodexHookSmokeOutput(eventName, run) {
+  if (run.error) {
+    return `Codex hook smoke failed for ${eventName}: ${run.error.message}`;
+  }
+  if (run.status !== 0) {
+    return `Codex hook smoke failed for ${eventName}: exit ${run.status}; ${String(run.stderr ?? '').trim() || 'no stderr'}`;
+  }
+
+  let output;
+  try {
+    output = JSON.parse(String(run.stdout ?? '').trim());
+  } catch (error) {
+    return `Codex hook smoke emitted invalid JSON for ${eventName}: ${error.message}`;
+  }
+
+  if (!output || typeof output !== 'object' || Array.isArray(output)) {
+    return `Codex hook smoke emitted a non-object payload for ${eventName}.`;
+  }
+
+  const legacyFields = LEGACY_CODEX_HOOK_OUTPUT_FIELDS.filter((field) => Object.prototype.hasOwnProperty.call(output, field));
+  if (legacyFields.length > 0) {
+    return `Codex hook smoke emitted legacy fields for ${eventName}: ${legacyFields.join(', ')}`;
+  }
+
+  if (output.continue !== true) {
+    return `Codex hook smoke omitted continue=true for ${eventName}.`;
+  }
+
+  if (output.hookSpecificOutput !== undefined) {
+    if (!output.hookSpecificOutput || typeof output.hookSpecificOutput !== 'object' || Array.isArray(output.hookSpecificOutput)) {
+      return `Codex hook smoke emitted invalid hookSpecificOutput for ${eventName}.`;
+    }
+    if (output.hookSpecificOutput.hookEventName !== eventName) {
+      return `Codex hook smoke emitted hookSpecificOutput.hookEventName=${output.hookSpecificOutput.hookEventName ?? 'null'} for ${eventName}.`;
+    }
+  }
+
+  return null;
+}
+
+async function smokeTestCodexHook(projectRoot) {
+  const hookPath = cjoin(projectRoot, '.codex', 'hooks', 'openprd-hook.mjs');
+  if (!(await exists(hookPath))) {
+    return { ok: false, message: 'Codex hook runner is missing.' };
+  }
+
+  const smokeId = `doctor-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const smokeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'openprd-hook-smoke-'));
+  try {
+    for (const eventName of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse']) {
+      const run = spawnSync(process.execPath, [hookPath, eventName], {
+        cwd: smokeRoot,
+        input: JSON.stringify(codexHookSmokePayload(smokeRoot, eventName, smokeId)),
+        encoding: 'utf8',
+        timeout: 15000,
+        env: {
+          ...process.env,
+          OPENPRD_CLI: process.env.OPENPRD_CLI || cjoin(PACKAGE_ROOT, 'bin', 'openprd.js'),
+        },
+      });
+      const error = validateCodexHookSmokeOutput(eventName, run);
+      if (error) {
+        return { ok: false, message: error };
+      }
+    }
+
+    return { ok: true, message: 'ok' };
+  } finally {
+    await fs.rm(smokeRoot, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 export async function doctorOpenPrdAgentIntegration(projectRoot, options = {}) {
   const tools = normalizeTools(options.tools);
   const checks = [];
@@ -1287,6 +1390,8 @@ export async function doctorOpenPrdAgentIntegration(projectRoot, options = {}) {
     await collectDoctorCheck(projectRoot, checks, '.codex/config.toml', (file) => fileHas(file, 'codex_hooks = true'), 'Codex hooks feature is not enabled.');
     await collectDoctorCheck(projectRoot, checks, '.codex/hooks.json', (file) => fileHas(file, 'openprd-hook.mjs'), 'Codex hooks.json is missing OpenPrd hooks.');
     await collectDoctorCheck(projectRoot, checks, '.codex/hooks/openprd-hook.mjs', (file) => fileHas(file, 'OpenPrd harness context'), 'Codex hook runner is missing.');
+    const smoke = await smokeTestCodexHook(projectRoot);
+    checks.push({ path: '.codex/hooks/openprd-hook.mjs:smoke', ok: smoke.ok, message: smoke.message });
     await collectDoctorCheck(projectRoot, checks, '.codex/skills/openprd-harness/SKILL.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Codex OpenPrd harness skill is missing.');
     if (options.enableUserCodexConfig) {
       const userConfigPath = cjoin(resolveCodexHome(options), 'config.toml');

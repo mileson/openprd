@@ -193,6 +193,30 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
   }
 });
 
+test('doctor fails when Codex hook emits legacy output schema', async () => {
+  const project = await makeTempProject();
+  const codexHome = path.join(project, 'codex-home');
+  await setupAgentIntegrationWorkspace(project, {
+    tools: 'codex',
+    templatePack: 'agent',
+    enableUserCodexConfig: true,
+    codexHome,
+  });
+
+  await fs.writeFile(
+    path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'),
+    'console.log(JSON.stringify({ should_stop: false, additional_contexts: [] }));\n',
+  );
+
+  const result = await doctorWorkspace(project, { tools: 'codex', enableUserCodexConfig: true, codexHome });
+  assert.equal(result.ok, false);
+  assert.ok(result.agentIntegration.checks.some((check) => (
+    check.path === '.codex/hooks/openprd-hook.mjs:smoke'
+      && check.ok === false
+      && check.message.includes('legacy fields')
+  )));
+});
+
 test('run exposes hook-stable context and records hook iterations', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'consumer' });
