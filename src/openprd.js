@@ -29,6 +29,8 @@ const OPENPRD_HARNESS_DIR = cjoin('.openprd', 'harness');
 const OPENPRD_HARNESS_RUN_STATE = cjoin(OPENPRD_HARNESS_DIR, 'run-state.json');
 const OPENPRD_HARNESS_ITERATIONS = cjoin(OPENPRD_HARNESS_DIR, 'iterations.jsonl');
 const OPENPRD_HARNESS_LEARNINGS = cjoin(OPENPRD_HARNESS_DIR, 'learnings.md');
+const OPENPRD_HARNESS_LOOP_FEATURE_LIST = cjoin(OPENPRD_HARNESS_DIR, 'feature-list.json');
+const OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD = 5;
 const SOURCE_INVENTORY_IGNORE_DIRS = new Set([
   '.git',
   '.hg',
@@ -2556,10 +2558,34 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
-function buildRunRecommendation({ changes, taskState, discovery, next }) {
+function buildRunRecommendation({ changes, taskState, discovery, next, loopFeatureList }) {
   const activeChange = changes?.activeChange ?? null;
   if (taskState?.nextTask) {
     const task = compactTask(taskState.nextTask);
+    const totalTasks = Number(taskState.summary?.total ?? taskState.tasks?.length ?? 0);
+    const pendingTasks = Number(taskState.summary?.pending ?? 0);
+    if (totalTasks > OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD || pendingTasks > OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD) {
+      const loopReady = loopFeatureList?.changeId === taskState.changeId && Array.isArray(loopFeatureList.tasks);
+      return {
+        type: 'loop-task',
+        title: `用 Loop 执行 ${task.id}: ${task.title}`,
+        command: loopReady
+          ? `openprd loop . --run --agent codex --item ${shellQuote(task.id)} --commit`
+          : `openprd loop . --plan --change ${shellQuote(taskState.changeId)} && openprd loop . --run --agent codex --item ${shellQuote(task.id)} --commit`,
+        verifyCommand: `openprd loop . --verify --item ${shellQuote(task.id)}`,
+        reason: `当前变更包含 ${totalTasks} 个任务，超过 ${OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD} 个任务的轻量执行上限；必须按 OpenPrd Loop 拆成独立单任务会话、自测、测试报告和 commit。`,
+        changeId: taskState.changeId,
+        task,
+        coverageItem: null,
+        loop: {
+          required: true,
+          threshold: OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD,
+          planned: loopReady,
+          totalTasks,
+          pendingTasks,
+        },
+      };
+    }
     return {
       type: 'task',
       title: `推进 ${task.id}: ${task.title}`,
@@ -2569,6 +2595,12 @@ function buildRunRecommendation({ changes, taskState, discovery, next }) {
       changeId: taskState.changeId,
       task,
       coverageItem: null,
+      loop: {
+        required: false,
+        threshold: OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD,
+        totalTasks,
+        pendingTasks,
+      },
     };
   }
   if (taskState && taskState.summary?.pending === 0 && activeChange) {
@@ -2639,7 +2671,8 @@ async function buildRunContext(projectRoot) {
     ? await listOpenSpecTaskWorkspace(projectRoot, { change: activeChange }).catch(() => null)
     : null;
   const discovery = await resumeOpenSpecDiscoveryWorkspace(projectRoot).catch(() => null);
-  const recommendation = buildRunRecommendation({ changes, taskState, discovery, next });
+  const loopFeatureList = await readJson(harnessFile(projectRoot, OPENPRD_HARNESS_LOOP_FEATURE_LIST)).catch(() => null);
+  const recommendation = buildRunRecommendation({ changes, taskState, discovery, next, loopFeatureList });
 
   const context = {
     ok: validation.valid,

@@ -230,6 +230,43 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.equal(hookPayload.hookSpecificOutput.hookEventName, 'PreToolUse');
     assert.ok(hookPayload.hookSpecificOutput.additionalContext.includes('high-risk gate passed'));
 
+    const lowRiskResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'PreToolUse'], {
+      cwd: project,
+      input: JSON.stringify({
+        cwd: project,
+        tool_input: {
+          cmd: 'ls',
+        },
+      }),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        OPENPRD_CLI: path.resolve('bin/openprd.js'),
+      },
+    });
+    assert.equal(lowRiskResult.status, 0);
+    assert.deepEqual(JSON.parse(lowRiskResult.stdout), { continue: true });
+
+    const successPostResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'PostToolUse'], {
+      cwd: project,
+      input: JSON.stringify({
+        cwd: project,
+        tool_input: {
+          cmd: 'ls',
+        },
+        tool_response: {
+          stdout: 'README.md',
+        },
+      }),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        OPENPRD_CLI: path.resolve('bin/openprd.js'),
+      },
+    });
+    assert.equal(successPostResult.status, 0);
+    assert.deepEqual(JSON.parse(successPostResult.stdout), { continue: true });
+
     for (const eventName of ['SessionStart', 'UserPromptSubmit']) {
       const eventResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), eventName], {
         cwd: project,
@@ -254,6 +291,8 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     }
     const events = await fs.readFile(path.join(project, '.openprd', 'harness', 'events.jsonl'), 'utf8');
     assert.ok(events.includes('allowed-high-risk'));
+    assert.equal(events.includes('allowed-low-risk'), false);
+    assert.equal(events.includes('tool-complete'), false);
 
     await fs.appendFile(path.join(project, '.codex', 'skills', 'openprd-harness', 'SKILL.md'), '\nmanual drift\n');
     const drifted = await doctorWorkspace(project, { tools: 'codex', enableUserCodexConfig: true, codexHome });
@@ -315,8 +354,10 @@ test('run exposes hook-stable context and records hook iterations', async () => 
   const context = await runWorkspace(project, { context: true });
   assert.equal(context.action, 'run-context');
   assert.equal(context.activeChange, 'run-loop');
-  assert.equal(context.recommendation.type, 'task');
-  assert.ok(context.recommendation.command.includes('openprd tasks . --change'));
+  assert.equal(context.recommendation.type, 'loop-task');
+  assert.equal(context.recommendation.loop.required, true);
+  assert.ok(context.recommendation.command.includes('openprd loop . --plan --change'));
+  assert.ok(context.recommendation.command.includes('openprd loop . --run --agent codex'));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'run-state.json')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'iterations.jsonl')).then(() => true));
 
@@ -345,6 +386,41 @@ test('run exposes hook-stable context and records hook iterations', async () => 
     console.log = originalLog;
   }
   assert.ok(logs.some((line) => line.includes('OpenPrd run context')));
+});
+
+test('run context keeps lightweight task advance for five or fewer tasks', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await synthesizeWorkspace(project, {
+    title: 'Small Run',
+    owner: 'PM',
+    problemStatement: 'Small changes should stay lightweight',
+    whyNow: 'Loop should be reserved for larger work',
+    primaryUsers: ['Product agents'],
+    goals: ['Keep small work simple'],
+    successMetrics: ['Run context points to a lightweight task'],
+    acceptanceGoals: ['The hook can recommend a single task'],
+    inScope: ['Run context'],
+    outOfScope: ['Large feature loops'],
+    primaryFlows: ['Agent reads run context'],
+    functional: ['Expose next task'],
+    productType: 'consumer',
+  });
+  const generated = await generateOpenSpecChangeWorkspace(project, { change: 'small-run' });
+  await fs.writeFile(path.join(generated.changeDir, 'tasks.md'), [
+    '- [ ] T001.01 Prepare small state',
+    '  - done: small state is ready',
+    '  - verify: node -e "process.exit(0)"',
+    '- [ ] T001.02 Wire small command',
+    '  - done: small command is ready',
+    '  - verify: node -e "process.exit(0)"',
+    '',
+  ].join('\n'));
+
+  const context = await runWorkspace(project, { context: true });
+  assert.equal(context.recommendation.type, 'task');
+  assert.equal(context.recommendation.loop.required, false);
+  assert.ok(context.recommendation.command.includes('openprd tasks . --change'));
 });
 
 test('fleet dry-run plans historical updates without auto-claiming agent-only projects', async () => {

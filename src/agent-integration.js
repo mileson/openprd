@@ -871,7 +871,10 @@ function handle(eventName, cwd, payload) {
   };
 
   if (eventName === 'SessionStart' || eventName === 'UserPromptSubmit') {
-    const result = allowHook(duplicate ? null : contextMessage(root));
+    if (duplicate) {
+      return allowHook();
+    }
+    const result = allowHook(contextMessage(root));
     appendEvent(root, { ...baseEvent, outcome: 'context-injected' });
     recordRunHook(root, baseEvent, 'context-injected');
     updateHookState(root, baseEvent);
@@ -900,15 +903,15 @@ function handle(eventName, cwd, payload) {
       updateHookState(root, baseEvent);
       return allowHook('OpenPrd detected a mutating action. Keep docs/basic, file manuals, folder README docs, and relevant OpenPrd change/task state synchronized before claiming readiness.');
     }
-    appendEvent(root, { ...baseEvent, outcome: 'allowed-low-risk' });
-    recordRunHook(root, baseEvent, 'allowed-low-risk');
-    updateHookState(root, baseEvent);
     return allowHook();
   }
 
   if (eventName === 'PostToolUse') {
     const text = payloadText(payload);
     const failed = /command not found|no such file|permission denied|failed|error|exception/i.test(text);
+    if (!failed) {
+      return allowHook();
+    }
     appendEvent(root, { ...baseEvent, outcome: failed ? 'tool-failure-detected' : 'tool-complete' });
     recordRunHook(root, baseEvent, failed ? 'tool-failure-detected' : 'tool-complete');
     updateHookState(root, baseEvent);
