@@ -1,3 +1,5 @@
+import { timestamp } from './time.js';
+
 function escapeHtml(value) {
   return `${value ?? ''}`
     .replace(/&/g, '&amp;')
@@ -356,7 +358,7 @@ export function buildArchitectureDiagramModel(snapshot) {
   return {
     type: 'architecture',
     version: 1,
-    generatedAt: new Date().toISOString(),
+    generatedAt: timestamp(),
     locale: 'zh-CN',
     title: '架构评审',
     subtitle: '在 freeze 前评审系统边界、依赖和交接形态。',
@@ -549,7 +551,7 @@ export function buildProductFlowDiagramModel(snapshot) {
   return {
     type: 'product-flow',
     version: 1,
-    generatedAt: new Date().toISOString(),
+    generatedAt: timestamp(),
     locale: 'zh-CN',
     title: '产品流程评审',
     subtitle: '在 freeze 前评审主要旅程、决策点和恢复路径。',

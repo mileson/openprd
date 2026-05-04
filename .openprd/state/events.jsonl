@@ -15,3 +15,4 @@
 {"type":"next","at":"2026-05-04T03:43:38.011Z","nextAction":"clarify-user","reason":"工作区缺少用户确认的关键信息，需要先澄清再继续合成。","missingRequiredFields":22}
 {"type":"next","at":"2026-05-04T03:51:37.803Z","nextAction":"clarify-user","reason":"工作区缺少用户确认的关键信息，需要先澄清再继续合成。","missingRequiredFields":22}
 {"type":"next","at":"2026-05-04T04:00:44.494Z","nextAction":"clarify-user","reason":"工作区缺少用户确认的关键信息，需要先澄清再继续合成。","missingRequiredFields":22}
+{"type":"workspace_migrated","at":"2026-05-04 17:39:12","changed":2}

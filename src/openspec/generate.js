@@ -71,7 +71,7 @@ function buildProposal({ changeId, capability, snapshot }) {
   return [
     `# ${scalar(snapshot.title, changeId)}`,
     '',
-    '## 为什么',
+    '## 背景与原因',
     '',
     scalar(sections.problem?.problemStatement, '需要把当前产品需求转化为可执行的规格变更。'),
     '',
@@ -83,11 +83,11 @@ function buildProposal({ changeId, capability, snapshot }) {
       ...arrayValue(sections.goals?.acceptanceGoals),
     ], ['根据当前 PRD 生成 OpenPrd 管理的规格增量。']),
     '',
-    '## 能力',
+    '## 能力范围',
     '',
     `- \`${capability}\`: ${scalar(snapshot.title, '产品行为')} 需求。`,
     '',
-    '## 影响',
+    '## 影响范围',
     '',
     bullets([
       ...arrayValue(sections.users?.primaryUsers).map((item) => `主要用户: ${item}`),

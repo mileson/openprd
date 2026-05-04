@@ -15,6 +15,7 @@ import { legacyOpenSpecDiscoveryDir, openPrdDiscoveryDir, readDiscoveryConfig } 
 import { checkStandardsWorkspace, initStandardsWorkspace } from './standards.js';
 import { doctorOpenPrdAgentIntegration, setupOpenPrdAgentIntegration, updateOpenPrdAgentIntegration } from './agent-integration.js';
 import { finishLoopWorkspace, initLoopWorkspace, nextLoopWorkspace, planLoopWorkspace, promptLoopWorkspace, runLoopWorkspace, statusLoopWorkspace, verifyLoopWorkspace } from './loop.js';
+import { compactTimestamp, timestamp } from './time.js';
 
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SEED_WORKSPACE = path.join(PACKAGE_ROOT, '.openprd');
@@ -253,16 +254,43 @@ async function readJsonl(filePath) {
     .map((line) => JSON.parse(line));
 }
 
-function timestamp() {
-  return new Date().toISOString();
-}
-
 function formatMarkdownLines(lines) {
   return lines.filter(Boolean).map((line) => `- ${line}`).join('\n');
 }
 
 function renderLogEntry(title, lines) {
   return `\n## ${title}\n\n${formatMarkdownLines(lines)}\n`;
+}
+
+function normalizeMarkdownTimestampHeadings(text) {
+  return text.replace(/^##\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)\s*$/gm, (_match, isoValue) => {
+    const parsed = new Date(isoValue);
+    if (Number.isNaN(parsed.getTime())) {
+      return `## ${isoValue}`;
+    }
+    return `## ${timestamp(parsed)}`;
+  });
+}
+
+async function normalizeWorkspaceMarkdownTimestamps(projectRoot, changes) {
+  const relativePaths = [
+    'engagements/active/decision-log.md',
+    'engagements/active/open-questions.md',
+    'engagements/active/progress.md',
+    'engagements/active/verification.md',
+  ];
+  for (const relativePath of relativePaths) {
+    const targetPath = cjoin(projectRoot, '.openprd', relativePath);
+    const current = await readText(targetPath).catch(() => null);
+    if (current === null) {
+      continue;
+    }
+    const next = normalizeMarkdownTimestampHeadings(current);
+    if (next !== current) {
+      await writeText(targetPath, next);
+      changes.push({ path: cjoin('.openprd', relativePath), status: 'updated-timestamp-format' });
+    }
+  }
 }
 
 function buildWorkflowTaskGraph(snapshot = null, analysis = null, options = {}) {
@@ -699,6 +727,7 @@ async function migrateWorkspaceSkeleton(projectRoot, options = {}) {
   await ensureHeadingFile(projectRoot, 'engagements/active/open-questions.md', '# 开放问题', '# 开放问题\n\n- 已初始化 OpenPrd 问题跟踪。\n', changes);
   await ensureHeadingFile(projectRoot, 'engagements/active/progress.md', '# 进度', '# 进度\n\n- 已初始化 OpenPrd 进度跟踪。\n', changes);
   await ensureHeadingFile(projectRoot, 'engagements/active/verification.md', '# 验证', '# 验证\n\n- 已初始化 OpenPrd 验证跟踪。\n', changes);
+  await normalizeWorkspaceMarkdownTimestamps(projectRoot, changes);
 
   const ws = await loadWorkspace(projectRoot);
   const taskGraphPath = cjoin(projectRoot, '.openprd', 'state', 'task-graph.json');
@@ -1776,7 +1805,7 @@ async function synthesizeWorkspace(projectRoot, overrides = {}) {
     ? Math.max(...versionIndex.map((entry) => Number(entry.versionNumber) || 0)) + 1
     : 1);
   const versionId = overrides.versionId ?? formatVersionId(nextVersionNumber);
-  const createdAt = overrides.createdAt ?? new Date().toISOString();
+  const createdAt = overrides.createdAt ?? timestamp();
   const snapshot = buildPrdSnapshot(ws, {
     ...overrides,
     versionNumber: nextVersionNumber,
@@ -2052,7 +2081,7 @@ async function captureWorkspace(projectRoot, options = {}) {
     `Captured clarification for ${applied.map((item) => item.field).join(', ')}.`,
   ]);
   await appendProgress(ws, [
-    `Updated ${applied.length} field(s) in current workspace state.`,
+    `已更新 ${applied.length} 个字段到当前工作区状态。`,
   ]);
 
   return {
@@ -2251,7 +2280,7 @@ async function classifyWorkspace(projectRoot, productType) {
     status: 'classified',
     productType,
     templatePack: productType,
-    classifiedAt: new Date().toISOString(),
+    classifiedAt: timestamp(),
   };
   await writeJson(ws.paths.currentState, currentState);
   await appendWorkflowEvent(ws, 'classified', { productType });
@@ -2297,7 +2326,7 @@ ${content}`);
     status: 'interviewing',
     productType: productType ?? ws.data.currentState?.productType ?? null,
     templatePack: productType ?? resolveActiveTemplatePack(ws),
-    interviewStartedAt: new Date().toISOString(),
+    interviewStartedAt: timestamp(),
   };
   await writeJson(ws.paths.currentState, currentState);
   await appendWorkflowEvent(ws, 'interview_started', {
@@ -2356,7 +2385,7 @@ async function initWorkspace(projectRoot, options) {
     captureMeta: {},
     projectRoot,
     workspaceRoot: workspace.workspaceRoot,
-    createdAt: new Date().toISOString(),
+    createdAt: timestamp(),
   };
   await writeJson(workspace.paths.currentState, currentState);
   await writeJson(workspace.paths.taskGraph, buildWorkflowTaskGraph(currentState));
@@ -2533,10 +2562,10 @@ function buildRunRecommendation({ changes, taskState, discovery, next }) {
     const task = compactTask(taskState.nextTask);
     return {
       type: 'task',
-      title: `Advance ${task.id}: ${task.title}`,
+      title: `推进 ${task.id}: ${task.title}`,
       command: `openprd tasks . --change ${shellQuote(taskState.changeId)} --advance --verify --item ${shellQuote(task.id)}`,
       verifyCommand: task.verify ?? `openprd tasks . --change ${shellQuote(taskState.changeId)} --verify --item ${shellQuote(task.id)}`,
-      reason: 'A dependency-ready OpenPrd task is available.',
+      reason: '存在一个依赖已就绪的 OpenPrd 任务。',
       changeId: taskState.changeId,
       task,
       coverageItem: null,
@@ -2545,10 +2574,10 @@ function buildRunRecommendation({ changes, taskState, discovery, next }) {
   if (taskState && taskState.summary?.pending === 0 && activeChange) {
     return {
       type: 'change-review',
-      title: `Validate completed change ${activeChange}`,
+      title: `校验已完成的变更 ${activeChange}`,
       command: `openprd change . --validate --change ${shellQuote(activeChange)}`,
       verifyCommand: `openprd change . --validate --change ${shellQuote(activeChange)}`,
-      reason: 'The active change has no pending structured tasks.',
+      reason: '当前激活变更没有待处理的结构化任务。',
       changeId: activeChange,
       task: null,
       coverageItem: null,
@@ -2559,10 +2588,10 @@ function buildRunRecommendation({ changes, taskState, discovery, next }) {
     const item = compactCoverageItem(nextCoverage);
     return {
       type: 'discovery',
-      title: `Investigate ${item.title}`,
+      title: `调研 ${item.title}`,
       command: `openprd discovery . --advance --item ${shellQuote(item.id)} --claim <evidence-backed-claim> --evidence <path>`,
       verifyCommand: 'openprd discovery . --verify',
-      reason: 'A pending OpenPrd discovery coverage item is available.',
+      reason: '存在一个待处理的 OpenPrd discovery 覆盖项。',
       changeId: activeChange,
       task: null,
       coverageItem: item,
@@ -2571,10 +2600,10 @@ function buildRunRecommendation({ changes, taskState, discovery, next }) {
   if (discovery?.coverageMatrix?.summary?.pending === 0 && discovery?.runId) {
     return {
       type: 'discovery-review',
-      title: `Verify discovery run ${discovery.runId}`,
+      title: `校验 discovery run ${discovery.runId}`,
       command: 'openprd discovery . --verify',
       verifyCommand: 'openprd discovery . --verify',
-      reason: 'The active discovery run has no pending coverage items.',
+      reason: '当前 discovery run 没有待处理覆盖项。',
       changeId: activeChange,
       task: null,
       coverageItem: null,
@@ -3044,7 +3073,7 @@ async function freezeWorkspace(projectRoot) {
   const digest = await computeWorkspaceDigest(ws);
   const snapshot = {
     version: 1,
-    frozenAt: new Date().toISOString(),
+    frozenAt: timestamp(),
     projectRoot: ws.projectRoot,
     workspaceRoot: ws.workspaceRoot,
     schema: ws.data.schema?.name ?? null,
@@ -3106,7 +3135,7 @@ async function handoffWorkspace(projectRoot, target) {
     versionId: snapshot.latestVersionId,
     versionNumber: snapshot.prdVersion,
     target,
-    generatedAt: new Date().toISOString(),
+    generatedAt: timestamp(),
     workspaceRoot: ws.workspaceRoot,
     projectRoot: ws.projectRoot,
     schema: ws.data.schema?.name ?? null,
@@ -3288,7 +3317,7 @@ function normalizeClaimConfidence(value) {
 }
 
 function buildDiscoveryRunId(mode, now = new Date()) {
-  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  const stamp = compactTimestamp(now);
   return `${stamp}-${mode}`;
 }
 
@@ -4717,13 +4746,13 @@ function printRunResult(result, json) {
   console.log(`项目: ${result.projectRoot}`);
   console.log(`验证: ${result.validation.valid ? '通过' : '失败'}`);
   if (result.activeChange) {
-    console.log(`Active change: ${result.activeChange}`);
+    console.log(`激活变更: ${result.activeChange}`);
   }
   if (result.taskSummary) {
     console.log(`任务: ${result.taskSummary.completed}/${result.taskSummary.total} 完成，${result.taskSummary.pending} 待处理，${result.taskSummary.blocked} 阻塞`);
   }
   if (result.discovery) {
-    console.log(`Discovery: ${result.discovery.runId} ${result.discovery.summary.covered}/${result.discovery.summary.total} covered, ${result.discovery.summary.pending} pending`);
+    console.log(`Discovery: ${result.discovery.runId} 已覆盖 ${result.discovery.summary.covered}/${result.discovery.summary.total}，待处理 ${result.discovery.summary.pending}`);
   }
   console.log(`下一步类型: ${result.recommendation.type}`);
   console.log(`下一步: ${result.recommendation.title}`);
@@ -4762,7 +4791,10 @@ function printLoopResult(result, json) {
     if (result.promptPath) console.log(`Prompt: ${result.promptPath}`);
     if (result.invocation?.display) console.log(`执行: ${result.invocation.display}`);
     if (result.finish?.commit) {
-      console.log(`Commit: ${result.finish.commit.skipped ? 'skipped' : result.finish.commit.sha}`);
+      console.log(`Commit: ${result.finish.commit.skipped ? '跳过' : result.finish.commit.sha}`);
+    }
+    if (result.finish?.testReport) {
+      console.log(`测试报告: ${result.finish.testReport}`);
     }
     if (result.errors?.length) {
       for (const error of result.errors) console.log(`- ${error}`);
@@ -4773,7 +4805,8 @@ function printLoopResult(result, json) {
   if (result.action === 'loop-finish') {
     console.log(`OpenPrd loop finish: ${result.ok ? '通过' : '失败'}`);
     if (result.task) console.log(`任务: ${result.task.id} ${result.task.title}`);
-    if (result.commit) console.log(`Commit: ${result.commit.skipped ? 'skipped' : result.commit.sha}`);
+    if (result.commit) console.log(`Commit: ${result.commit.skipped ? '跳过' : result.commit.sha}`);
+    if (result.testReport) console.log(`测试报告: ${result.testReport}`);
     if (result.next) console.log(`下一任务: ${result.next.id} ${result.next.title}`);
     if (result.errors?.length) {
       for (const error of result.errors) console.log(`- ${error}`);
@@ -4784,13 +4817,13 @@ function printLoopResult(result, json) {
   console.log(`OpenPrd loop: ${result.action} ${result.ok ? '通过' : '失败'}`);
   if (result.changeId) console.log(`Change: ${result.changeId}`);
   if (result.summary) {
-    console.log(`任务: ${result.summary.done}/${result.summary.total} done, ${result.summary.pending} pending, ${result.summary.failed} failed, ${result.summary.blocked} blocked`);
+    console.log(`任务: ${result.summary.done}/${result.summary.total} 完成，${result.summary.pending} 待处理，${result.summary.failed} 失败，${result.summary.blocked} 阻塞`);
   }
   if (result.next) {
     console.log(`下一任务: ${result.next.id} ${result.next.title}`);
   }
   if (result.files) {
-    console.log(`Feature list: ${result.files.featureList}`);
+    console.log(`任务清单: ${result.files.featureList}`);
   }
   if (result.errors?.length) {
     for (const error of result.errors) console.log(`- ${error}`);

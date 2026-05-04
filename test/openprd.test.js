@@ -443,7 +443,7 @@ test('openprd discovery ignores dependency folders and enforces task shards', as
   const failed = await openspecDiscoveryWorkspace(project, { verify: true });
   assert.equal(failed.ok, false);
   assert.equal(failed.verification.valid, false);
-  assert.ok(failed.verification.errors.some((error) => error.includes('2 or fewer')));
+  assert.ok(failed.verification.errors.some((error) => error.includes('不超过 2 个')));
 
   await fs.writeFile(
     path.join(project, 'openprd', 'changes', 'large-change', 'tasks.md'),
@@ -461,7 +461,7 @@ test('openprd discovery ignores dependency folders and enforces task shards', as
   const passed = await openspecDiscoveryWorkspace(project, { verify: true });
   assert.equal(passed.ok, true);
   assert.equal(passed.verification.valid, true);
-  assert.ok(passed.verification.checks.some((check) => check.includes('max 2 per file')));
+  assert.ok(passed.verification.checks.some((check) => check.includes('每个文件最多 2 个')));
 });
 
 test('openprd discovery verifies structured task metadata and dependencies', async () => {
@@ -489,7 +489,7 @@ test('openprd discovery verifies structured task metadata and dependencies', asy
   const passed = await openspecDiscoveryWorkspace(project, { verify: true });
   assert.equal(passed.ok, true);
   assert.equal(passed.verification.valid, true);
-  assert.ok(passed.verification.checks.some((check) => check.includes('Structured OpenPrd tasks: 2 task(s), 1 dependency link(s).')));
+  assert.ok(passed.verification.checks.some((check) => check.includes('结构化 OpenPrd 任务: 2 个任务，1 条依赖。')));
 
   await fs.writeFile(
     path.join(project, 'openprd', 'changes', 'structured-change', 'tasks.md'),
@@ -507,8 +507,8 @@ test('openprd discovery verifies structured task metadata and dependencies', asy
   const failed = await openspecDiscoveryWorkspace(project, { verify: true });
   assert.equal(failed.ok, false);
   assert.equal(failed.verification.valid, false);
-  assert.ok(failed.verification.errors.some((error) => error.includes('is missing "done:"')));
-  assert.ok(failed.verification.errors.some((error) => error.includes('depends on unknown task T001.99')));
+  assert.ok(failed.verification.errors.some((error) => error.includes('缺少 "done:"')));
+  assert.ok(failed.verification.errors.some((error) => error.includes('依赖未知任务 T001.99')));
 });
 
 test('openprd validates change structure without external openspec cli', async () => {
@@ -568,7 +568,7 @@ test('openprd validates change structure without external openspec cli', async (
 
   const failed = await validateOpenSpecChangeWorkspace(project, { change: 'desktop-rebuild' });
   assert.equal(failed.ok, false);
-  assert.ok(failed.errors.some((error) => error.includes('must contain at least one scenario')));
+  assert.ok(failed.errors.some((error) => error.includes('必须至少包含一个 scenario')));
 });
 
 test('openprd generates a change from the latest prd snapshot', async () => {
@@ -659,7 +659,7 @@ test('openprd applies accepted specs and archives changes', async () => {
 
   const blockedApply = await applyOpenPrdChangeWorkspace(project, { change: 'checkout-flow' });
   assert.equal(blockedApply.ok, false);
-  assert.ok(blockedApply.errors.some((error) => error.includes('incomplete task')));
+  assert.ok(blockedApply.errors.some((error) => error.includes('未完成任务')));
 
   const applied = await applyOpenPrdChangeWorkspace(project, { change: 'checkout-flow', force: true });
   assert.equal(applied.ok, true);
@@ -724,6 +724,10 @@ test('openprd exposes natural change task and specs cli commands', async () => {
     console.log = originalLog;
   }
   assert.ok(logs.some((line) => line.includes('已生成 OpenPrd change: profile-settings')));
+  const generatedProposal = await fs.readFile(path.join(project, 'openprd', 'changes', 'profile-settings', 'proposal.md'), 'utf8');
+  assert.ok(generatedProposal.includes('## 背景与原因'));
+  assert.ok(generatedProposal.includes('## 变更内容'));
+  assert.ok(generatedProposal.includes('## 影响范围'));
   const generatedTasks = await fs.readFile(path.join(project, 'openprd', 'changes', 'profile-settings', 'tasks.md'), 'utf8');
   assert.ok(generatedTasks.includes('docs/basic'));
   assert.ok(generatedTasks.includes('openprd standards . --verify'));
@@ -750,7 +754,7 @@ test('openprd advances tasks by dependency order and verify command', async () =
 
   await assert.rejects(
     () => advanceOpenSpecTaskWorkspace(project, { change: 'desktop-rebuild', item: 'T001.02' }),
-    /blocked by incomplete task/
+    /被未完成任务阻塞/
   );
 
   const advanced = await advanceOpenSpecTaskWorkspace(project, {
@@ -831,7 +835,9 @@ test('openprd loop plans prompts and finishes one verified task', async () => {
   const prompt = await promptLoopWorkspace(project, { agent: 'codex' });
   assert.equal(prompt.ok, true);
   assert.equal(prompt.task.id, 'T001.01');
-  assert.match(prompt.prompt, /Do not begin the next task/);
+  assert.match(prompt.prompt, /不要开始下一个任务/);
+  assert.match(prompt.prompt, /Computer Use/);
+  assert.match(prompt.prompt, /Playwright/);
   assert.match(prompt.invocation.display, /codex exec --full-auto/);
   assert.ok(await fs.stat(path.join(project, prompt.promptPath)).then(() => true));
 
@@ -847,6 +853,8 @@ test('openprd loop plans prompts and finishes one verified task', async () => {
   assert.equal(finish.ok, true);
   assert.equal(finish.summary.done, 1);
   assert.equal(finish.next.id, 'T001.02');
+  assert.equal(finish.testReport, path.join('.openprd', 'harness', 'test-reports', 'T001.01.md'));
+  assert.ok(await fs.stat(path.join(project, finish.testReport)).then(() => true));
 
   const featureList = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'feature-list.json'), 'utf8'));
   assert.equal(featureList.tasks.find((task) => task.id === 'T001.01').status, 'done');

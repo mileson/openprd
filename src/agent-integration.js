@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { timestamp } from './time.js';
 
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const OPENPRD_AGENT_TOOLS = ['codex', 'claude', 'cursor'];
@@ -37,7 +38,8 @@ const CANONICAL_SKILLS = [
       '',
       '- Rebuild context from `.openprd/` before acting.',
       '- Prefer `openprd status .` and `openprd next .` before choosing a mutating command.',
-      '- Follow the user language for user-facing artifacts.',
+      '- User-facing docs, progress logs, proposals, prompts, and reports should use Simplified Chinese by default; keep only necessary proper nouns, command names, file paths, field names, and API terms in their original form.',
+      '- Time shown to users must use Shanghai time in `YYYY-MM-DD HH:mm:ss` format, without `T`, `Z`, or millisecond suffixes.',
       '- Keep unresolved assumptions visible.',
       '- Use `docs/basic/` as the only project baseline docs path.',
       '- Do not claim readiness until `openprd validate .` and `openprd standards . --verify` pass.',
@@ -97,7 +99,9 @@ const CANONICAL_SKILLS = [
       '- Use `openprd loop . --run --agent codex --dry-run` or `openprd loop . --run --agent claude --dry-run` to generate the exact one-task prompt and launch command.',
       '- Each loop task is the full boundary for one fresh agent session. Do not continue into the next task inside the same session.',
       '- Finish the task with `openprd loop . --finish --item <task-id> --commit` after the task verify command and `openprd run . --verify` pass.',
-      '- Keep `.openprd/harness/feature-list.json`, `progress.md`, `agent-sessions.jsonl`, `loop-state.json`, and `loop-prompts/` as durable implementation state.',
+      '- For frontend UI work, Codex desktop should prefer Computer Use; Codex CLI and Claude Code should prefer Playwright, MCP browser automation, or the project e2e tool.',
+      '- `openprd loop . --finish` writes `.openprd/harness/test-reports/<task-id>.md`; commit this staged test report together with the task.',
+      '- Keep `.openprd/harness/feature-list.json`, `progress.md`, `agent-sessions.jsonl`, `loop-state.json`, `loop-prompts/`, and `test-reports/` as durable implementation state.',
       '',
       '## Failure Protocol',
       '',
@@ -246,13 +250,14 @@ const CANONICAL_COMMANDS = [
     id: 'loop',
     title: 'OpenPrd Loop',
     body: [
-      'Use the long-running agent harness for implementation.',
+      '使用长程 agent harness 做开发落地。',
       '',
       '1. Run `openprd loop . --init` once for the workspace.',
       '2. Run `openprd loop . --plan --change <id>` to build the feature list from structured change tasks.',
       '3. Run `openprd loop . --next` to inspect the next dependency-ready task.',
       '4. Run `openprd loop . --run --agent codex --dry-run` or `openprd loop . --run --agent claude --dry-run` to prepare one fresh single-task session.',
-      '5. After the session completes, run `openprd loop . --finish --item <task-id> --commit` to verify, mark done, update progress, and create the task commit.',
+      '5. 每个任务都必须先自测；前端界面任务在 Codex 桌面优先用 Computer Use，在 CLI/Claude Code 优先用 Playwright 或 MCP 自动化。',
+      '6. After the session completes, run `openprd loop . --finish --item <task-id> --commit` to verify, write the staged test report, mark done, update progress, and create the task commit.',
       '',
       'Do not continue into the next task inside the same agent session.',
     ].join('\n'),
@@ -490,7 +495,7 @@ function agentContractBody() {
     '- `openprd run . --verify` - verify the current run gates.',
     '- `openprd loop . --plan --change <id>` - build the one-task-per-session feature list.',
     '- `openprd loop . --run --agent codex|claude --dry-run` - prepare a fresh single-task agent session.',
-    '- `openprd loop . --finish --item <task-id> --commit` - verify, mark done, and create the task commit.',
+    '- `openprd loop . --finish --item <task-id> --commit` - verify, write staged test report, mark done, and create the task commit.',
     '- `openprd standards . --verify` - verify project documentation standards.',
     '- `openprd change . --validate --change <id>` - verify change structure.',
     '- `openprd discovery . --verify` - verify long-running discovery state.',
@@ -590,7 +595,18 @@ process.stdin.on('end', () => {
 });
 
 function now() {
-  return new Date().toISOString();
+  const formatter = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(new Date()).map((part) => [part.type, part.value]));
+  return \`\${parts.year}-\${parts.month}-\${parts.day} \${parts.hour}:\${parts.minute}:\${parts.second}\`;
 }
 
 function findProjectRoot(start) {
@@ -1163,7 +1179,7 @@ async function writeInstallManifest(projectRoot, options, changes, tools) {
     version: 1,
     openprdVersion: version,
     action: options.action ?? 'setup',
-    generatedAt: new Date().toISOString(),
+    generatedAt: timestamp(),
     tools,
     managedFiles,
     hooks: {
@@ -1216,7 +1232,7 @@ async function computeDriftReport(projectRoot, tools) {
   if (!manifest) {
     const report = {
       ok: false,
-      checkedAt: new Date().toISOString(),
+      checkedAt: timestamp(),
       tools,
       errors: [`${OPENPRD_HARNESS_MANIFEST} is missing. Run openprd update .`],
       checks,
@@ -1232,7 +1248,7 @@ async function computeDriftReport(projectRoot, tools) {
     .map((check) => `${check.path}: ${check.reason}`);
   const report = {
     ok: errors.length === 0,
-    checkedAt: new Date().toISOString(),
+    checkedAt: timestamp(),
     tools,
     manifestVersion: manifest.version,
     generatedAt: manifest.generatedAt,

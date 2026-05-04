@@ -47,9 +47,9 @@ export async function resolveOpenSpecChangeId(projectRoot, requestedChange) {
     return changeDirs[0];
   }
   if (changeDirs.length === 0) {
-    throw new Error('No OpenPrd changes found under openprd/changes.');
+    throw new Error('openprd/changes 下没有找到 OpenPrd change。');
   }
-  throw new Error(`Multiple OpenPrd changes found; pass --change <id>. Found: ${changeDirs.join(', ')}`);
+  throw new Error(`找到多个 OpenPrd change；请传入 --change <id>。已找到: ${changeDirs.join(', ')}`);
 }
 
 function extractProposalCapabilities(text) {
@@ -65,10 +65,10 @@ function validateOpenSpecSpecText(relativePath, text, errors, checks) {
   const sectionMatches = [...text.matchAll(/^##\s+(ADDED|MODIFIED|REMOVED)\s+Requirements\s*$/gim)];
 
   if (sectionMatches.length === 0) {
-    errors.push(`${relativePath} must contain an ADDED, MODIFIED, or REMOVED Requirements section.`);
+    errors.push(`${relativePath} 必须包含 ADDED、MODIFIED 或 REMOVED Requirements 章节。`);
   }
   if (requirementMatches.length === 0) {
-    errors.push(`${relativePath} must contain at least one "### Requirement:" block.`);
+    errors.push(`${relativePath} 必须至少包含一个 "### Requirement:" 块。`);
   }
 
   for (let index = 0; index < requirementMatches.length; index += 1) {
@@ -79,7 +79,7 @@ function validateOpenSpecSpecText(relativePath, text, errors, checks) {
     const block = text.slice(start, end);
     const scenarioMatches = [...block.matchAll(/^#### Scenario:\s+(.+)$/gm)];
     if (scenarioMatches.length === 0) {
-      errors.push(`${relativePath} requirement "${title}" must contain at least one scenario.`);
+      errors.push(`${relativePath} 的 requirement "${title}" 必须至少包含一个 scenario。`);
       continue;
     }
 
@@ -88,15 +88,15 @@ function validateOpenSpecSpecText(relativePath, text, errors, checks) {
       const nextScenario = scenarioMatches.find((candidate) => (candidate.index ?? 0) > scenarioStart);
       const scenarioBlock = block.slice(scenarioStart, nextScenario?.index ?? block.length);
       if (!/- \*\*WHEN\*\*/.test(scenarioBlock)) {
-        errors.push(`${relativePath} scenario "${scenarioMatch[1].trim()}" is missing WHEN.`);
+        errors.push(`${relativePath} 的 scenario "${scenarioMatch[1].trim()}" 缺少 WHEN。`);
       }
       if (!/- \*\*THEN\*\*/.test(scenarioBlock)) {
-        errors.push(`${relativePath} scenario "${scenarioMatch[1].trim()}" is missing THEN.`);
+        errors.push(`${relativePath} 的 scenario "${scenarioMatch[1].trim()}" 缺少 THEN。`);
       }
     }
   }
 
-  checks.push(`${relativePath}: ${requirementMatches.length} requirement(s).`);
+  checks.push(`${relativePath}: ${requirementMatches.length} 个 requirement。`);
 }
 
 export async function validateOpenSpecChangeWorkspace(projectRoot, options = {}) {
@@ -107,7 +107,7 @@ export async function validateOpenSpecChangeWorkspace(projectRoot, options = {})
   const checks = [];
 
   if (!(await exists(changeDir))) {
-    errors.push(`Missing OpenPrd change directory: ${path.relative(projectRoot, changeDir)}`);
+    errors.push(`缺少 OpenPrd change 目录: ${path.relative(projectRoot, changeDir)}`);
     return {
       ok: false,
       valid: false,
@@ -126,7 +126,7 @@ export async function validateOpenSpecChangeWorkspace(projectRoot, options = {})
   for (const metadataPath of metadataPaths) {
     if (await exists(metadataPath)) {
       await readYaml(metadataPath).catch((error) => {
-        errors.push(`Invalid ${path.relative(projectRoot, metadataPath)}: ${error.message}`);
+        errors.push(`${path.relative(projectRoot, metadataPath)} 无效: ${error.message}`);
       });
       break;
     }
@@ -135,28 +135,33 @@ export async function validateOpenSpecChangeWorkspace(projectRoot, options = {})
   const proposalPath = cjoin(changeDir, 'proposal.md');
   let proposalText = '';
   if (!(await exists(proposalPath))) {
-    errors.push(`${path.relative(projectRoot, proposalPath)} is required.`);
+    errors.push(`${path.relative(projectRoot, proposalPath)} 是必需文件。`);
   } else {
     proposalText = await readText(proposalPath);
     if (!proposalText.trim()) {
-      errors.push(`${path.relative(projectRoot, proposalPath)} must not be empty.`);
+      errors.push(`${path.relative(projectRoot, proposalPath)} 不能为空。`);
     }
-    for (const heading of ['## Why', '## What Changes', '## Impact']) {
-      if (!proposalText.includes(heading)) {
-        warnings.push(`${path.relative(projectRoot, proposalPath)} is missing ${heading}.`);
+    const requiredHeadingGroups = [
+      ['## 背景与原因', '## Why', '## 为什么'],
+      ['## 变更内容', '## What Changes'],
+      ['## 影响范围', '## Impact', '## 影响'],
+    ];
+    for (const headings of requiredHeadingGroups) {
+      if (!headings.some((heading) => proposalText.includes(heading))) {
+        warnings.push(`${path.relative(projectRoot, proposalPath)} 缺少章节: ${headings[0]}`);
       }
     }
   }
 
   const designPath = cjoin(changeDir, 'design.md');
   if (!(await exists(designPath))) {
-    warnings.push(`${path.relative(projectRoot, designPath)} is missing; complex changes should include design rationale.`);
+    warnings.push(`${path.relative(projectRoot, designPath)} 缺失；复杂变更建议补充设计依据。`);
   }
 
   const specsRoot = cjoin(changeDir, 'specs');
   const specs = [];
   if (!(await exists(specsRoot))) {
-    errors.push(`${path.relative(projectRoot, specsRoot)} is required.`);
+    errors.push(`${path.relative(projectRoot, specsRoot)} 是必需目录。`);
   } else {
     const specEntries = await fs.readdir(specsRoot, { withFileTypes: true }).catch(() => []);
     for (const entry of specEntries.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -166,7 +171,7 @@ export async function validateOpenSpecChangeWorkspace(projectRoot, options = {})
       const specPath = cjoin(specsRoot, entry.name, 'spec.md');
       const relativePath = path.relative(projectRoot, specPath);
       if (!(await exists(specPath))) {
-        errors.push(`${relativePath} is required.`);
+        errors.push(`${relativePath} 是必需文件。`);
         continue;
       }
       const text = await readText(specPath);
@@ -176,18 +181,18 @@ export async function validateOpenSpecChangeWorkspace(projectRoot, options = {})
   }
 
   if (specs.length === 0) {
-    errors.push(`${path.relative(projectRoot, specsRoot)} must contain at least one capability spec.`);
+    errors.push(`${path.relative(projectRoot, specsRoot)} 必须至少包含一个 capability spec。`);
   }
 
   const proposalCapabilities = extractProposalCapabilities(proposalText);
   for (const capability of proposalCapabilities) {
     if (!specs.some((spec) => spec.capability === capability)) {
-      warnings.push(`Proposal capability ${capability} has no matching specs/${capability}/spec.md.`);
+      warnings.push(`proposal.md 中的 capability ${capability} 没有对应的 specs/${capability}/spec.md。`);
     }
   }
   for (const spec of specs) {
     if (proposalCapabilities.length > 0 && !proposalCapabilities.includes(spec.capability)) {
-      warnings.push(`Spec capability ${spec.capability} is not listed in proposal.md capabilities.`);
+      warnings.push(`spec capability ${spec.capability} 未列入 proposal.md 的能力范围。`);
     }
   }
 
@@ -202,11 +207,11 @@ export async function validateOpenSpecChangeWorkspace(projectRoot, options = {})
     checks.push(...standards.checks);
     const hasStandardsTask = taskVolume.files.some((file) => file.text.includes('openprd standards') && file.text.includes('docs/basic'));
     if (!hasStandardsTask) {
-      warnings.push(`${path.relative(projectRoot, changeDir)} should include a docs/basic standards maintenance task.`);
+      warnings.push(`${path.relative(projectRoot, changeDir)} 应包含 docs/basic 标准文档维护任务。`);
     }
   }
 
-  checks.unshift(`OpenPrd change ${changeId}: ${specs.length} spec delta(s).`);
+  checks.unshift(`OpenPrd change ${changeId}: ${specs.length} 个 spec delta。`);
 
   return {
     ok: errors.length === 0,

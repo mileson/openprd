@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { buildArchitectureDiagramModel, buildProductFlowDiagramModel, renderDiagramMermaidFromModel } from './diagram-core.js';
 import { TBD_ZH, languagePolicyLines } from './language-policy.js';
+import { timestamp } from './time.js';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -150,7 +151,7 @@ export function buildPrdSnapshot(ws, options = {}) {
   const state = ws.data.currentState ?? {};
   const versionNumber = options.versionNumber ?? state.prdVersion ?? 0;
   const versionId = options.versionId ?? (versionNumber > 0 ? formatVersionId(versionNumber) : 'v0000');
-  const createdAt = options.createdAt ?? new Date().toISOString();
+  const createdAt = options.createdAt ?? timestamp();
   const productType = options.productType ?? state.productType ?? null;
   const templatePack = options.templatePack ?? state.templatePack ?? ws.data.config?.activeTemplatePack ?? 'base';
   const title = pickValue(options.title, state.title, path.basename(ws.projectRoot));

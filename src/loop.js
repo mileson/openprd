@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { listOpenSpecTaskWorkspace, advanceOpenSpecTaskWorkspace, verifyOpenSpecTaskWorkspace } from './openspec/execute.js';
 import { validateOpenSpecChangeWorkspace } from './openspec/change-validate.js';
+import { timestamp } from './time.js';
 
 const LOOP_FEATURE_LIST = path.join('.openprd', 'harness', 'feature-list.json');
 const LOOP_STATE = path.join('.openprd', 'harness', 'loop-state.json');
@@ -10,14 +11,11 @@ const LOOP_PROGRESS = path.join('.openprd', 'harness', 'progress.md');
 const LOOP_SESSIONS = path.join('.openprd', 'harness', 'agent-sessions.jsonl');
 const LOOP_BOOTSTRAP = path.join('.openprd', 'harness', 'bootstrap.sh');
 const LOOP_PROMPTS_DIR = path.join('.openprd', 'harness', 'loop-prompts');
+const LOOP_TEST_REPORTS_DIR = path.join('.openprd', 'harness', 'test-reports');
 const LOOP_AGENT_VALUES = ['codex', 'claude'];
 
 function cjoin(...parts) {
   return path.join(...parts);
-}
-
-function timestamp() {
-  return new Date().toISOString();
 }
 
 function exists(filePath) {
@@ -78,6 +76,7 @@ function bootstrapScript() {
 async function ensureLoopFiles(projectRoot) {
   await fs.mkdir(harnessPath(projectRoot, path.dirname(LOOP_FEATURE_LIST)), { recursive: true });
   await fs.mkdir(harnessPath(projectRoot, LOOP_PROMPTS_DIR), { recursive: true });
+  await fs.mkdir(harnessPath(projectRoot, LOOP_TEST_REPORTS_DIR), { recursive: true });
 
   const bootstrapPath = harnessPath(projectRoot, LOOP_BOOTSTRAP);
   if (!(await exists(bootstrapPath))) {
@@ -126,9 +125,11 @@ function featureTaskFromOpenSpecTask(task, changeId) {
     verify: task.metadata?.verify ?? null,
     commitMessage: `Complete ${task.id}: ${task.title}`,
     sessionScope: [
-      'Work on this task only.',
-      'Do not start the next task in the same agent session.',
-      'Keep docs/basic, file manuals, and folder README docs synchronized when touched.',
+      '只处理这个任务，不要在同一会话继续下一个任务。',
+      '完成代码后必须先自测，失败就修复并重新自测。',
+      '涉及前端界面时，在 Codex 客户端优先使用 Computer Use；在 Codex CLI 或 Claude Code 中优先使用 Playwright、MCP 或等价浏览器自动化。',
+      '纯后端、脚本或库任务使用最贴近项目的脚本、单测、集成测试或命令行验证。',
+      '保持 docs/basic、文件说明书和文件夹 README 与本任务改动同步。',
     ],
     updatedAt: timestamp(),
   };
@@ -253,48 +254,60 @@ function defaultAgentInvocation(agent, projectRoot, promptPath) {
 }
 
 function renderLoopPrompt({ agent, projectRoot, featureList, task, dependency, mode }) {
+  const frontendStrategy = [
+    '- 如果任务涉及页面、组件、样式、前端交互或浏览器行为，必须做界面级验证。',
+    '- Codex 客户端环境: 优先使用 Computer Use 以第三方视角打开页面、点击、输入、截图或读取可访问性树。',
+    '- Codex CLI / Claude Code 环境: 优先使用 Playwright、MCP 浏览器自动化或项目已有 e2e 工具。',
+    '- 每次发现问题后先修复，再重新运行验证；验证通过后才能提交。',
+  ];
   return [
-    '# OpenPrd Long-Running Agent Session',
+    '# OpenPrd 长程单任务执行会话',
     '',
     `Agent: ${agent}`,
-    `Mode: ${mode}`,
-    `Project: ${projectRoot}`,
-    `Change: ${task.changeId}`,
-    `Task: ${task.id} ${task.title}`,
+    `模式: ${mode}`,
+    `项目: ${projectRoot}`,
+    `变更: ${task.changeId}`,
+    `任务: ${task.id} ${task.title}`,
     '',
-    '## Harness Contract',
+    '## Harness 契约',
     '',
-    'You are running one isolated OpenPrd loop session. This session has no assumed memory from previous sessions.',
-    'Use the project files and Git history as the source of continuity.',
+    '你正在运行一个隔离的 OpenPrd loop 单任务会话。本会话不假设拥有前一个会话的对话记忆。',
+    '连续性只来自项目文件、OpenPrd 状态文件、测试报告和 Git 历史。',
     '',
-    '## Required Startup',
+    '## 启动步骤',
     '',
-    '1. Read `AGENTS.md` and follow the OpenPrd managed block.',
-    '2. Run `.openprd/harness/bootstrap.sh .` if available.',
-    '3. Inspect `git status --short` and do not overwrite unrelated user work.',
-    '4. Read `.openprd/harness/feature-list.json`, `.openprd/harness/progress.md`, and this task source file.',
+    '1. 读取 `AGENTS.md`，遵守 OpenPrd managed block。',
+    '2. 如存在 `.openprd/harness/bootstrap.sh`，先运行 `.openprd/harness/bootstrap.sh .`。',
+    '3. 查看 `git status --short`，不要覆盖无关用户改动。',
+    '4. 读取 `.openprd/harness/feature-list.json`、`.openprd/harness/progress.md` 和本任务来源文件。',
     '',
-    '## Single Task Boundary',
+    '## 单任务边界',
     '',
-    `Only implement task ${task.id}: ${task.title}`,
-    `Done condition: ${task.done ?? 'not specified'}`,
-    `Verify command: ${task.verify ?? 'not specified'}`,
-    `Dependencies ready: ${dependency?.ready ? 'yes' : 'no'}`,
-    dependency?.missing?.length ? `Missing dependencies: ${dependency.missing.join(', ')}` : '',
-    dependency?.incomplete?.length ? `Incomplete dependencies: ${dependency.incomplete.join(', ')}` : '',
-    `Source: ${task.sourcePath}:${task.sourceLine}`,
+    `只实现任务 ${task.id}: ${task.title}`,
+    `完成条件: ${task.done ?? '未指定'}`,
+    `自测命令: ${task.verify ?? '未指定'}`,
+    `依赖是否就绪: ${dependency?.ready ? '是' : '否'}`,
+    dependency?.missing?.length ? `缺失依赖: ${dependency.missing.join(', ')}` : '',
+    dependency?.incomplete?.length ? `未完成依赖: ${dependency.incomplete.join(', ')}` : '',
+    `来源: ${task.sourcePath}:${task.sourceLine}`,
     '',
-    'Do not begin the next task. If you discover the task is too broad, split it in the task file and stop after the smallest useful slice.',
+    '不要开始下一个任务。如果发现任务仍然过大，先拆分任务文件，并只完成最小可用切片。',
     '',
-    '## Required Finish',
+    '## 自测与界面验证要求',
     '',
-    '1. Run the task verify command.',
-    '2. Run `openprd run . --verify`.',
-    '3. Leave a concise final summary with changed files and verification results.',
-    '4. If this prompt is used manually, finish with:',
+    '1. 必须运行本任务的自测命令。',
+    '2. 必须运行 `openprd run . --verify`。',
+    ...frontendStrategy,
+    '5. 阶段性测试报告会由 `openprd loop . --finish` 写入 `.openprd/harness/test-reports/`，并与本任务改动一起进入 commit。',
+    '',
+    '## 收尾步骤',
+    '',
+    '1. 确认自测、界面验证和 OpenPrd verify 都已经通过。',
+    '2. 留下简洁总结，说明改动文件和验证结果。',
+    '3. 如果这是手动执行 prompt，用以下命令结束任务并提交:',
     `   openprd loop . --finish --item ${task.id} --commit --message ${JSON.stringify(task.commitMessage)}`,
     '',
-    '## Feature List Snapshot',
+    '## 任务快照',
     '',
     JSON.stringify({
       version: featureList.version,
@@ -337,27 +350,85 @@ async function runCommand(command, args, options = {}) {
 async function gitCommit(projectRoot, message) {
   const status = await runCommand('git', ['status', '--porcelain'], { cwd: projectRoot });
   if (!status.ok) {
-    return { ok: false, skipped: false, message: 'git status failed', status };
+    return { ok: false, skipped: false, message: 'git status 执行失败', status };
   }
   if (!status.stdout.trim()) {
-    return { ok: true, skipped: true, message: 'No git changes to commit.' };
+    return { ok: true, skipped: true, message: '没有需要提交的 Git 变更。' };
   }
   const add = await runCommand('git', ['add', '-A'], { cwd: projectRoot });
   if (!add.ok) {
-    return { ok: false, skipped: false, message: 'git add failed', add };
+    return { ok: false, skipped: false, message: 'git add 执行失败', add };
   }
   const commit = await runCommand('git', ['commit', '-m', message], { cwd: projectRoot });
   if (!commit.ok) {
-    return { ok: false, skipped: false, message: 'git commit failed', commit };
+    return { ok: false, skipped: false, message: 'git commit 执行失败', commit };
   }
   const rev = await runCommand('git', ['rev-parse', '--short', 'HEAD'], { cwd: projectRoot });
   return {
     ok: true,
     skipped: false,
-    message: 'committed',
+    message: '已提交',
     sha: rev.stdout.trim() || null,
     commit,
   };
+}
+
+function trimOutput(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '无';
+  return text.length > 4000 ? `${text.slice(-4000)}\n...` : text;
+}
+
+function reportFileName(taskId) {
+  return `${taskId.replace(/[^a-zA-Z0-9._-]/g, '_')}.md`;
+}
+
+function inferUiVerificationHint(task, agent = 'codex') {
+  const text = `${task.title} ${task.done ?? ''} ${task.verify ?? ''}`.toLowerCase();
+  const looksFrontend = /前端|界面|页面|组件|样式|布局|浏览器|ui|css|html|react|vue|svelte|playwright|e2e/.test(text);
+  if (!looksFrontend) {
+    return '未识别为前端界面任务；请以任务自测命令、单测、集成测试或脚本验证为主。';
+  }
+  if (agent === 'codex') {
+    return '识别为前端界面任务；Codex 客户端优先使用 Computer Use，Codex CLI 优先使用 Playwright/MCP 浏览器自动化。';
+  }
+  return '识别为前端界面任务；Claude Code 优先使用 Playwright、MCP 浏览器自动化或项目已有 e2e 工具。';
+}
+
+async function writeTestReport(projectRoot, { task, agent, advanced, change }) {
+  const relativePath = cjoin(LOOP_TEST_REPORTS_DIR, reportFileName(task.id));
+  const lines = [
+    `# 阶段性测试报告: ${task.id} ${task.title}`,
+    '',
+    `- 测试时间: ${timestamp()}`,
+    `- 变更: ${task.changeId}`,
+    `- 完成条件: ${task.done ?? '未指定'}`,
+    `- 自测命令: ${advanced.verification?.command ?? task.verify ?? '未指定'}`,
+    `- 自测结果: ${advanced.verification?.ok ? '通过' : '失败或未运行'}`,
+    `- Change 校验: ${change.ok ? '通过' : '失败'}`,
+    `- 界面验证策略: ${inferUiVerificationHint(task, agent)}`,
+    '',
+    '## 自测输出',
+    '',
+    '```text',
+    trimOutput(advanced.verification?.stdout),
+    '```',
+    '',
+    '## 错误输出',
+    '',
+    '```text',
+    trimOutput(advanced.verification?.stderr),
+    '```',
+    '',
+    '## OpenPrd 校验摘要',
+    '',
+    ...(change.checks ?? []).map((check) => `- ${check}`),
+    ...(change.warnings?.length ? ['', '## 警告', '', ...change.warnings.map((warning) => `- ${warning}`)] : []),
+    ...(change.errors?.length ? ['', '## 错误', '', ...change.errors.map((error) => `- ${error}`)] : []),
+    '',
+  ];
+  await writeText(harnessPath(projectRoot, relativePath), `${lines.join('\n')}\n`);
+  return relativePath;
 }
 
 export async function initLoopWorkspace(projectRoot, options = {}) {
@@ -379,8 +450,8 @@ export async function initLoopWorkspace(projectRoot, options = {}) {
   };
   await writeFeatureList(projectRoot, featureList);
   await appendText(harnessPath(projectRoot, LOOP_PROGRESS), renderProgressEntry(timestamp(), [
-    'Loop harness initialized.',
-    `Agent default: ${normalizeAgent(options.agent ?? 'codex')}.`,
+    'Loop harness 已初始化。',
+    `默认 Agent: ${normalizeAgent(options.agent ?? 'codex')}。`,
   ]));
   return {
     ok: true,
@@ -392,6 +463,7 @@ export async function initLoopWorkspace(projectRoot, options = {}) {
       progress: LOOP_PROGRESS,
       sessions: LOOP_SESSIONS,
       bootstrap: LOOP_BOOTSTRAP,
+      testReports: LOOP_TEST_REPORTS_DIR,
     },
     featureList,
   };
@@ -420,13 +492,14 @@ export async function planLoopWorkspace(projectRoot, options = {}) {
       requireCommit: true,
       continuity: 'files-and-git-history',
       agentSessionRule: 'start a new Codex or Claude session for exactly one task',
+      testReportRule: 'write one staged test report before each task commit',
     },
     tasks,
   };
   await writeFeatureList(projectRoot, featureList);
   await appendText(harnessPath(projectRoot, LOOP_PROGRESS), renderProgressEntry(timestamp(), [
-    `Planned ${tasks.length} loop task(s) from change ${taskState.changeId}.`,
-    'Each task is a separate agent session boundary.',
+    `已从 change ${taskState.changeId} 规划 ${tasks.length} 个 loop 任务。`,
+    '每个任务都是独立 Agent 会话边界。',
   ]));
   return {
     ok: true,
@@ -499,7 +572,7 @@ export async function promptLoopWorkspace(projectRoot, options = {}) {
       action: 'loop-prompt',
       projectRoot,
       agent,
-      errors: ['No ready loop task is available.'],
+      errors: ['当前没有可执行的 loop 任务。'],
     };
   }
   if (!state.ready) {
@@ -510,7 +583,7 @@ export async function promptLoopWorkspace(projectRoot, options = {}) {
       agent,
       task,
       dependencyState: state,
-      errors: [`Task ${task.id} is not ready.`],
+      errors: [`任务 ${task.id} 尚未就绪。`],
     };
   }
   const prompt = renderLoopPrompt({
@@ -546,10 +619,21 @@ export async function verifyLoopWorkspace(projectRoot, options = {}) {
   }
   const { task, dependencyState: state } = nextLoopTask(featureList, options.item);
   if (!task) {
-    return { ok: false, action: 'loop-verify', projectRoot, errors: ['No ready loop task is available.'] };
+    const summary = buildLoopSummary(featureList);
+    if (summary.total > 0 && summary.done === summary.total) {
+      return {
+        ok: true,
+        action: 'loop-verify',
+        projectRoot,
+        summary,
+        errors: [],
+        checks: ['所有 OpenPrd loop 任务均已完成。'],
+      };
+    }
+    return { ok: false, action: 'loop-verify', projectRoot, summary, errors: ['当前没有可执行的 loop 任务。'] };
   }
   if (!state.ready) {
-    return { ok: false, action: 'loop-verify', projectRoot, task, dependencyState: state, errors: [`Task ${task.id} is not ready.`] };
+    return { ok: false, action: 'loop-verify', projectRoot, task, dependencyState: state, errors: [`任务 ${task.id} 尚未就绪。`] };
   }
   const verify = await verifyOpenSpecTaskWorkspace(projectRoot, { change: task.changeId, item: task.sourceTaskId });
   return {
@@ -559,7 +643,7 @@ export async function verifyLoopWorkspace(projectRoot, options = {}) {
     task,
     dependencyState: state,
     verify,
-    errors: verify.ok ? [] : [verify.verification?.stderr || verify.verification?.stdout || `Task ${task.id} verify failed.`],
+    errors: verify.ok ? [] : [verify.verification?.stderr || verify.verification?.stdout || `任务 ${task.id} 自测失败。`],
   };
 }
 
@@ -581,10 +665,10 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
   }
   const { task, dependencyState: state } = nextLoopTask(featureList, options.item);
   if (!task) {
-    return { ok: false, action: 'loop-finish', projectRoot, errors: ['No ready loop task is available.'] };
+    return { ok: false, action: 'loop-finish', projectRoot, errors: ['当前没有可执行的 loop 任务。'] };
   }
   if (!state.ready) {
-    return { ok: false, action: 'loop-finish', projectRoot, task, dependencyState: state, errors: [`Task ${task.id} is not ready.`] };
+    return { ok: false, action: 'loop-finish', projectRoot, task, dependencyState: state, errors: [`任务 ${task.id} 尚未就绪。`] };
   }
 
   const beforeChange = await validateOpenSpecChangeWorkspace(projectRoot, { change: task.changeId });
@@ -607,7 +691,7 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     notes: options.notes,
   });
   if (!advanced.ok) {
-    const failedList = updateTask(featureList, task.id, { status: 'failed', lastError: advanced.verification?.stderr || advanced.verification?.stdout || 'verify failed' });
+    const failedList = updateTask(featureList, task.id, { status: 'failed', lastError: advanced.verification?.stderr || advanced.verification?.stdout || '自测失败' });
     await writeFeatureList(projectRoot, failedList);
     return {
       ok: false,
@@ -615,7 +699,7 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
       projectRoot,
       task,
       advanced,
-      errors: [advanced.verification?.stderr || advanced.verification?.stdout || `Task ${task.id} verify failed.`],
+      errors: [advanced.verification?.stderr || advanced.verification?.stdout || `任务 ${task.id} 自测失败。`],
     };
   }
 
@@ -635,6 +719,12 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
   }
 
   let commit = null;
+  const testReportPath = await writeTestReport(projectRoot, {
+    task,
+    agent: options.agent ?? 'codex',
+    advanced,
+    change,
+  });
   if (options.commit) {
     commit = await gitCommit(projectRoot, options.message ?? task.commitMessage);
     if (!commit.ok) {
@@ -656,12 +746,14 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     lastVerifiedAt: timestamp(),
     lastCommittedAt: commit && !commit.skipped ? timestamp() : null,
     commitSha: commit?.sha ?? null,
+    lastTestReport: testReportPath,
   });
   await writeFeatureList(projectRoot, updatedList);
   await appendText(harnessPath(projectRoot, LOOP_PROGRESS), renderProgressEntry(timestamp(), [
-    `Finished ${task.id}: ${task.title}.`,
-    `Verify: ${advanced.verification?.ok ? 'ok' : 'not-run'}.`,
-    commit ? `Commit: ${commit.skipped ? 'skipped' : commit.sha}` : 'Commit: not requested.',
+    `已完成 ${task.id}: ${task.title}。`,
+    `自测: ${advanced.verification?.ok ? '通过' : '未运行'}。`,
+    `测试报告: ${testReportPath}。`,
+    commit ? `Commit: ${commit.skipped ? '跳过' : commit.sha}` : 'Commit: 未请求。',
   ]));
   await appendJsonl(harnessPath(projectRoot, LOOP_SESSIONS), {
     version: 1,
@@ -671,6 +763,7 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     changeId: task.changeId,
     ok: true,
     commit: commit ? { ok: commit.ok, skipped: commit.skipped, sha: commit.sha ?? null } : null,
+    testReport: testReportPath,
   });
   await updateLoopState(projectRoot, {
     currentTaskId: advanced.nextTask?.id ?? null,
@@ -684,6 +777,7 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     advanced,
     change,
     commit,
+    testReport: testReportPath,
     summary: buildLoopSummary(updatedList),
     next: nextLoopTask(updatedList).task,
   };
@@ -757,7 +851,7 @@ export async function runLoopWorkspace(projectRoot, options = {}) {
       agent,
       task: promptResult.task,
       run,
-      errors: [run.stderr || run.stdout || 'Agent command failed.'],
+      errors: [run.stderr || run.stdout || 'Agent 命令执行失败。'],
     };
   }
 

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { validateOpenSpecChangeWorkspace, resolveOpenSpecChangeId } from './change-validate.js';
 import { listOpenSpecStructuredTasks } from './tasks.js';
+import { timestamp } from '../time.js';
 import {
   cjoin,
   exists,
@@ -12,10 +13,6 @@ import {
   readDiscoveryConfig,
   resolveChangeDir,
 } from './paths.js';
-
-function timestamp() {
-  return new Date().toISOString();
-}
 
 async function readText(filePath) {
   return fs.readFile(filePath, 'utf8');
@@ -238,7 +235,7 @@ export async function applyOpenPrdChangeWorkspace(projectRoot, options = {}) {
       changeId,
       validation,
       appliedSpecs: [],
-      errors: [`Change ${changeId} still has incomplete task(s): ${taskState.incomplete.join(', ')}. Use --force to apply anyway.`],
+      errors: [`Change ${changeId} 仍有未完成任务: ${taskState.incomplete.join(', ')}。如需强制应用，请使用 --force。`],
     };
   }
 

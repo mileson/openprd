@@ -142,7 +142,7 @@ This project is managed by OpenPrd. Agents should be led by the harness rather t
 - `openprd run . --verify` - verify the current run gates.
 - `openprd loop . --plan --change <id>` - build the one-task-per-session feature list.
 - `openprd loop . --run --agent codex|claude --dry-run` - prepare a fresh single-task agent session.
-- `openprd loop . --finish --item <task-id> --commit` - verify, mark done, and create the task commit.
+- `openprd loop . --finish --item <task-id> --commit` - verify, write staged test report, mark done, and create the task commit.
 - `openprd standards . --verify` - verify project documentation standards.
 - `openprd change . --validate --change <id>` - verify change structure.
 - `openprd discovery . --verify` - verify long-running discovery state.

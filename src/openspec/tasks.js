@@ -169,7 +169,7 @@ export function validateOpenSpecStructuredTasks(sortedFiles, errors, checks) {
 
   for (const task of tasks) {
     if (taskById.has(task.id)) {
-      errors.push(`${formatOpenSpecTaskLocation(task)} duplicates task id ${task.id}.`);
+      errors.push(`${formatOpenSpecTaskLocation(task)} 重复使用任务 id ${task.id}。`);
       continue;
     }
     taskById.set(task.id, task);
@@ -177,30 +177,30 @@ export function validateOpenSpecStructuredTasks(sortedFiles, errors, checks) {
 
   for (const task of tasks) {
     if (!task.metadata.done) {
-      errors.push(`${formatOpenSpecTaskLocation(task)} is missing "done:".`);
+      errors.push(`${formatOpenSpecTaskLocation(task)} 缺少 "done:"。`);
     }
     if (!task.metadata.verify) {
-      errors.push(`${formatOpenSpecTaskLocation(task)} is missing "verify:".`);
+      errors.push(`${formatOpenSpecTaskLocation(task)} 缺少 "verify:"。`);
     }
 
     for (const depId of parseOpenSpecTaskDeps(task.metadata.deps)) {
       if (!OPENSPEC_TASK_ID_PATTERN.test(depId)) {
-        errors.push(`${formatOpenSpecTaskLocation(task)} has invalid dependency id ${depId}.`);
+        errors.push(`${formatOpenSpecTaskLocation(task)} 存在无效依赖 id ${depId}。`);
         continue;
       }
 
       const dependency = taskById.get(depId);
       if (!dependency) {
-        errors.push(`${formatOpenSpecTaskLocation(task)} depends on unknown task ${depId}.`);
+        errors.push(`${formatOpenSpecTaskLocation(task)} 依赖未知任务 ${depId}。`);
         continue;
       }
       if (dependency.order >= task.order) {
-        errors.push(`${formatOpenSpecTaskLocation(task)} depends on ${depId}, which must appear before ${task.id}.`);
+        errors.push(`${formatOpenSpecTaskLocation(task)} 依赖 ${depId}，该任务必须出现在 ${task.id} 之前。`);
       }
     }
   }
 
-  checks.push(`Structured OpenPrd tasks: ${tasks.length} task(s), ${dependencyCount} dependency link(s).`);
+  checks.push(`结构化 OpenPrd 任务: ${tasks.length} 个任务，${dependencyCount} 条依赖。`);
 }
 
 export async function analyzeOpenSpecTaskVolumes(projectRoot, options = {}) {
@@ -212,12 +212,12 @@ export async function analyzeOpenSpecTaskVolumes(projectRoot, options = {}) {
   const filesByGroup = new Map();
 
   if (!Number.isInteger(maxItemsPerFile) || maxItemsPerFile < 1) {
-    errors.push(`Invalid OpenPrd task sharding maxItemsPerFile: ${discoveryConfig?.taskSharding?.maxItemsPerFile}`);
+    errors.push(`OpenPrd 任务分片 maxItemsPerFile 无效: ${discoveryConfig?.taskSharding?.maxItemsPerFile}`);
   }
 
   for (const file of taskFiles) {
     if (file.checkboxCount > maxItemsPerFile) {
-      errors.push(`${file.relativePath} has ${file.checkboxCount} checkbox tasks; split it to ${maxItemsPerFile} or fewer per file.`);
+      errors.push(`${file.relativePath} 包含 ${file.checkboxCount} 个 checkbox 任务；请拆分到每个文件不超过 ${maxItemsPerFile} 个。`);
     }
     if (!filesByGroup.has(file.groupDir)) {
       filesByGroup.set(file.groupDir, []);
@@ -231,7 +231,7 @@ export async function analyzeOpenSpecTaskVolumes(projectRoot, options = {}) {
       const file = sortedFiles[index];
       const next = sortedFiles[index + 1];
       if (!file.lastCheckboxLine.includes(next.fileName)) {
-        errors.push(`${file.relativePath} must end with a checkbox that hands off to ${next.fileName}.`);
+        errors.push(`${file.relativePath} 最后必须用 checkbox 任务交接到 ${next.fileName}。`);
       }
     }
     validateOpenSpecStructuredTasks(sortedFiles, errors, checks);
@@ -239,7 +239,7 @@ export async function analyzeOpenSpecTaskVolumes(projectRoot, options = {}) {
 
   if (taskFiles.length > 0) {
     const totalCheckboxes = taskFiles.reduce((sum, file) => sum + file.checkboxCount, 0);
-    checks.push(`OpenPrd task files: ${taskFiles.length} file(s), ${totalCheckboxes} checkbox task(s), max ${maxItemsPerFile} per file.`);
+    checks.push(`OpenPrd 任务文件: ${taskFiles.length} 个文件，${totalCheckboxes} 个 checkbox 任务，每个文件最多 ${maxItemsPerFile} 个。`);
   }
 
   return {

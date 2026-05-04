@@ -225,8 +225,10 @@ openprd loop /path/to/project --run --agent codex --dry-run
 
 如果进入真正的开发落地阶段，建议使用 `openprd loop`。它比 `run --context`
 更严格：先生成稳定的 feature list，再为每个任务写出单独提示词，启动一个新的
-Codex 或 Claude 会话只处理这一个任务，完成后验证、记录进度，并可为该任务生成
-独立 commit。
+Codex 或 Claude 会话只处理这一个任务。每个任务完成后必须先自测，失败就修复并
+重新自测；前端界面任务在 Codex 客户端优先用 Computer Use，在 Codex CLI 和
+Claude Code 中优先用 Playwright、MCP 浏览器自动化或项目已有 e2e 工具。验证
+通过后，`loop --finish` 会写入阶段性测试报告，并可为该任务生成独立 commit。
 
 ```bash
 openprd loop . --init
@@ -247,10 +249,15 @@ Loop 状态会沉淀在 `.openprd/harness/`：
 - `bootstrap.sh`：每个新会话启动时执行的检查脚本
 - `loop-state.json`：当前任务和最近一次 Agent 会话状态
 - `loop-prompts/`：生成过的单任务提示词，便于审计和复用
+- `test-reports/`：每个任务的阶段性测试报告，会和任务改动一起提交
 
 建议先用 `--dry-run`，让 OpenPrd 生成提示词和准确执行命令，但不直接启动 Agent。
 `--agent codex` / `--agent claude` 会使用默认 CLI 集成；只有需要接入团队自定义
 包装器时，才使用 `--agent-command "<custom command>"`。
+
+OpenPrd 面向用户的时间统一使用上海时区的 `YYYY-MM-DD HH:mm:ss` 格式，不输出
+`T`、`Z` 或毫秒后缀。除命令、字段名、文件路径、API 名称等必要专有术语外，生成
+文档、进度日志、proposal、prompt 和测试报告默认使用简体中文。
 
 历史项目不要手写 shell 循环批量改。使用 `fleet` 先扫描报告；`--update-openprd` 只刷新已经有 `.openprd/` 的项目，只有 agent 配置或普通项目默认保持不变，除非显式用 `--setup-missing` 接管。
 

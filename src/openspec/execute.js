@@ -3,14 +3,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { resolveOpenSpecChangeId } from './change-validate.js';
 import { cjoin, resolveChangeDir } from './paths.js';
+import { timestamp } from '../time.js';
 import {
   listOpenSpecStructuredTasks,
   parseOpenSpecTaskDeps,
 } from './tasks.js';
-
-function timestamp() {
-  return new Date().toISOString();
-}
 
 async function readText(filePath) {
   return fs.readFile(filePath, 'utf8');
@@ -109,7 +106,7 @@ function assertTaskReady(task, state) {
     throw new Error(`${task.id} depends on unknown task(s): ${dependencyState.missing.join(', ')}`);
   }
   if (dependencyState.incomplete.length > 0) {
-    throw new Error(`${task.id} is blocked by incomplete task(s): ${dependencyState.incomplete.join(', ')}`);
+    throw new Error(`${task.id} 被未完成任务阻塞: ${dependencyState.incomplete.join(', ')}`);
   }
   return dependencyState;
 }
