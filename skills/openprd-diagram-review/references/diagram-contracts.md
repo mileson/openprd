@@ -1,5 +1,11 @@
 # Diagram Contracts
 
+## Language Requirement
+
+For `locale: zh-CN`, all visible user-facing text in the contract must be Simplified Chinese. This includes `title`, `subtitle`, component names/subtitles/details, flow labels, summary cards, side panels, and review instructions.
+
+Preserve necessary proper nouns and technical tokens inside Chinese sentences, such as MotiClaw, Electron, TypeScript, CLI, API, JSON, NDJSON, dry-run, Host API, schema, and `waiting_approval`. Do not write full English sentences just because the diagram contains technical terms.
+
 ## Architecture Diagram Contract
 
 ### Minimum required fields

@@ -54,7 +54,16 @@ Therefore:
 ## Language Rules
 
 - Follow the user's current primary language for all user-facing labels and review notes.
+- Diagram contracts are user-facing. When `locale` is `zh-CN`, write visible text in Simplified Chinese:
+  - `title`, `subtitle`
+  - `components[].name`, `components[].subtitle`, `components[].details`
+  - `flows[].label`
+  - `summaryCards[].title`, `summaryCards[].items`
+  - `sidePanels[].title`, `sidePanels[].items`
+  - `reviewInstructions`
 - Keep proper nouns, product names, protocol names, API names, framework names, and cloud service names unchanged when translation would reduce clarity.
+- Keep necessary terms such as MotiClaw, Electron, TypeScript, CLI, API, JSON, NDJSON, dry-run, Host API, schema, and `waiting_approval` unchanged, but translate the surrounding sentence into Simplified Chinese.
+- Do not write full English sentences in zh-CN diagram contracts. Before running `openprd diagram --input`, inspect the contract once and rewrite English-heavy visible text into Simplified Chinese.
 - If the conversation language is mixed, prefer the dominant language of the latest requirement-clarification turns.
 
 ## Review Loop

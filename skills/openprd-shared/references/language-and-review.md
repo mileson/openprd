@@ -12,6 +12,9 @@ Translate:
 - legend labels
 - review instructions
 - summary-card labels
+- diagram contract visible fields, including component names, subtitles, details, flow labels, cards, panels, and review instructions
+
+For `locale: zh-CN` diagram contracts, translate full sentences into Simplified Chinese and preserve only necessary product names, framework names, protocol names, command names, field keys, and file paths. Examples that may stay unchanged inside Chinese sentences: MotiClaw, Electron, TypeScript, CLI, API, JSON, NDJSON, dry-run, Host API, schema, `waiting_approval`.
 
 Do not translate by default:
 

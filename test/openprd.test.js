@@ -1325,6 +1325,60 @@ test('diagram rejects invalid contract input', async () => {
   );
 });
 
+test('diagram rejects English-heavy zh-CN user-facing contract text', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await synthesizeWorkspace(project, {
+    title: 'AI 操作导师',
+    owner: 'PM',
+    problemStatement: '新用户学不会复杂创意软件的操作',
+    whyNow: '本地多模态与桌面助手成熟',
+    primaryUsers: ['设计新手'],
+    stakeholders: ['产品团队'],
+    productType: 'consumer',
+  });
+
+  const contractPath = path.join(project, 'english-architecture-contract.json');
+  await fs.writeFile(contractPath, JSON.stringify({
+    type: 'architecture',
+    locale: 'zh-CN',
+    title: 'MotiClaw Agent CLI Capability Architecture',
+    components: [
+      {
+        id: 'agent',
+        name: 'Agent / Maintainer',
+        type: 'external',
+        subtitle: 'Discovers commands reads Skills runs dry-run and composes CLI outputs',
+      },
+      {
+        id: 'gateway',
+        name: 'CLI 网关',
+        type: 'backend',
+        subtitle: '解析命令并调度执行',
+      },
+    ],
+    flows: [
+      { source: 'agent', target: 'gateway', label: 'discover schema dry-run execute' },
+    ],
+    summaryCards: [
+      {
+        title: 'Core Pattern',
+        items: ['Three CLI layers: atomic commands shortcuts and workflow orchestration'],
+      },
+    ],
+    reviewInstructions: ['Confirm whether these are the right top-level layers'],
+    metadata: {
+      versionId: 'v0001',
+      reviewStatus: 'pending-confirmation',
+    },
+  }, null, 2));
+
+  await assert.rejects(
+    () => diagramWorkspace(project, { open: false, type: 'architecture', input: contractPath }),
+    /Invalid architecture diagram language[\s\S]*title 应使用简体中文表达/
+  );
+});
+
 test('diagram mark updates review status on existing artifact', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'consumer' });

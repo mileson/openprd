@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { analyzePrdSnapshot, buildPrdSnapshot, diffSnapshots, formatVersionId, getRequiredFieldDescriptors, renderPrdMarkdown, summarizeSnapshot } from './prd-core.js';
-import { buildDiagramArtifact, renderDiagramArtifactFromModel, renderDiagramMermaidFromModel, validateDiagramContract } from './diagram-core.js';
+import { buildDiagramArtifact, renderDiagramArtifactFromModel, renderDiagramMermaidFromModel, validateDiagramContract, validateDiagramLanguage } from './diagram-core.js';
 import { validateOpenSpecChangeWorkspace } from './openspec/change-validate.js';
 import { generateOpenSpecChangeWorkspace as writeOpenSpecChangeWorkspace } from './openspec/generate.js';
 import { advanceOpenSpecTaskWorkspace, listOpenSpecTaskWorkspace, verifyOpenSpecTaskWorkspace } from './openspec/execute.js';
@@ -1688,6 +1688,10 @@ async function diagramWorkspace(projectRoot, options = {}) {
       ...(model.metadata ?? {}),
       reviewStatus: options.mark,
     };
+    const languageValidation = validateDiagramLanguage(model);
+    if (!languageValidation.valid) {
+      throw new Error(`Invalid ${type} diagram language:\n- ${languageValidation.errors.join('\n- ')}`);
+    }
     const html = renderDiagramArtifactFromModel(type, model);
     const mermaid = renderDiagramMermaidFromModel(type, model);
     await writeJson(jsonPath, model);
@@ -1751,6 +1755,10 @@ async function diagramWorkspace(projectRoot, options = {}) {
       reviewStatus: options.mark,
     };
     artifact.html = renderDiagramArtifactFromModel(type, artifact.model);
+  }
+  const languageValidation = validateDiagramLanguage(artifact.model);
+  if (!languageValidation.valid) {
+    throw new Error(`Invalid ${type} diagram language:\n- ${languageValidation.errors.join('\n- ')}`);
   }
 
   const mermaid = renderDiagramMermaidFromModel(type, artifact.model);

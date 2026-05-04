@@ -127,6 +127,75 @@ function normalizeReviewStatus(value) {
   return pickValue(value, 'pending-confirmation');
 }
 
+function hasCjk(text) {
+  return /[\u3400-\u9fff]/.test(text);
+}
+
+function englishWords(text) {
+  return `${text ?? ''}`.match(/[A-Za-z][A-Za-z0-9+_.-]*/g) ?? [];
+}
+
+function isEnglishHeavyText(text) {
+  const value = `${text ?? ''}`.trim();
+  if (!value || hasCjk(value)) return false;
+  const words = englishWords(value);
+  return words.length >= 4;
+}
+
+function collectDiagramTexts(model) {
+  const entries = [];
+  const push = (path, value) => {
+    if (typeof value === 'string' && value.trim()) {
+      entries.push({ path, value: value.trim() });
+    }
+  };
+  push('title', model.title);
+  push('subtitle', model.subtitle);
+  push('metadata.projectName', model.metadata?.projectName);
+  for (const [index, component] of (model.components ?? []).entries()) {
+    push(`components.${index}.name`, component.name);
+    push(`components.${index}.subtitle`, component.subtitle);
+    for (const [detailIndex, detail] of (component.details ?? []).entries()) {
+      push(`components.${index}.details.${detailIndex}`, detail);
+    }
+  }
+  for (const [index, flow] of (model.flows ?? []).entries()) {
+    push(`flows.${index}.label`, flow.label);
+  }
+  for (const [index, card] of (model.summaryCards ?? []).entries()) {
+    push(`summaryCards.${index}.title`, card.title);
+    for (const [itemIndex, item] of (card.items ?? []).entries()) {
+      push(`summaryCards.${index}.items.${itemIndex}`, item);
+    }
+  }
+  for (const [index, panel] of (model.sidePanels ?? []).entries()) {
+    push(`sidePanels.${index}.title`, panel.title);
+    for (const [itemIndex, item] of (panel.items ?? []).entries()) {
+      push(`sidePanels.${index}.items.${itemIndex}`, item);
+    }
+  }
+  for (const [index, instruction] of (model.reviewInstructions ?? []).entries()) {
+    push(`reviewInstructions.${index}`, instruction);
+  }
+  return entries;
+}
+
+export function validateDiagramLanguage(model) {
+  const locale = `${model?.locale ?? 'zh-CN'}`.toLowerCase();
+  if (!locale.startsWith('zh')) {
+    return { valid: true, errors: [] };
+  }
+  const offenders = collectDiagramTexts(model)
+    .filter((entry) => isEnglishHeavyText(entry.value))
+    .slice(0, 12);
+  return {
+    valid: offenders.length === 0,
+    errors: offenders.map((entry) => (
+      `${entry.path} 应使用简体中文表达，当前内容偏英文: ${trimText(entry.value, 96)}`
+    )),
+  };
+}
+
 function getAtPath(root, path) {
   return path.split('.').reduce((acc, key) => (acc === null || acc === undefined ? undefined : acc[key]), root);
 }
@@ -804,6 +873,7 @@ export function buildDiagramArtifact(snapshot, options = {}) {
       metadata: {
         ...base.metadata,
         ...(contract.metadata ?? {}),
+        projectName: pickValue(contract?.metadata?.projectName, pickValue(contract.title, base.metadata.projectName)),
         versionId: pickValue(contract?.metadata?.versionId, base.metadata.versionId),
         owner: pickValue(contract?.metadata?.owner, base.metadata.owner),
         targetSystem: pickValue(contract?.metadata?.targetSystem, base.metadata.targetSystem),
@@ -859,6 +929,7 @@ export function buildDiagramArtifact(snapshot, options = {}) {
       metadata: {
         ...base.metadata,
         ...(contract.metadata ?? {}),
+        projectName: pickValue(contract?.metadata?.projectName, pickValue(contract.title, base.metadata.projectName)),
         versionId: pickValue(contract?.metadata?.versionId, base.metadata.versionId),
         owner: pickValue(contract?.metadata?.owner, base.metadata.owner),
         targetSystem: pickValue(contract?.metadata?.targetSystem, base.metadata.targetSystem),

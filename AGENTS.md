@@ -134,6 +134,7 @@ This project is managed by OpenPrd. Agents should be led by the harness rather t
 4. Keep `docs/basic/`, file manuals, and folder README docs synchronized during implementation.
 5. Before claiming readiness, run `openprd run . --verify`.
 6. Treat `.openprd/harness/` as the installed agent-control state: run state, iterations, events, hook state, install manifest, and drift report.
+7. For any OpenPrd diagram contract with `locale: zh-CN`, write visible labels, node text, flow labels, cards, panels, and review instructions in Simplified Chinese. Preserve only necessary proper nouns and technical field names.
 
 ### Canonical Commands
 
