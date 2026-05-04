@@ -12,6 +12,14 @@
     "bin",
     "src",
     ".openprd",
+    "!.openprd/harness",
+    "!.openprd/harness/**",
+    "!.openprd/state/events.jsonl",
+    "!.openprd/state/task-graph.json",
+    "!.openprd/engagements/active/decision-log.md",
+    "!.openprd/engagements/active/open-questions.md",
+    "!.openprd/engagements/active/progress.md",
+    "!.openprd/engagements/active/verification.md",
     "skills"
   ],
   "engines": {

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { buildArchitectureDiagramModel, buildProductFlowDiagramModel, renderDiagramMermaidFromModel } from './diagram-core.js';
+import { TBD_ZH, languagePolicyLines } from './language-policy.js';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -34,7 +35,7 @@ function normalizeArray(value) {
 
 function renderScalar(value) {
   if (value === null || value === undefined || `${value}`.trim() === '') {
-    return 'TBD';
+    return TBD_ZH;
   }
   return `${value}`;
 }
@@ -44,7 +45,7 @@ function renderChild(value, depth = 1) {
 
   if (Array.isArray(value)) {
     if (value.length === 0) {
-      return `${indent}- TBD`;
+      return `${indent}- ${TBD_ZH}`;
     }
 
     return value
@@ -62,7 +63,7 @@ function renderChild(value, depth = 1) {
   if (isPlainObject(value)) {
     const entries = Object.entries(value);
     if (entries.length === 0) {
-      return `${indent}- TBD`;
+      return `${indent}- ${TBD_ZH}`;
     }
 
     return entries
@@ -93,7 +94,7 @@ function buildTypeSpecificSection(productType, state, overrides) {
   if (productType === 'consumer') {
     return {
       kind: 'consumer',
-      title: 'Consumer Specific',
+      title: '消费端专项',
       fields: {
         persona: pickValue(overrides.persona, state.persona),
         segment: pickValue(overrides.segment, state.segment),
@@ -107,7 +108,7 @@ function buildTypeSpecificSection(productType, state, overrides) {
   if (productType === 'b2b') {
     return {
       kind: 'b2b',
-      title: 'B2B Specific',
+      title: 'B2B 专项',
       fields: {
         buyer: pickValue(overrides.buyer, state.buyer),
         user: pickValue(overrides.user, state.user),
@@ -125,7 +126,7 @@ function buildTypeSpecificSection(productType, state, overrides) {
   if (productType === 'agent') {
     return {
       kind: 'agent',
-      title: 'Agent Specific',
+      title: 'Agent 专项',
       fields: {
         humanAgentContract: pickValue(overrides.humanAgentContract, state.humanAgentContract),
         autonomyBoundary: pickValue(overrides.autonomyBoundary, state.autonomyBoundary),
@@ -138,9 +139,9 @@ function buildTypeSpecificSection(productType, state, overrides) {
 
   return {
     kind: 'base',
-    title: 'Type Specific',
+    title: '类型专项',
     fields: {
-      note: 'Select a product type to unlock the specialized PRD block.',
+      note: '请选择产品类型，以启用对应的专项 PRD 模块。',
     },
   };
 }
@@ -153,7 +154,7 @@ export function buildPrdSnapshot(ws, options = {}) {
   const productType = options.productType ?? state.productType ?? null;
   const templatePack = options.templatePack ?? state.templatePack ?? ws.data.config?.activeTemplatePack ?? 'base';
   const title = pickValue(options.title, state.title, path.basename(ws.projectRoot));
-  const owner = pickValue(options.owner, state.owner, 'TBD');
+  const owner = pickValue(options.owner, state.owner, TBD_ZH);
   const status = pickValue(options.status, state.status, 'draft');
 
   const sections = {
@@ -162,7 +163,7 @@ export function buildPrdSnapshot(ws, options = {}) {
       owner,
       status,
       version: versionId,
-      productType: productType ?? 'unclassified',
+      productType: productType ?? '未分类',
       date: options.date ?? createdAt.slice(0, 10),
     },
     problem: {
@@ -206,7 +207,7 @@ export function buildPrdSnapshot(ws, options = {}) {
     },
     handoff: {
       owner: pickValue(options.handoffOwner, state.handoffOwner, owner),
-      nextStep: pickValue(options.nextStep, state.nextStep, 'Review the synthesized PRD and prepare handoff.'),
+      nextStep: pickValue(options.nextStep, state.nextStep, '评审已生成的 PRD，并准备交接。'),
       targetSystem: pickValue(options.targetSystem, state.targetSystem, 'OpenSpec'),
     },
     typeSpecific: buildTypeSpecificSection(productType, state, options),
@@ -243,15 +244,15 @@ function renderMermaidSection(snapshot) {
   );
 
   return [
-    '## Visual Diagrams',
+    '## 可视化图表',
     '',
-    '### Product Flow',
+    '### 产品流程',
     '',
     '```mermaid',
     productFlow,
     '```',
     '',
-    '### Architecture',
+    '### 架构',
     '',
     '```mermaid',
     architecture,
@@ -265,72 +266,73 @@ export function renderPrdMarkdown(snapshot) {
   const lines = [
     `# ${snapshot.title}`,
     '',
-    `- Version: ${snapshot.versionId}`,
-    `- Owner: ${snapshot.owner}`,
-    `- Product Type: ${snapshot.productType ?? 'unclassified'}`,
-    `- Template Pack: ${snapshot.templatePack}`,
-    `- Status: ${snapshot.status}`,
-    `- Generated: ${snapshot.createdAt}`,
+    ...languagePolicyLines(),
+    `- 版本: ${snapshot.versionId}`,
+    `- 负责人: ${snapshot.owner}`,
+    `- 产品类型: ${snapshot.productType ?? '未分类'}`,
+    `- 模板包: ${snapshot.templatePack}`,
+    `- 状态: ${snapshot.status}`,
+    `- 生成时间: ${snapshot.createdAt}`,
     '',
-    renderSection('Meta', [
-      ['Title', sections.meta.title],
-      ['Owner', sections.meta.owner],
-      ['Status', sections.meta.status],
-      ['Version', sections.meta.version],
-      ['Product Type', sections.meta.productType],
-      ['Date', sections.meta.date],
+    renderSection('元信息', [
+      ['标题', sections.meta.title],
+      ['负责人', sections.meta.owner],
+      ['状态', sections.meta.status],
+      ['版本', sections.meta.version],
+      ['产品类型', sections.meta.productType],
+      ['日期', sections.meta.date],
     ]),
-    renderSection('Problem', [
-      ['Problem statement', sections.problem.problemStatement],
-      ['Why now', sections.problem.whyNow],
-      ['Evidence', sections.problem.evidence],
+    renderSection('问题', [
+      ['问题陈述', sections.problem.problemStatement],
+      ['为什么是现在', sections.problem.whyNow],
+      ['证据', sections.problem.evidence],
     ]),
-    renderSection('Users / Stakeholders', [
-      ['Primary users', sections.users.primaryUsers],
-      ['Secondary users', sections.users.secondaryUsers],
-      ['Stakeholders', sections.users.stakeholders],
+    renderSection('用户与相关方', [
+      ['主要用户', sections.users.primaryUsers],
+      ['次要用户', sections.users.secondaryUsers],
+      ['相关方', sections.users.stakeholders],
     ]),
-    renderSection('Goals / Success', [
-      ['Goals', sections.goals.goals],
-      ['Success metrics', sections.goals.successMetrics],
-      ['Acceptance goals', sections.goals.acceptanceGoals],
+    renderSection('目标与成功标准', [
+      ['目标', sections.goals.goals],
+      ['成功指标', sections.goals.successMetrics],
+      ['验收目标', sections.goals.acceptanceGoals],
     ]),
-    renderSection('Scope / Non-goals', [
-      ['In scope', sections.scope.inScope],
-      ['Out of scope', sections.scope.outOfScope],
+    renderSection('范围与非目标', [
+      ['范围内', sections.scope.inScope],
+      ['范围外', sections.scope.outOfScope],
     ]),
-    renderSection('Scenarios / Flows', [
-      ['Primary flows', sections.scenarios.primaryFlows],
-      ['Edge cases', sections.scenarios.edgeCases],
-      ['Failure modes', sections.scenarios.failureModes],
+    renderSection('场景与流程', [
+      ['主流程', sections.scenarios.primaryFlows],
+      ['边界情况', sections.scenarios.edgeCases],
+      ['失败模式', sections.scenarios.failureModes],
     ]),
     renderMermaidSection(snapshot),
-    renderSection('Requirements', [
-      ['Functional requirements', sections.requirements.functional],
-      ['Non-functional requirements', sections.requirements.nonFunctional],
-      ['Business rules', sections.requirements.businessRules],
+    renderSection('需求', [
+      ['功能需求', sections.requirements.functional],
+      ['非功能需求', sections.requirements.nonFunctional],
+      ['业务规则', sections.requirements.businessRules],
     ]),
-    renderSection('Constraints / Dependencies / Risks', [
-      ['Technical constraints', sections.constraints.technical],
-      ['Compliance', sections.constraints.compliance],
-      ['Dependencies', sections.constraints.dependencies],
-      ['Assumptions', sections.risks.assumptions],
-      ['Risks', sections.risks.risks],
-      ['Open questions', sections.risks.openQuestions],
+    renderSection('约束、依赖与风险', [
+      ['技术约束', sections.constraints.technical],
+      ['合规要求', sections.constraints.compliance],
+      ['依赖', sections.constraints.dependencies],
+      ['假设', sections.risks.assumptions],
+      ['风险', sections.risks.risks],
+      ['开放问题', sections.risks.openQuestions],
     ]),
   ];
 
   const typeSpecific = sections.typeSpecific;
   const typeSpecificFields = [
-    ['Type', typeSpecific.title ?? 'Type Specific'],
+    ['类型', typeSpecific.title ?? '类型专项'],
     ...Object.entries(typeSpecific.fields),
   ];
-  lines.push(renderSection('Type-Specific Block', typeSpecificFields));
+  lines.push(renderSection('类型专项模块', typeSpecificFields));
 
-  lines.push(renderSection('Handoff', [
-    ['Owner', sections.handoff.owner],
-    ['Next step', sections.handoff.nextStep],
-    ['Target system', sections.handoff.targetSystem],
+  lines.push(renderSection('交接', [
+    ['负责人', sections.handoff.owner],
+    ['下一步', sections.handoff.nextStep],
+    ['目标系统', sections.handoff.targetSystem],
   ]));
 
   return `${lines.filter(Boolean).join('\n')}`;
@@ -338,63 +340,63 @@ export function renderPrdMarkdown(snapshot) {
 
 
 const BASE_REQUIRED_FIELD_DESCRIPTORS = [
-  { section: 'meta', path: 'meta.title', label: 'Title', prompt: 'What should this PRD be called?' },
-  { section: 'meta', path: 'meta.owner', label: 'Owner', prompt: 'Who owns this PRD?' },
-  { section: 'meta', path: 'meta.version', label: 'Version', prompt: 'What version should this PRD start at?' },
-  { section: 'meta', path: 'meta.status', label: 'Status', prompt: 'What is the current PRD status?' },
-  { section: 'meta', path: 'meta.productType', label: 'Product Type', prompt: 'Is this a consumer, b2b, or agent product?' },
-  { section: 'problem', path: 'problem.problemStatement', label: 'Problem statement', prompt: 'What problem are we solving?' },
-  { section: 'problem', path: 'problem.whyNow', label: 'Why now', prompt: 'Why is now the right time to solve this?' },
-  { section: 'problem', path: 'problem.evidence', label: 'Evidence', prompt: 'What evidence supports this problem?' },
-  { section: 'users', path: 'users.primaryUsers', label: 'Primary users', prompt: 'Who is the primary user?' },
-  { section: 'users', path: 'users.stakeholders', label: 'Stakeholders', prompt: 'Who else is involved or affected?' },
-  { section: 'goals', path: 'goals.goals', label: 'Goals', prompt: 'What outcomes do we want?' },
-  { section: 'goals', path: 'goals.successMetrics', label: 'Success metrics', prompt: 'How will success be measured?' },
-  { section: 'goals', path: 'goals.acceptanceGoals', label: 'Acceptance goals', prompt: 'What must be true before we call this done?' },
-  { section: 'scope', path: 'scope.inScope', label: 'In scope', prompt: 'What is in scope for this version?' },
-  { section: 'scope', path: 'scope.outOfScope', label: 'Out of scope', prompt: 'What is explicitly out of scope?' },
-  { section: 'scenarios', path: 'scenarios.primaryFlows', label: 'Primary flows', prompt: 'What is the main user flow?' },
-  { section: 'scenarios', path: 'scenarios.edgeCases', label: 'Edge cases', prompt: 'What edge cases matter?' },
-  { section: 'scenarios', path: 'scenarios.failureModes', label: 'Failure modes', prompt: 'What failure modes should we handle?' },
-  { section: 'requirements', path: 'requirements.functional', label: 'Functional requirements', prompt: 'What must the product do?' },
-  { section: 'requirements', path: 'requirements.nonFunctional', label: 'Non-functional requirements', prompt: 'What performance, reliability, or security requirements matter?' },
-  { section: 'requirements', path: 'requirements.businessRules', label: 'Business rules', prompt: 'What business rules should apply?' },
-  { section: 'constraints', path: 'constraints.technical', label: 'Technical constraints', prompt: 'What technical constraints exist?' },
-  { section: 'constraints', path: 'constraints.compliance', label: 'Compliance', prompt: 'Are there compliance or policy constraints?' },
-  { section: 'constraints', path: 'constraints.dependencies', label: 'Dependencies', prompt: 'What dependencies does this rely on?' },
-  { section: 'risks', path: 'risks.assumptions', label: 'Assumptions', prompt: 'What assumptions are we making?' },
-  { section: 'risks', path: 'risks.risks', label: 'Risks', prompt: 'What risks do we need to watch?' },
-  { section: 'risks', path: 'risks.openQuestions', label: 'Open questions', prompt: 'What remains unresolved?' },
-  { section: 'handoff', path: 'handoff.owner', label: 'Handoff owner', prompt: 'Who owns the next step after PRD freeze?' },
-  { section: 'handoff', path: 'handoff.nextStep', label: 'Next step', prompt: 'What happens immediately after this PRD is frozen?' },
-  { section: 'handoff', path: 'handoff.targetSystem', label: 'Target system', prompt: 'Where should this handoff go?' },
+  { section: 'meta', path: 'meta.title', label: '标题', prompt: '这份 PRD 应该叫什么？' },
+  { section: 'meta', path: 'meta.owner', label: '负责人', prompt: '谁负责这份 PRD？' },
+  { section: 'meta', path: 'meta.version', label: '版本', prompt: '这份 PRD 从哪个版本开始？' },
+  { section: 'meta', path: 'meta.status', label: '状态', prompt: '当前 PRD 状态是什么？' },
+  { section: 'meta', path: 'meta.productType', label: '产品类型', prompt: '这是 consumer、b2b 还是 agent 产品？' },
+  { section: 'problem', path: 'problem.problemStatement', label: '问题陈述', prompt: '我们要解决什么问题？' },
+  { section: 'problem', path: 'problem.whyNow', label: '为什么是现在', prompt: '为什么现在是解决这个问题的合适时机？' },
+  { section: 'problem', path: 'problem.evidence', label: '证据', prompt: '有哪些证据支持这个问题？' },
+  { section: 'users', path: 'users.primaryUsers', label: '主要用户', prompt: '主要用户是谁？' },
+  { section: 'users', path: 'users.stakeholders', label: '相关方', prompt: '还有谁会参与或受到影响？' },
+  { section: 'goals', path: 'goals.goals', label: '目标', prompt: '我们希望达成什么结果？' },
+  { section: 'goals', path: 'goals.successMetrics', label: '成功指标', prompt: '如何衡量成功？' },
+  { section: 'goals', path: 'goals.acceptanceGoals', label: '验收目标', prompt: '满足什么条件才能认为完成？' },
+  { section: 'scope', path: 'scope.inScope', label: '范围内', prompt: '这个版本包含哪些范围？' },
+  { section: 'scope', path: 'scope.outOfScope', label: '范围外', prompt: '哪些内容明确不在范围内？' },
+  { section: 'scenarios', path: 'scenarios.primaryFlows', label: '主流程', prompt: '主要用户流程是什么？' },
+  { section: 'scenarios', path: 'scenarios.edgeCases', label: '边界情况', prompt: '哪些边界情况需要处理？' },
+  { section: 'scenarios', path: 'scenarios.failureModes', label: '失败模式', prompt: '需要处理哪些失败模式？' },
+  { section: 'requirements', path: 'requirements.functional', label: '功能需求', prompt: '产品必须做什么？' },
+  { section: 'requirements', path: 'requirements.nonFunctional', label: '非功能需求', prompt: '有哪些性能、可靠性或安全要求？' },
+  { section: 'requirements', path: 'requirements.businessRules', label: '业务规则', prompt: '需要遵守哪些业务规则？' },
+  { section: 'constraints', path: 'constraints.technical', label: '技术约束', prompt: '存在哪些技术约束？' },
+  { section: 'constraints', path: 'constraints.compliance', label: '合规要求', prompt: '是否存在合规或策略约束？' },
+  { section: 'constraints', path: 'constraints.dependencies', label: '依赖', prompt: '这个需求依赖什么？' },
+  { section: 'risks', path: 'risks.assumptions', label: '假设', prompt: '我们做了哪些假设？' },
+  { section: 'risks', path: 'risks.risks', label: '风险', prompt: '需要关注哪些风险？' },
+  { section: 'risks', path: 'risks.openQuestions', label: '开放问题', prompt: '还有哪些问题未解决？' },
+  { section: 'handoff', path: 'handoff.owner', label: '交接负责人', prompt: 'PRD freeze 后由谁负责下一步？' },
+  { section: 'handoff', path: 'handoff.nextStep', label: '下一步', prompt: 'PRD freeze 后马上做什么？' },
+  { section: 'handoff', path: 'handoff.targetSystem', label: '目标系统', prompt: '交接到哪里？' },
 ];
 
 const TYPE_REQUIRED_FIELD_DESCRIPTORS = {
   consumer: [
-    { section: 'consumer', path: 'typeSpecific.fields.persona', label: 'Persona', prompt: 'Who is the target persona?' },
-    { section: 'consumer', path: 'typeSpecific.fields.segment', label: 'Segment', prompt: 'Which segment are we targeting?' },
-    { section: 'consumer', path: 'typeSpecific.fields.journey', label: 'Journey', prompt: 'Which journey are we optimizing?' },
-    { section: 'consumer', path: 'typeSpecific.fields.activationMetric', label: 'Activation metric', prompt: 'What activation metric defines early success?' },
-    { section: 'consumer', path: 'typeSpecific.fields.retentionMetric', label: 'Retention metric', prompt: 'What retention metric defines repeat value?' },
+    { section: 'consumer', path: 'typeSpecific.fields.persona', label: '用户画像', prompt: '目标用户画像是什么？' },
+    { section: 'consumer', path: 'typeSpecific.fields.segment', label: '用户分层', prompt: '目标用户分层是什么？' },
+    { section: 'consumer', path: 'typeSpecific.fields.journey', label: '用户旅程', prompt: '要优化哪段用户旅程？' },
+    { section: 'consumer', path: 'typeSpecific.fields.activationMetric', label: '激活指标', prompt: '哪个激活指标代表早期成功？' },
+    { section: 'consumer', path: 'typeSpecific.fields.retentionMetric', label: '留存指标', prompt: '哪个留存指标代表持续价值？' },
   ],
   b2b: [
-    { section: 'b2b', path: 'typeSpecific.fields.buyer', label: 'Buyer', prompt: 'Who buys or approves this product?' },
-    { section: 'b2b', path: 'typeSpecific.fields.user', label: 'User', prompt: 'Who uses the product daily?' },
-    { section: 'b2b', path: 'typeSpecific.fields.admin', label: 'Admin', prompt: 'Who configures or administers the product?' },
-    { section: 'b2b', path: 'typeSpecific.fields.operator', label: 'Operator', prompt: 'Who operates the workflow end to end?' },
-    { section: 'b2b', path: 'typeSpecific.fields.roles', label: 'Roles', prompt: 'What are the key roles in the workflow?' },
-    { section: 'b2b', path: 'typeSpecific.fields.asIs', label: 'As-Is', prompt: 'What does the current process look like?' },
-    { section: 'b2b', path: 'typeSpecific.fields.toBe', label: 'To-Be', prompt: 'What should the future process look like?' },
-    { section: 'b2b', path: 'typeSpecific.fields.permissionMatrix', label: 'Permission matrix', prompt: 'What permissions or access rules apply?' },
-    { section: 'b2b', path: 'typeSpecific.fields.approvalFlow', label: 'Approval flow', prompt: 'What approvals or sign-offs are required?' },
+    { section: 'b2b', path: 'typeSpecific.fields.buyer', label: '采购方', prompt: '谁购买或审批这个产品？' },
+    { section: 'b2b', path: 'typeSpecific.fields.user', label: '使用者', prompt: '谁每天使用这个产品？' },
+    { section: 'b2b', path: 'typeSpecific.fields.admin', label: '管理员', prompt: '谁配置或管理这个产品？' },
+    { section: 'b2b', path: 'typeSpecific.fields.operator', label: '运营者', prompt: '谁端到端运营这个流程？' },
+    { section: 'b2b', path: 'typeSpecific.fields.roles', label: '角色', prompt: '流程中的关键角色有哪些？' },
+    { section: 'b2b', path: 'typeSpecific.fields.asIs', label: '现状流程', prompt: '当前流程是什么样？' },
+    { section: 'b2b', path: 'typeSpecific.fields.toBe', label: '目标流程', prompt: '未来流程应该是什么样？' },
+    { section: 'b2b', path: 'typeSpecific.fields.permissionMatrix', label: '权限矩阵', prompt: '需要哪些权限或访问规则？' },
+    { section: 'b2b', path: 'typeSpecific.fields.approvalFlow', label: '审批流程', prompt: '需要哪些审批或确认？' },
   ],
   agent: [
-    { section: 'agent', path: 'typeSpecific.fields.humanAgentContract', label: 'Human-Agent contract', prompt: 'What must remain human-approved versus agent-automated?' },
-    { section: 'agent', path: 'typeSpecific.fields.autonomyBoundary', label: 'Autonomy boundary', prompt: 'How far can the agent act on its own?' },
-    { section: 'agent', path: 'typeSpecific.fields.toolBoundary', label: 'Tool boundary', prompt: 'Which tools can the agent use?' },
-    { section: 'agent', path: 'typeSpecific.fields.stateModel', label: 'State model', prompt: 'What state or memory model does the agent need?' },
-    { section: 'agent', path: 'typeSpecific.fields.evalPlan', label: 'Eval plan', prompt: 'How will we evaluate the agent?' },
+    { section: 'agent', path: 'typeSpecific.fields.humanAgentContract', label: 'Human-Agent contract', prompt: '哪些事项必须由人确认，哪些可以由 Agent 自动完成？' },
+    { section: 'agent', path: 'typeSpecific.fields.autonomyBoundary', label: '自主边界', prompt: 'Agent 可以自主行动到什么程度？' },
+    { section: 'agent', path: 'typeSpecific.fields.toolBoundary', label: '工具边界', prompt: 'Agent 可以使用哪些工具？' },
+    { section: 'agent', path: 'typeSpecific.fields.stateModel', label: '状态模型', prompt: 'Agent 需要什么状态或记忆模型？' },
+    { section: 'agent', path: 'typeSpecific.fields.evalPlan', label: '评估计划', prompt: '如何评估这个 Agent？' },
   ],
 };
 

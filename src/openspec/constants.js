@@ -1,0 +1,12 @@
+export const OPENPRD_DISCOVERY_DIR = ['.openprd', 'discovery'];
+export const OPENPRD_DISCOVERY_CONFIG_PATH = ['.openprd', 'discovery', 'config.json'];
+export const LEGACY_OPENSPEC_DISCOVERY_DIR = ['.openspec', 'discovery'];
+export const LEGACY_OPENSPEC_DISCOVERY_CONFIG_PATH = ['.openspec', 'discovery', 'config.json'];
+export const OPENSPEC_DISCOVERY_CONFIG_PATH = LEGACY_OPENSPEC_DISCOVERY_CONFIG_PATH;
+export const OPENPRD_CHANGE_ROOT = ['openprd', 'changes'];
+export const LEGACY_OPENSPEC_CHANGE_ROOT = ['openspec', 'changes'];
+export const OPENPRD_ACCEPTED_SPEC_ROOT = ['openprd', 'specs'];
+export const OPENPRD_ARCHIVE_CHANGE_ROOT = ['openprd', 'archive', 'changes'];
+export const OPENSPEC_TASK_MAX_ITEMS_PER_FILE = 25;
+export const OPENSPEC_TASK_FILE_PATTERN = /^tasks(?:-\d{3})?\.md$/;
+export const OPENSPEC_TASK_ID_PATTERN = /^T\d{3}\.\d+$/;

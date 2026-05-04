@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenPrd Standards"
+  short_description: "Initialize and verify OpenPrd project documentation standards"
+  default_prompt: "Use $openprd-standards to initialize and verify docs/basic, file manuals, and folder README standards."

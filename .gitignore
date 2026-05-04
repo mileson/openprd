@@ -7,6 +7,11 @@ node_modules/
 # local tooling state
 .omx/
 .playwright-mcp/
+.codex/
+.claude/
+.cursor/
+.openprd/harness/
+CLAUDE.md
 
 # local demo artifacts
 openprd-architecture-diagram-demo.png

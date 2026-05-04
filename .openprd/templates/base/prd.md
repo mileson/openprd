@@ -1,58 +1,58 @@
 # PRD
 
-## 1. Meta
+## 1. 元信息
 
-- Title:
-- Owner:
-- Status:
-- Version:
-- Product Type:
-- Date:
+- 标题:
+- 负责人:
+- 状态:
+- 版本:
+- 产品类型:
+- 日期:
 
-## 2. Problem
+## 2. 问题
 
-- Problem statement:
-- Why now:
-- Evidence:
+- 问题陈述:
+- 为什么现在做:
+- 证据:
 
-## 3. Users / Stakeholders
+## 3. 用户与相关方
 
-- Primary users:
-- Secondary users:
-- Stakeholders:
+- 主要用户:
+- 次要用户:
+- 相关方:
 
-## 4. Goals / Success
+## 4. 目标与成功标准
 
-- Goals:
-- Success metrics:
-- Acceptance goals:
+- 目标:
+- 成功指标:
+- 验收目标:
 
-## 5. Scope / Non-goals
+## 5. 范围与非目标
 
-- In scope:
-- Out of scope:
+- 范围内:
+- 范围外:
 
-## 6. Scenarios / Flows
+## 6. 场景与流程
 
-- Primary flows:
-- Edge cases:
-- Failure modes:
+- 主流程:
+- 边界情况:
+- 失败模式:
 
-## 7. Requirements
+## 7. 需求
 
-- Functional requirements:
-- Non-functional requirements:
-- Business rules:
+- 功能需求:
+- 非功能需求:
+- 业务规则:
 
-## 8. Constraints / Dependencies / Risks
+## 8. 约束、依赖与风险
 
-- Technical constraints:
-- Dependencies:
-- Risks:
-- Open questions:
+- 技术约束:
+- 依赖:
+- 风险:
+- 开放问题:
 
-## 9. Handoff
+## 9. 交接
 
-- Next step:
-- Target system:
-- Owner:
+- 下一步:
+- 目标系统:
+- 负责人:

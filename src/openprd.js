@@ -6,11 +6,126 @@ import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { analyzePrdSnapshot, buildPrdSnapshot, diffSnapshots, formatVersionId, getRequiredFieldDescriptors, renderPrdMarkdown, summarizeSnapshot } from './prd-core.js';
 import { buildDiagramArtifact, renderDiagramArtifactFromModel, renderDiagramMermaidFromModel, validateDiagramContract } from './diagram-core.js';
+import { validateOpenSpecChangeWorkspace } from './openspec/change-validate.js';
+import { generateOpenSpecChangeWorkspace as writeOpenSpecChangeWorkspace } from './openspec/generate.js';
+import { advanceOpenSpecTaskWorkspace, listOpenSpecTaskWorkspace, verifyOpenSpecTaskWorkspace } from './openspec/execute.js';
+import { analyzeOpenSpecTaskVolumes } from './openspec/tasks.js';
+import { activateOpenPrdChangeWorkspace, applyOpenPrdChangeWorkspace, archiveOpenPrdChangeWorkspace, closeOpenPrdChangeWorkspace, listAcceptedSpecsWorkspace, listOpenPrdChangesWorkspace } from './openspec/change-lifecycle.js';
+import { legacyOpenSpecDiscoveryDir, openPrdDiscoveryDir, readDiscoveryConfig } from './openspec/paths.js';
+import { checkStandardsWorkspace, initStandardsWorkspace } from './standards.js';
+import { doctorOpenPrdAgentIntegration, setupOpenPrdAgentIntegration, updateOpenPrdAgentIntegration } from './agent-integration.js';
 
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SEED_WORKSPACE = path.join(PACKAGE_ROOT, '.openprd');
 const REQUIRED_PRODUCT_TYPES = ['consumer', 'b2b', 'agent'];
 const REQUIRED_SECTIONS = ['meta', 'problem', 'users', 'goals', 'scope', 'scenarios', 'requirements', 'constraints', 'risks', 'handoff'];
+const OPENSPEC_DISCOVERY_MODES = ['brownfield', 'reference', 'requirement'];
+const OPENSPEC_DISCOVERY_COVERAGE_STATUSES = ['pending', 'covered', 'blocked'];
+const OPENSPEC_DISCOVERY_DEFAULT_MAX_ITERATIONS = 10;
+const FLEET_DEFAULT_MAX_DEPTH = 4;
+const OPENPRD_HARNESS_DIR = cjoin('.openprd', 'harness');
+const OPENPRD_HARNESS_RUN_STATE = cjoin(OPENPRD_HARNESS_DIR, 'run-state.json');
+const OPENPRD_HARNESS_ITERATIONS = cjoin(OPENPRD_HARNESS_DIR, 'iterations.jsonl');
+const OPENPRD_HARNESS_LEARNINGS = cjoin(OPENPRD_HARNESS_DIR, 'learnings.md');
+const SOURCE_INVENTORY_IGNORE_DIRS = new Set([
+  '.git',
+  '.hg',
+  '.svn',
+  '.openprd',
+  '.openspec',
+  '.next',
+  '.turbo',
+  '.cache',
+  '.env',
+  '.eggs',
+  '.mypy_cache',
+  '.parcel-cache',
+  '.pytest_cache',
+  '.ruff_cache',
+  '.tox',
+  '.venv',
+  '.vite',
+  '.vscode',
+  'coverage',
+  'dist',
+  'env',
+  'build',
+  'node_modules',
+  'vendor',
+  'venv',
+  '__pycache__',
+]);
+const FLEET_IGNORE_DIRS = new Set([
+  ...SOURCE_INVENTORY_IGNORE_DIRS,
+  '.idea',
+  '.DS_Store',
+  '.Trash',
+  'DerivedData',
+  'Library',
+  'logs',
+  'tmp',
+]);
+const FLEET_PROJECT_MARKERS = [
+  '.openprd',
+  '.codex',
+  '.claude',
+  '.cursor',
+  'AGENTS.md',
+  'CLAUDE.md',
+  '.git',
+  'package.json',
+  'pnpm-workspace.yaml',
+  'pyproject.toml',
+  'Cargo.toml',
+  'go.mod',
+  'deno.json',
+  'Makefile',
+];
+const FLEET_AGENT_MARKERS = ['.codex', '.claude', '.cursor', 'AGENTS.md', 'CLAUDE.md'];
+const SOURCE_INVENTORY_EXTENSIONS = new Set([
+  '.cjs',
+  '.css',
+  '.go',
+  '.html',
+  '.java',
+  '.js',
+  '.json',
+  '.jsx',
+  '.kt',
+  '.md',
+  '.mjs',
+  '.php',
+  '.py',
+  '.rb',
+  '.rs',
+  '.scss',
+  '.sh',
+  '.sql',
+  '.swift',
+  '.toml',
+  '.ts',
+  '.tsx',
+  '.vue',
+  '.yaml',
+  '.yml',
+]);
+const SOURCE_INVENTORY_SPECIAL_FILES = new Set([
+  'Dockerfile',
+  'Makefile',
+  'Procfile',
+  'README',
+  'LICENSE',
+  'AGENTS.md',
+  'CLAUDE.md',
+]);
+
+function shouldIgnoreSourceDirectory(name) {
+  const normalized = String(name ?? '').toLowerCase();
+  return SOURCE_INVENTORY_IGNORE_DIRS.has(normalized)
+    || /^\.?venv(?:[-_].*)?$/.test(normalized)
+    || /^env(?:[-_].*)?$/.test(normalized);
+}
+
 const CORE_TEMPLATE_FILES = [
   'README.md',
   'config.yaml',
@@ -32,6 +147,9 @@ const CORE_TEMPLATE_FILES = [
   'templates/industry/README.md',
   'templates/project/README.md',
   'templates/session/README.md',
+  'standards/config.json',
+  'standards/file-manual-template.md',
+  'standards/folder-readme-template.md',
   'engagements/active/intake.md',
   'engagements/active/prd.md',
   'engagements/active/flows.md',
@@ -44,6 +162,40 @@ const CORE_TEMPLATE_FILES = [
   'state/task-graph.json',
   'state/events.jsonl',
 ];
+const WORKSPACE_SEED_REFRESH_FILES = [
+  'README.md',
+  'schema/prd.schema.yaml',
+  'schema/diagram-architecture.schema.yaml',
+  'schema/diagram-product-flow.schema.yaml',
+  'templates/manifest.yaml',
+  'templates/base/prd.md',
+  'templates/base/intake.md',
+  'templates/diagram/architecture.contract.json',
+  'templates/diagram/product-flow.contract.json',
+  'templates/consumer/prd.md',
+  'templates/consumer/intake.md',
+  'templates/b2b/prd.md',
+  'templates/b2b/intake.md',
+  'templates/agent/prd.md',
+  'templates/agent/intake.md',
+  'templates/company/README.md',
+  'templates/industry/README.md',
+  'templates/project/README.md',
+  'templates/session/README.md',
+  'standards/config.json',
+  'standards/file-manual-template.md',
+  'standards/folder-readme-template.md',
+];
+const WORKSPACE_SEED_COPY_IGNORE = new Set([
+  'harness',
+  'state',
+  'sessions',
+  'exports',
+  'engagements/active/decision-log.md',
+  'engagements/active/open-questions.md',
+  'engagements/active/progress.md',
+  'engagements/active/verification.md',
+]);
 
 function cjoin(...parts) {
   return path.join(...parts);
@@ -89,6 +241,15 @@ async function writeJson(filePath, value) {
 
 async function appendJsonl(filePath, value) {
   await appendText(filePath, `${JSON.stringify(value)}\n`);
+}
+
+async function readJsonl(filePath) {
+  const text = await readText(filePath);
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
 }
 
 function timestamp() {
@@ -356,7 +517,17 @@ async function appendVerification(ws, lines) {
   await appendText(ws.paths.verificationLog, renderLogEntry(timestamp(), lines));
 }
 
-async function copyTree(sourceDir, targetDir, { overwrite = false } = {}) {
+function normalizeRelativePath(filePath) {
+  return filePath.split(path.sep).join('/');
+}
+
+function shouldIgnoreSeedCopy(relativePath, ignorePaths) {
+  const normalized = normalizeRelativePath(relativePath);
+  return ignorePaths.has(normalized)
+    || [...ignorePaths].some((ignored) => normalized.startsWith(`${ignored}/`));
+}
+
+async function copyTree(sourceDir, targetDir, { overwrite = false, ignorePaths = new Set(), rootDir = sourceDir } = {}) {
   const entries = await fs.readdir(sourceDir, { withFileTypes: true });
   let created = 0;
 
@@ -365,9 +536,13 @@ async function copyTree(sourceDir, targetDir, { overwrite = false } = {}) {
   for (const entry of entries) {
     const sourcePath = cjoin(sourceDir, entry.name);
     const targetPath = cjoin(targetDir, entry.name);
+    const relativePath = path.relative(rootDir, sourcePath);
+    if (shouldIgnoreSeedCopy(relativePath, ignorePaths)) {
+      continue;
+    }
 
     if (entry.isDirectory()) {
-      created += await copyTree(sourcePath, targetPath, { overwrite });
+      created += await copyTree(sourcePath, targetPath, { overwrite, ignorePaths, rootDir });
       continue;
     }
 
@@ -385,7 +560,11 @@ async function copyTree(sourceDir, targetDir, { overwrite = false } = {}) {
 
 async function ensureWorkspaceSkeleton(projectRoot, options = {}) {
   const workspaceRoot = cjoin(projectRoot, '.openprd');
-  const created = await copyTree(SEED_WORKSPACE, workspaceRoot, { overwrite: Boolean(options.force) });
+  const created = await copyTree(SEED_WORKSPACE, workspaceRoot, {
+    overwrite: Boolean(options.force),
+    ignorePaths: WORKSPACE_SEED_COPY_IGNORE,
+    rootDir: SEED_WORKSPACE,
+  });
   await fs.mkdir(cjoin(workspaceRoot, 'state'), { recursive: true });
   await fs.mkdir(cjoin(workspaceRoot, 'state', 'versions'), { recursive: true });
   await fs.mkdir(cjoin(workspaceRoot, 'sessions'), { recursive: true });
@@ -393,10 +572,10 @@ async function ensureWorkspaceSkeleton(projectRoot, options = {}) {
   await fs.mkdir(cjoin(workspaceRoot, 'engagements', 'active'), { recursive: true });
 
   const defaults = [
-    [cjoin(workspaceRoot, 'engagements', 'active', 'decision-log.md'), '# Decision Log\n\n- Seeded OpenPrd decision tracking.\n'],
-    [cjoin(workspaceRoot, 'engagements', 'active', 'open-questions.md'), '# Open Questions\n\n- Seeded OpenPrd question tracking.\n'],
-    [cjoin(workspaceRoot, 'engagements', 'active', 'progress.md'), '# Progress\n\n- Seeded OpenPrd progress tracking.\n'],
-    [cjoin(workspaceRoot, 'engagements', 'active', 'verification.md'), '# Verification\n\n- Seeded OpenPrd verification tracking.\n'],
+    [cjoin(workspaceRoot, 'engagements', 'active', 'decision-log.md'), '# 决策记录\n\n- 已初始化 OpenPrd 决策跟踪。\n'],
+    [cjoin(workspaceRoot, 'engagements', 'active', 'open-questions.md'), '# 开放问题\n\n- 已初始化 OpenPrd 问题跟踪。\n'],
+    [cjoin(workspaceRoot, 'engagements', 'active', 'progress.md'), '# 进度\n\n- 已初始化 OpenPrd 进度跟踪。\n'],
+    [cjoin(workspaceRoot, 'engagements', 'active', 'verification.md'), '# 验证\n\n- 已初始化 OpenPrd 验证跟踪。\n'],
     [cjoin(workspaceRoot, 'state', 'task-graph.json'), JSON.stringify(buildWorkflowTaskGraph(), null, 2) + '\n'],
     [cjoin(workspaceRoot, 'state', 'events.jsonl'), ''],
   ];
@@ -408,6 +587,156 @@ async function ensureWorkspaceSkeleton(projectRoot, options = {}) {
   }
 
   return { workspaceRoot, created };
+}
+
+async function copySeedFileIfChanged(projectRoot, relativePath, changes) {
+  const sourcePath = cjoin(SEED_WORKSPACE, relativePath);
+  const targetPath = cjoin(projectRoot, '.openprd', relativePath);
+  if (!(await exists(sourcePath))) {
+    return;
+  }
+  const next = await readText(sourcePath);
+  const current = await readText(targetPath).catch(() => null);
+  if (current === next) {
+    changes.push({ path: cjoin('.openprd', relativePath), status: 'unchanged' });
+    return;
+  }
+  await writeText(targetPath, next);
+  changes.push({ path: cjoin('.openprd', relativePath), status: current === null ? 'created' : 'updated' });
+}
+
+async function migrateWorkspaceConfig(projectRoot, changes) {
+  const sourcePath = cjoin(SEED_WORKSPACE, 'config.yaml');
+  const targetPath = cjoin(projectRoot, '.openprd', 'config.yaml');
+  const seed = await readYaml(sourcePath);
+  const current = await readYaml(targetPath).catch(() => ({}));
+  const next = {
+    ...seed,
+    ...current,
+    supportedProductTypes: seed.supportedProductTypes,
+    templateInheritance: seed.templateInheritance,
+    workflow: seed.workflow,
+    qualityGates: {
+      ...(seed.qualityGates ?? {}),
+      ...(current.qualityGates ?? {}),
+      standards: seed.qualityGates?.standards,
+      freezeRequires: seed.qualityGates?.freezeRequires,
+    },
+  };
+  const currentText = await readText(targetPath).catch(() => null);
+  const nextText = YAML.stringify(next, { indent: 2, lineWidth: 100 });
+  if (currentText !== nextText) {
+    await writeText(targetPath, nextText);
+    changes.push({ path: cjoin('.openprd', 'config.yaml'), status: currentText === null ? 'created' : 'updated' });
+  } else {
+    changes.push({ path: cjoin('.openprd', 'config.yaml'), status: 'unchanged' });
+  }
+}
+
+function extractMarkdownSection(text, heading) {
+  const start = text.indexOf(heading);
+  if (start < 0) {
+    return '';
+  }
+  const rest = text.slice(start);
+  const nextHeading = rest.slice(heading.length).search(/\n##\s+/);
+  if (nextHeading < 0) {
+    return rest.trim();
+  }
+  return rest.slice(0, heading.length + nextHeading).trim();
+}
+
+async function ensureActiveFileContains(projectRoot, relativePath, requiredToken, seedFallback, changes) {
+  const targetPath = cjoin(projectRoot, '.openprd', relativePath);
+  const current = await readText(targetPath).catch(() => null);
+  if (current?.includes(requiredToken)) {
+    changes.push({ path: cjoin('.openprd', relativePath), status: 'unchanged' });
+    return;
+  }
+  const next = current
+    ? `${current.trimEnd()}\n\n---\n\n${seedFallback.trim()}\n`
+    : `${seedFallback.trim()}\n`;
+  await writeText(targetPath, next);
+  changes.push({ path: cjoin('.openprd', relativePath), status: current === null ? 'created' : 'updated-append' });
+}
+
+async function ensureHeadingFile(projectRoot, relativePath, heading, fallbackBody, changes) {
+  const targetPath = cjoin(projectRoot, '.openprd', relativePath);
+  const current = await readText(targetPath).catch(() => null);
+  if (current?.includes(heading)) {
+    changes.push({ path: cjoin('.openprd', relativePath), status: 'unchanged' });
+    return;
+  }
+  const next = current
+    ? `${heading}\n\n${current.trim()}\n`
+    : fallbackBody;
+  await writeText(targetPath, next);
+  changes.push({ path: cjoin('.openprd', relativePath), status: current === null ? 'created' : 'updated-prepend' });
+}
+
+async function migrateWorkspaceSkeleton(projectRoot, options = {}) {
+  const changes = [];
+  const workspaceRoot = cjoin(projectRoot, '.openprd');
+  await fs.mkdir(workspaceRoot, { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'state'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'state', 'versions'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'sessions'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'exports'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'engagements', 'active'), { recursive: true });
+
+  await migrateWorkspaceConfig(projectRoot, changes);
+  for (const relativePath of WORKSPACE_SEED_REFRESH_FILES) {
+    await copySeedFileIfChanged(projectRoot, relativePath, changes);
+  }
+
+  const seedIntake = await readText(cjoin(SEED_WORKSPACE, 'engagements', 'active', 'intake.md'));
+  const seedPrd = await readText(cjoin(SEED_WORKSPACE, 'engagements', 'active', 'prd.md'));
+  const typeSpecificBlock = extractMarkdownSection(seedPrd, '## 类型专项模块') || seedPrd;
+  await ensureActiveFileContains(projectRoot, 'engagements/active/intake.md', '我们要解决什么问题？', seedIntake, changes);
+  await ensureActiveFileContains(projectRoot, 'engagements/active/prd.md', '类型专项模块', typeSpecificBlock, changes);
+  await ensureHeadingFile(projectRoot, 'engagements/active/decision-log.md', '# 决策记录', '# 决策记录\n\n- 已初始化 OpenPrd 决策跟踪。\n', changes);
+  await ensureHeadingFile(projectRoot, 'engagements/active/open-questions.md', '# 开放问题', '# 开放问题\n\n- 已初始化 OpenPrd 问题跟踪。\n', changes);
+  await ensureHeadingFile(projectRoot, 'engagements/active/progress.md', '# 进度', '# 进度\n\n- 已初始化 OpenPrd 进度跟踪。\n', changes);
+  await ensureHeadingFile(projectRoot, 'engagements/active/verification.md', '# 验证', '# 验证\n\n- 已初始化 OpenPrd 验证跟踪。\n', changes);
+
+  const ws = await loadWorkspace(projectRoot);
+  const taskGraphPath = cjoin(projectRoot, '.openprd', 'state', 'task-graph.json');
+  const currentTaskGraph = await readText(taskGraphPath).catch(() => null);
+  let shouldRewriteTaskGraph = currentTaskGraph === null;
+  if (currentTaskGraph !== null) {
+    try {
+      const parsed = JSON.parse(currentTaskGraph);
+      shouldRewriteTaskGraph = !Array.isArray(parsed.workflow) || !Array.isArray(parsed.nodes);
+    } catch {
+      shouldRewriteTaskGraph = true;
+    }
+  }
+  if (shouldRewriteTaskGraph) {
+    await writeJson(taskGraphPath, buildWorkflowTaskGraph(ws.data.currentState));
+    changes.push({ path: cjoin('.openprd', 'state', 'task-graph.json'), status: currentTaskGraph === null ? 'created' : 'updated' });
+  } else {
+    changes.push({ path: cjoin('.openprd', 'state', 'task-graph.json'), status: 'unchanged' });
+  }
+  if (!(await exists(cjoin(projectRoot, '.openprd', 'state', 'events.jsonl')))) {
+    await writeText(cjoin(projectRoot, '.openprd', 'state', 'events.jsonl'), '');
+    changes.push({ path: cjoin('.openprd', 'state', 'events.jsonl'), status: 'created' });
+  }
+
+  const changedCount = changes.filter((change) => change.status !== 'unchanged').length;
+  if (options.recordEvent && changedCount > 0) {
+    const nextWs = await loadWorkspace(projectRoot);
+    await appendWorkflowEvent(nextWs, 'workspace_migrated', {
+      changed: changedCount,
+    });
+  }
+
+  return {
+    ok: true,
+    action: 'migrate',
+    projectRoot,
+    workspaceRoot,
+    changes,
+  };
 }
 
 async function loadWorkspace(projectRoot) {
@@ -451,6 +780,9 @@ async function loadWorkspace(projectRoot) {
     freezeState: cjoin(workspaceRoot, 'state', 'freeze.json'),
     taskGraph: cjoin(workspaceRoot, 'state', 'task-graph.json'),
     eventsLog: cjoin(workspaceRoot, 'state', 'events.jsonl'),
+    standardsConfig: cjoin(workspaceRoot, 'standards', 'config.json'),
+    standardsFileManualTemplate: cjoin(workspaceRoot, 'standards', 'file-manual-template.md'),
+    standardsFolderReadmeTemplate: cjoin(workspaceRoot, 'standards', 'folder-readme-template.md'),
     exportsDir: cjoin(workspaceRoot, 'exports'),
     openspecExportDir: cjoin(workspaceRoot, 'exports', 'openspec'),
     openspecHandoffJson: cjoin(workspaceRoot, 'exports', 'openspec', 'handoff.json'),
@@ -612,6 +944,9 @@ async function validateWorkspace(projectRoot) {
     ws.paths.verificationLog,
     ws.paths.taskGraph,
     ws.paths.eventsLog,
+    ws.paths.standardsConfig,
+    ws.paths.standardsFileManualTemplate,
+    ws.paths.standardsFolderReadmeTemplate,
   ];
 
   const missingFiles = [];
@@ -712,7 +1047,7 @@ async function validateWorkspace(projectRoot) {
   }
 
   const basePrd = await readText(ws.paths.basePrd);
-  for (const section of ['Meta', 'Problem', 'Users / Stakeholders', 'Goals / Success', 'Scope / Non-goals', 'Scenarios / Flows', 'Requirements', 'Constraints / Dependencies / Risks', 'Handoff']) {
+  for (const section of ['元信息', '问题', '用户与相关方', '目标与成功标准', '范围与非目标', '场景与流程', '需求', '约束、依赖与风险', '交接']) {
     if (!basePrd.includes(section)) {
       report.valid = false;
       report.errors.push(`templates/base/prd.md is missing section heading: ${section}`);
@@ -720,7 +1055,7 @@ async function validateWorkspace(projectRoot) {
   }
 
   const consumerPrd = await readText(ws.paths.consumerPrd);
-  for (const token of ['Persona', 'Segment', 'Journey', 'Activation metric', 'Retention metric']) {
+  for (const token of ['用户画像', '用户分层', '用户旅程', '激活指标', '留存指标']) {
     if (!consumerPrd.includes(token)) {
       report.valid = false;
       report.errors.push(`templates/consumer/prd.md is missing field: ${token}`);
@@ -728,7 +1063,7 @@ async function validateWorkspace(projectRoot) {
   }
 
   const b2bPrd = await readText(ws.paths.b2bPrd);
-  for (const token of ['Buyer', 'User', 'Admin', 'Operator', 'Permission matrix', 'Approval flow']) {
+  for (const token of ['采购方', '使用者', '管理员', '运营者', '权限矩阵', '审批流程']) {
     if (!b2bPrd.includes(token)) {
       report.valid = false;
       report.errors.push(`templates/b2b/prd.md is missing field: ${token}`);
@@ -736,7 +1071,7 @@ async function validateWorkspace(projectRoot) {
   }
 
   const agentPrd = await readText(ws.paths.agentPrd);
-  for (const token of ['Human-Agent contract', 'Autonomy boundary', 'Tool boundary', 'Memory / state model', 'Eval plan']) {
+  for (const token of ['Human-Agent contract', '自主边界', '工具边界', '状态模型', '评估计划']) {
     if (!agentPrd.includes(token)) {
       report.valid = false;
       report.errors.push(`templates/agent/prd.md is missing field: ${token}`);
@@ -756,37 +1091,37 @@ async function validateWorkspace(projectRoot) {
   }
 
   const activeIntake = await readText(ws.paths.activeIntake);
-  if (!activeIntake.includes('What problem are we solving?')) {
+  if (!activeIntake.includes('我们要解决什么问题？')) {
     report.valid = false;
     report.errors.push('engagements/active/intake.md is missing the core discovery prompts');
   }
 
   const activePrd = await readText(ws.paths.activePrd);
-  if (!activePrd.includes('Type-Specific Block')) {
+  if (!activePrd.includes('类型专项模块')) {
     report.valid = false;
     report.errors.push('engagements/active/prd.md is missing the type-specific block');
   }
 
   const decisionLog = await readText(ws.paths.decisionLog);
-  if (!decisionLog.includes('# Decision Log')) {
+  if (!decisionLog.includes('# 决策记录')) {
     report.valid = false;
     report.errors.push('engagements/active/decision-log.md is missing the decision log heading');
   }
 
   const openQuestionsLog = await readText(ws.paths.openQuestionsLog);
-  if (!openQuestionsLog.includes('# Open Questions')) {
+  if (!openQuestionsLog.includes('# 开放问题')) {
     report.valid = false;
     report.errors.push('engagements/active/open-questions.md is missing the open questions heading');
   }
 
   const progressLog = await readText(ws.paths.progressLog);
-  if (!progressLog.includes('# Progress')) {
+  if (!progressLog.includes('# 进度')) {
     report.valid = false;
     report.errors.push('engagements/active/progress.md is missing the progress heading');
   }
 
   const verificationLog = await readText(ws.paths.verificationLog);
-  if (!verificationLog.includes('# Verification')) {
+  if (!verificationLog.includes('# 验证')) {
     report.valid = false;
     report.errors.push('engagements/active/verification.md is missing the verification heading');
   }
@@ -801,6 +1136,16 @@ async function validateWorkspace(projectRoot) {
   if (typeof eventsLog !== 'string') {
     report.valid = false;
     report.errors.push('state/events.jsonl is missing');
+  }
+
+  const standards = await checkStandardsWorkspace(projectRoot, { optional: true });
+  if (!standards.skipped) {
+    if (standards.errors.length > 0) {
+      report.valid = false;
+    }
+    report.errors.push(...standards.errors);
+    report.warnings.push(...standards.warnings);
+    report.checks.push(...standards.checks.map((check) => ({ name: `standards: ${check}`, ok: standards.ok })));
   }
 
   if (ws.data.currentState && ws.data.currentState.templatePack && !['base', 'consumer', 'b2b', 'agent'].includes(ws.data.currentState.templatePack)) {
@@ -940,9 +1285,9 @@ async function detectWorkspaceScenario(projectRoot, ws, versionIndex = []) {
   if (versionIndex.length > 0 || ['synthesized', 'frozen', 'handed_off'].includes(currentStatus)) {
     return {
       id: 'continuing-workspace',
-      label: 'Continuing workspace',
-      userParticipation: 'targeted-confirmation',
-      reason: 'This workspace already has synthesized or persisted history, so only delta clarification should be required.',
+      label: '继续已有工作区',
+      userParticipation: '定向确认',
+      reason: '该工作区已有合成结果或历史记录，只需要补充确认增量信息。',
     };
   }
 
@@ -958,17 +1303,17 @@ async function detectWorkspaceScenario(projectRoot, ws, versionIndex = []) {
   if (meaningfulEntries.length === 0) {
     return {
       id: 'cold-start-greenfield',
-      label: 'Cold start (greenfield)',
-      userParticipation: 'high-collaboration',
-      reason: 'The project root is effectively empty, so the agent should co-create the initial requirement shape with the user.',
+      label: '冷启动（全新项目）',
+      userParticipation: '高协作',
+      reason: '项目根目录基本为空，需要 Agent 与用户共同梳理初始需求形态。',
     };
   }
 
   return {
     id: 'cold-start-existing-project',
-    label: 'Cold start (existing project)',
-    userParticipation: 'context-plus-confirmation',
-    reason: 'The project already contains material, but the OpenPrd workspace is new, so existing context should be reused and then confirmed with the user.',
+    label: '冷启动（已有项目）',
+    userParticipation: '上下文复用加确认',
+    reason: '项目已经包含资料，但 OpenPrd 工作区是新的，需要复用既有上下文并向用户确认。',
   };
 }
 
@@ -983,7 +1328,7 @@ function buildClarificationState({ snapshot, analysis, basePlan, scenario, captu
     .map((field) => ({
       id: field.path,
       label: field.label,
-      prompt: `Please confirm this inferred input: ${field.label}. Current value: ${Array.isArray(field.value) ? field.value.join(', ') : JSON.stringify(field.value)}`,
+      prompt: `请确认这个推断输入：${field.label}。当前值：${Array.isArray(field.value) ? field.value.join(', ') : JSON.stringify(field.value)}`,
       reason: 'confirm-derived',
     }));
 
@@ -1010,14 +1355,14 @@ function buildClarificationState({ snapshot, analysis, basePlan, scenario, captu
     questions = [
       {
         id: 'existing-project-goal',
-        label: 'Existing project scope',
-        prompt: 'Given the existing project, what specifically should this OpenPrd workspace define or improve right now?',
+        label: '已有项目范围',
+        prompt: '基于当前已有项目，这个 OpenPrd 工作区现在具体要定义或改进什么？',
         reason: 'kickoff',
       },
       {
         id: 'reuse-boundary',
-        label: 'Reuse boundary',
-        prompt: 'Which existing capabilities should be treated as fixed inputs, and which areas are still open for change?',
+        label: '复用边界',
+        prompt: '哪些既有能力应视为固定输入，哪些区域仍可调整？',
         reason: 'kickoff',
       },
       ...missingQuestions,
@@ -1063,7 +1408,7 @@ function buildClarificationPlan(snapshot, analysis) {
   const kickoffQuestions = [
     { id: 'project-overview', label: 'Project overview', prompt: 'What are we building at a high level, and for whom?' },
     { id: 'success-definition', label: 'Success definition', prompt: 'What outcome would make this first version successful?' },
-    { id: 'first-milestone', label: 'First milestone', prompt: 'What is the first milestone we want to freeze?' },
+    { id: 'first-milestone', label: '首个里程碑', prompt: '我们希望 freeze 的第一个里程碑是什么？' },
   ];
   return {
     totalRequiredFields: descriptors.length,
@@ -1146,7 +1491,7 @@ async function loadLatestVersionSnapshot(ws) {
 function renderBulletList(items) {
   const list = Array.isArray(items) ? items : [];
   if (list.length === 0) {
-    return ['- TBD'].join('\n');
+    return ['- 待补充'].join('\n');
   }
 
   return list.map((item) => `- ${item}`).join('\n');
@@ -1156,22 +1501,22 @@ function renderFlowDoc(snapshot) {
   const { scenarios } = snapshot.sections;
   const productFlow = buildDiagramArtifact(snapshot, { type: 'product-flow' });
   const mermaid = renderDiagramMermaidFromModel('product-flow', productFlow.model);
-  return `# Flows\n\n## Primary Flow\n\n${renderBulletList(scenarios.primaryFlows)}\n\n## Mermaid Flow\n\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n\n## Edge Cases\n\n${renderBulletList(scenarios.edgeCases)}\n\n## Failure Modes\n\n${renderBulletList(scenarios.failureModes)}\n`;
+  return `# 流程\n\n## 主流程\n\n${renderBulletList(scenarios.primaryFlows)}\n\n## Mermaid 流程图\n\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n\n## 边界情况\n\n${renderBulletList(scenarios.edgeCases)}\n\n## 失败模式\n\n${renderBulletList(scenarios.failureModes)}\n`;
 }
 
 function renderRolesDoc(snapshot) {
   const { users, typeSpecific } = snapshot.sections;
   const roleFields = typeSpecific.fields ?? {};
   const extraLines = Object.entries(roleFields)
-    .map(([key, value]) => `- ${key}: ${Array.isArray(value) ? value.join(', ') : value ?? 'TBD'}`)
-    .join('\n') || '- TBD';
+    .map(([key, value]) => `- ${key}: ${Array.isArray(value) ? value.join(', ') : value ?? '待补充'}`)
+    .join('\n') || '- 待补充';
 
-  return `# Roles\n\n## Users\n\n- Primary users:\n${renderBulletList(users.primaryUsers)}\n\n- Secondary users:\n${renderBulletList(users.secondaryUsers)}\n\n- Stakeholders:\n${renderBulletList(users.stakeholders)}\n\n## Type Specific\n\n${extraLines}\n`;
+  return `# 角色\n\n## 用户\n\n- 主要用户:\n${renderBulletList(users.primaryUsers)}\n\n- 次要用户:\n${renderBulletList(users.secondaryUsers)}\n\n- 相关方:\n${renderBulletList(users.stakeholders)}\n\n## 类型专项\n\n${extraLines}\n`;
 }
 
 function renderHandoffDoc(snapshot) {
   const { handoff } = snapshot.sections;
-  return `# Handoff\n\n- Version: ${snapshot.versionId}\n- Product Type: ${snapshot.productType ?? 'unclassified'}\n- Template Pack: ${snapshot.templatePack}\n- Digest: ${snapshot.digest}\n- Owner: ${handoff.owner}\n- Next Step: ${handoff.nextStep}\n- Target System: ${handoff.targetSystem}\n`;
+  return `# 交接\n\n- 版本: ${snapshot.versionId}\n- 产品类型: ${snapshot.productType ?? '未分类'}\n- 模板包: ${snapshot.templatePack}\n- Digest: ${snapshot.digest}\n- 负责人: ${handoff.owner}\n- 下一步: ${handoff.nextStep}\n- 目标系统: ${handoff.targetSystem}\n`;
 }
 
 async function openInBrowser(filePath) {
@@ -1389,16 +1734,16 @@ async function diagramWorkspace(projectRoot, options = {}) {
     mermaidPath,
   });
   await appendProgress(ws, [
-    `Generated ${label} diagram artifact for ${snapshot.title}.`,
+    `已为 ${snapshot.title} 生成 ${label} 图表产物。`,
     `HTML: ${htmlPath}`,
     `Mermaid: ${mermaidPath}`,
     ...(options.input ? [`Input contract: ${path.resolve(options.input)}`] : []),
   ]);
   await appendDecision(ws, [
-    `Created ${label} diagram review artifact for ${snapshot.title}.`,
+    `已为 ${snapshot.title} 创建 ${label} 图表评审产物。`,
     type === 'product-flow'
-      ? 'Use this artifact to confirm steps, decision points, and recovery paths before freeze.'
-      : 'Use this artifact to confirm components, boundaries, and missing systems before freeze.',
+      ? '请在 freeze 前使用该产物确认步骤、决策点和恢复路径。'
+      : '请在 freeze 前使用该产物确认组件、边界和缺失系统。',
   ]);
 
   if (options.open) {
@@ -1459,14 +1804,14 @@ async function synthesizeWorkspace(projectRoot, overrides = {}) {
     productType: snapshot.productType,
   });
   await appendDecision(ws, [
-    `Synthesized version ${snapshot.versionId}.`,
-    `Product type: ${snapshot.productType ?? 'unclassified'}.`,
-    `Template pack: ${snapshot.templatePack}.`,
+    `已生成版本 ${snapshot.versionId}。`,
+    `产品类型: ${snapshot.productType ?? '未分类'}。`,
+    `模板包: ${snapshot.templatePack}。`,
     `Digest: ${snapshot.digest}.`,
   ]);
   await appendProgress(ws, [
-    `Synthesized PRD snapshot ${snapshot.versionId}.`,
-    `Updated active PRD, flows, roles, and handoff docs.`,
+    `已生成 PRD 快照 ${snapshot.versionId}。`,
+    `已更新当前 PRD、流程、角色和交接文档。`,
   ]);
 
   const currentState = {
@@ -1749,32 +2094,32 @@ async function computeWorkspaceGuidance(ws, options = {}) {
   });
 
   let nextAction = 'synthesize';
-  let reason = 'The PRD can be synthesized into a first version.';
+  let reason = 'PRD 可以合成为第一个版本。';
   let suggestedCommand = 'openprd synthesize .';
   let suggestedQuestions = analysis.suggestedQuestions;
 
   if (clarification.shouldAskUser) {
     nextAction = 'clarify-user';
-    reason = 'The workspace is missing key user-confirmed inputs and should be clarified before further synthesis.';
+    reason = '工作区缺少用户确认的关键信息，需要先澄清再继续合成。';
     suggestedCommand = 'openprd clarify .';
     suggestedQuestions = clarification.mustAskUser.map((item) => item.prompt);
   } else if (!hasProductType) {
     nextAction = 'classify';
-    reason = 'Product type has not been locked yet.';
+    reason = '产品类型尚未锁定。';
     suggestedCommand = 'openprd classify . <consumer|b2b|agent>';
-    suggestedQuestions = ['Is this a consumer, b2b, or agent product?'];
+    suggestedQuestions = ['这是 consumer、b2b 还是 agent 产品？'];
   } else if (analysis.missingRequiredFields > 0) {
     nextAction = 'interview';
-    reason = `${analysis.missingRequiredFields} required fields are still missing.`;
+    reason = `仍缺少 ${analysis.missingRequiredFields} 个必填字段。`;
     suggestedCommand = `openprd interview . --product-type ${currentProductType}`;
   } else if (currentStatus === 'frozen') {
     nextAction = 'handoff';
-    reason = 'Latest PRD is frozen and ready to hand off.';
-    suggestedCommand = 'openprd handoff . --target openspec';
+    reason = '最新 PRD 已 freeze，可以交接。';
+    suggestedCommand = 'openprd handoff . --target openprd';
     suggestedQuestions = [];
   } else if (currentStatus === 'handed_off') {
     nextAction = versionIndex.length > 1 ? 'diff' : 'history';
-    reason = 'This workspace has already been handed off.';
+    reason = '该工作区已经完成交接。';
     suggestedCommand = nextAction === 'diff' ? 'openprd diff .' : 'openprd history .';
     suggestedQuestions = [];
   } else if (diagramState.shouldGateFreeze && (currentStatus === 'synthesized' || currentState.prdVersion > 0)) {
@@ -1782,12 +2127,12 @@ async function computeWorkspaceGuidance(ws, options = {}) {
     reason = diagramState.reason;
     suggestedCommand = `openprd diagram . --type ${diagramState.preferredType} --open`;
     suggestedQuestions = [
-      `Does this ${diagramState.preferredType} diagram reflect the intended design?`,
-      'What is missing or incorrect in the current visual representation?',
+      `这张 ${diagramState.preferredType} 图是否符合预期设计？`,
+      '当前可视化表达中还缺少什么，或哪里不准确？',
     ];
   } else if (currentStatus === 'synthesized' || currentState.prdVersion > 0) {
     nextAction = 'freeze';
-    reason = 'A versioned PRD exists and should be frozen before handoff.';
+    reason = '已有版本化 PRD，交接前应先 freeze。';
     suggestedCommand = 'openprd freeze .';
     suggestedQuestions = [];
   }
@@ -1842,13 +2187,13 @@ async function nextWorkspace(projectRoot) {
   });
   if (analysis.missingRequiredFields > 0) {
     await appendOpenQuestions(ws, [
-      `Missing required fields: ${analysis.missingRequiredFields}.`,
+      `缺少必填字段: ${analysis.missingRequiredFields}。`,
       ...analysis.suggestedQuestions,
     ]);
   }
   await appendProgress(ws, [
-    `Recommended next action: ${nextAction}.`,
-    `Reason: ${reason}`,
+    `建议下一步: ${nextAction}。`,
+    `原因: ${reason}`,
   ]);
 
   return {
@@ -1910,11 +2255,11 @@ async function classifyWorkspace(projectRoot, productType) {
   await writeJson(ws.paths.currentState, currentState);
   await appendWorkflowEvent(ws, 'classified', { productType });
   await appendDecision(ws, [
-    `Locked product type to ${productType}.`,
-    `Template pack set to ${productType}.`,
+    `已锁定产品类型为 ${productType}。`,
+    `模板包已设置为 ${productType}。`,
   ]);
   await appendProgress(ws, [
-    `Classified workspace as ${productType}.`,
+    `已将工作区分类为 ${productType}。`,
   ]);
   await writeJson(ws.paths.taskGraph, buildWorkflowTaskGraph(currentState));
 
@@ -1959,15 +2304,15 @@ ${content}`);
     sourceFiles: sourceFiles.map((filePath) => path.relative(ws.workspaceRoot, filePath)),
   });
   await appendProgress(ws, [
-    `Loaded interview prompts for ${productType ?? 'unclassified'}.`,
-    `Source files: ${sourceFiles.map((filePath) => path.relative(ws.workspaceRoot, filePath)).join(', ')}`,
+    `已加载 ${productType ?? '未分类'} 的访谈问题。`,
+    `来源文件: ${sourceFiles.map((filePath) => path.relative(ws.workspaceRoot, filePath)).join(', ')}`,
   ]);
   await appendOpenQuestions(ws, [
-    'What problem are we solving?',
-    'Who is the primary user?',
-    'What does success look like?',
-    'What is explicitly out of scope?',
-    'What is the first milestone we want to freeze?',
+    '我们要解决什么问题？',
+    '主要用户是谁？',
+    '成功是什么样？',
+    '哪些内容明确不在范围内？',
+    '我们希望 freeze 的第一个里程碑是什么？',
   ]);
   await writeJson(ws.paths.taskGraph, buildWorkflowTaskGraph(currentState));
 
@@ -1983,6 +2328,14 @@ ${content}`);
 async function initWorkspace(projectRoot, options) {
   const ws = await ensureWorkspaceSkeleton(projectRoot, options);
   const workspace = await loadWorkspace(projectRoot);
+  const standards = await initStandardsWorkspace(projectRoot, { force: Boolean(options.force) });
+  const agentIntegration = await setupOpenPrdAgentIntegration(projectRoot, {
+    tools: options.tools ?? 'all',
+    force: Boolean(options.force),
+    action: 'init',
+    enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
+    codexHome: options.codexHome,
+  });
   const config = workspace.data.config ?? {};
   if (options.templatePack) {
     config.activeTemplatePack = options.templatePack;
@@ -2011,11 +2364,656 @@ async function initWorkspace(projectRoot, options) {
     projectRoot,
   });
   await appendProgress(workspace, [
-    `Initialized workspace at ${workspace.workspaceRoot}.`,
-    `Template pack: ${currentState.templatePack}.`,
+    `已初始化工作区: ${workspace.workspaceRoot}。`,
+    `模板包: ${currentState.templatePack}。`,
   ]);
 
-  return { ws: workspace, created: ws.created, currentState };
+  return { ws: workspace, created: ws.created, currentState, standards, agentIntegration };
+}
+
+async function setupAgentIntegrationWorkspace(projectRoot, options = {}) {
+  if (!(await exists(cjoin(projectRoot, '.openprd')))) {
+    const initResult = await initWorkspace(projectRoot, options);
+    return {
+      ...initResult.agentIntegration,
+      initialized: true,
+      standards: initResult.standards,
+      init: {
+        workspaceRoot: initResult.ws.workspaceRoot,
+        created: initResult.created,
+        templatePack: initResult.currentState.templatePack,
+      },
+    };
+  }
+
+  const migration = await migrateWorkspaceSkeleton(projectRoot, { recordEvent: true });
+  const standards = await initStandardsWorkspace(projectRoot, { force: Boolean(options.force) });
+  const agentIntegration = await setupOpenPrdAgentIntegration(projectRoot, {
+    tools: options.tools ?? 'all',
+    force: Boolean(options.force),
+    action: 'setup',
+    enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
+    codexHome: options.codexHome,
+  });
+  return { ...agentIntegration, initialized: false, migration, standards };
+}
+
+async function updateAgentIntegrationWorkspace(projectRoot, options = {}) {
+  const migration = await migrateWorkspaceSkeleton(projectRoot, { recordEvent: true });
+  const standards = await initStandardsWorkspace(projectRoot, { force: false });
+  const agentIntegration = await updateOpenPrdAgentIntegration(projectRoot, {
+    tools: options.tools ?? 'all',
+    force: Boolean(options.force),
+    enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
+    codexHome: options.codexHome,
+  });
+  return { ...agentIntegration, migration, standards };
+}
+
+async function doctorWorkspace(projectRoot, options = {}) {
+  const agentIntegration = await doctorOpenPrdAgentIntegration(projectRoot, {
+    tools: options.tools ?? 'all',
+    enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
+    codexHome: options.codexHome,
+  });
+  const standards = await checkStandardsWorkspace(projectRoot).catch((error) => ({
+    ok: false,
+    errors: [error instanceof Error ? error.message : String(error)],
+    warnings: [],
+    checks: [],
+    docsRoot: path.join('docs', 'basic'),
+  }));
+  const validation = await validateWorkspace(projectRoot)
+    .then(({ report }) => report)
+    .catch((error) => ({
+      valid: false,
+      errors: [error instanceof Error ? error.message : String(error)],
+      warnings: [],
+      checks: [],
+    }));
+
+  return {
+    ok: agentIntegration.ok && standards.ok && validation.valid,
+    action: 'doctor',
+    projectRoot,
+    tools: agentIntegration.tools,
+    agentIntegration,
+    standards,
+    validation,
+    errors: [
+      ...agentIntegration.errors,
+      ...(standards.errors ?? []).map((error) => `standards: ${error}`),
+      ...(validation.errors ?? []).map((error) => `validate: ${error}`),
+    ],
+  };
+}
+
+function harnessFile(projectRoot, relativePath) {
+  return cjoin(projectRoot, relativePath);
+}
+
+async function ensureRunHarness(projectRoot) {
+  await fs.mkdir(harnessFile(projectRoot, OPENPRD_HARNESS_DIR), { recursive: true });
+  const statePath = harnessFile(projectRoot, OPENPRD_HARNESS_RUN_STATE);
+  if (!(await exists(statePath))) {
+    await writeJson(statePath, {
+      version: 1,
+      active: true,
+      currentIteration: 0,
+      lastContextAt: null,
+      lastHookAt: null,
+      lastOutcome: null,
+      lastRecommendation: null,
+    });
+  }
+  const iterationsPath = harnessFile(projectRoot, OPENPRD_HARNESS_ITERATIONS);
+  if (!(await exists(iterationsPath))) {
+    await writeText(iterationsPath, '');
+  }
+  const learningsPath = harnessFile(projectRoot, OPENPRD_HARNESS_LEARNINGS);
+  if (!(await exists(learningsPath))) {
+    await writeText(learningsPath, '# OpenPrd Harness Learnings\n\nReusable patterns discovered during hook-driven runs belong here.\n');
+  }
+}
+
+async function readRunState(projectRoot) {
+  await ensureRunHarness(projectRoot);
+  return readJson(harnessFile(projectRoot, OPENPRD_HARNESS_RUN_STATE)).catch(() => ({
+    version: 1,
+    active: true,
+    currentIteration: 0,
+  }));
+}
+
+async function writeRunState(projectRoot, state) {
+  await writeJson(harnessFile(projectRoot, OPENPRD_HARNESS_RUN_STATE), {
+    version: 1,
+    active: true,
+    ...state,
+    updatedAt: timestamp(),
+  });
+}
+
+function compactTask(task) {
+  if (!task) {
+    return null;
+  }
+  return {
+    id: task.id,
+    title: task.title,
+    relativePath: task.relativePath,
+    lineNumber: task.lineNumber,
+    verify: task.metadata?.verify ?? null,
+    done: task.metadata?.done ?? null,
+    deps: task.metadata?.deps ?? null,
+  };
+}
+
+function compactCoverageItem(item) {
+  if (!item) {
+    return null;
+  }
+  return {
+    id: item.id,
+    title: item.title,
+    status: item.status,
+    source: item.source ?? null,
+    evidence: item.evidence ?? [],
+  };
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function buildRunRecommendation({ changes, taskState, discovery, next }) {
+  const activeChange = changes?.activeChange ?? null;
+  if (taskState?.nextTask) {
+    const task = compactTask(taskState.nextTask);
+    return {
+      type: 'task',
+      title: `Advance ${task.id}: ${task.title}`,
+      command: `openprd tasks . --change ${shellQuote(taskState.changeId)} --advance --verify --item ${shellQuote(task.id)}`,
+      verifyCommand: task.verify ?? `openprd tasks . --change ${shellQuote(taskState.changeId)} --verify --item ${shellQuote(task.id)}`,
+      reason: 'A dependency-ready OpenPrd task is available.',
+      changeId: taskState.changeId,
+      task,
+      coverageItem: null,
+    };
+  }
+  if (taskState && taskState.summary?.pending === 0 && activeChange) {
+    return {
+      type: 'change-review',
+      title: `Validate completed change ${activeChange}`,
+      command: `openprd change . --validate --change ${shellQuote(activeChange)}`,
+      verifyCommand: `openprd change . --validate --change ${shellQuote(activeChange)}`,
+      reason: 'The active change has no pending structured tasks.',
+      changeId: activeChange,
+      task: null,
+      coverageItem: null,
+    };
+  }
+  const nextCoverage = discovery?.coverageMatrix?.nextPendingItem;
+  if (nextCoverage) {
+    const item = compactCoverageItem(nextCoverage);
+    return {
+      type: 'discovery',
+      title: `Investigate ${item.title}`,
+      command: `openprd discovery . --advance --item ${shellQuote(item.id)} --claim <evidence-backed-claim> --evidence <path>`,
+      verifyCommand: 'openprd discovery . --verify',
+      reason: 'A pending OpenPrd discovery coverage item is available.',
+      changeId: activeChange,
+      task: null,
+      coverageItem: item,
+    };
+  }
+  if (discovery?.coverageMatrix?.summary?.pending === 0 && discovery?.runId) {
+    return {
+      type: 'discovery-review',
+      title: `Verify discovery run ${discovery.runId}`,
+      command: 'openprd discovery . --verify',
+      verifyCommand: 'openprd discovery . --verify',
+      reason: 'The active discovery run has no pending coverage items.',
+      changeId: activeChange,
+      task: null,
+      coverageItem: null,
+    };
+  }
+  return {
+    type: 'workflow',
+    title: next?.recommendation?.nextAction ?? 'Inspect OpenPrd next action',
+    command: next?.recommendation?.suggestedCommand ?? 'openprd next .',
+    verifyCommand: 'openprd validate .',
+    reason: next?.recommendation?.reason ?? 'No active task or discovery item was found.',
+    changeId: activeChange,
+    task: null,
+    coverageItem: null,
+  };
+}
+
+async function buildRunContext(projectRoot) {
+  await ensureRunHarness(projectRoot);
+  const runState = await readRunState(projectRoot);
+  const validation = await validateWorkspace(projectRoot)
+    .then(({ report }) => report)
+    .catch((error) => ({
+      valid: false,
+      errors: [error instanceof Error ? error.message : String(error)],
+      warnings: [],
+      checks: [],
+    }));
+  const next = await nextWorkspace(projectRoot).catch(() => null);
+  const changes = await listOpenPrdChangesWorkspace(projectRoot).catch(() => null);
+  const activeChange = changes?.activeChange ?? null;
+  const taskState = activeChange
+    ? await listOpenSpecTaskWorkspace(projectRoot, { change: activeChange }).catch(() => null)
+    : null;
+  const discovery = await resumeOpenSpecDiscoveryWorkspace(projectRoot).catch(() => null);
+  const recommendation = buildRunRecommendation({ changes, taskState, discovery, next });
+
+  const context = {
+    ok: validation.valid,
+    action: 'run-context',
+    projectRoot,
+    generatedAt: timestamp(),
+    runState,
+    validation: {
+      valid: validation.valid,
+      errors: validation.errors ?? [],
+      warnings: validation.warnings ?? [],
+    },
+    workflow: next?.workflow ?? [],
+    next: next?.recommendation ?? null,
+    activeChange,
+    taskSummary: taskState?.summary ?? null,
+    nextTask: compactTask(taskState?.nextTask ?? null),
+    blockedTasks: taskState?.blockedTasks ?? [],
+    discovery: discovery
+      ? {
+          runId: discovery.runId,
+          mode: discovery.control?.mode ?? null,
+          status: discovery.control?.status ?? null,
+          iteration: discovery.control?.iteration ?? null,
+          maxIterations: discovery.control?.maxIterations ?? null,
+          summary: discovery.coverageMatrix?.summary ?? null,
+          nextPendingItem: compactCoverageItem(discovery.coverageMatrix?.nextPendingItem ?? null),
+        }
+      : null,
+    recommendation,
+    files: {
+      runState: OPENPRD_HARNESS_RUN_STATE,
+      iterations: OPENPRD_HARNESS_ITERATIONS,
+      learnings: OPENPRD_HARNESS_LEARNINGS,
+    },
+  };
+
+  await writeRunState(projectRoot, {
+    ...runState,
+    lastContextAt: context.generatedAt,
+    lastRecommendation: recommendation,
+  });
+
+  return context;
+}
+
+async function recordRunHook(projectRoot, options = {}) {
+  await ensureRunHarness(projectRoot);
+  const state = await readRunState(projectRoot);
+  const currentIteration = Number(state.currentIteration ?? 0) + 1;
+  const event = {
+    version: 1,
+    at: timestamp(),
+    iteration: currentIteration,
+    type: 'hook',
+    eventName: options.event ?? 'Unknown',
+    risk: options.risk ?? 'unknown',
+    outcome: options.outcome ?? 'unknown',
+    preview: options.preview ?? null,
+  };
+  await appendJsonl(harnessFile(projectRoot, OPENPRD_HARNESS_ITERATIONS), event);
+  await writeRunState(projectRoot, {
+    ...state,
+    currentIteration,
+    lastHookAt: event.at,
+    lastOutcome: event.outcome,
+  });
+  if (options.learn) {
+    await appendText(harnessFile(projectRoot, OPENPRD_HARNESS_LEARNINGS), `\n## ${event.at}\n\n- ${options.learn}\n`);
+  }
+  return {
+    ok: true,
+    action: 'run-record-hook',
+    projectRoot,
+    event,
+    files: {
+      runState: OPENPRD_HARNESS_RUN_STATE,
+      iterations: OPENPRD_HARNESS_ITERATIONS,
+      learnings: OPENPRD_HARNESS_LEARNINGS,
+    },
+  };
+}
+
+async function verifyRunWorkspace(projectRoot) {
+  const context = await buildRunContext(projectRoot);
+  const standards = await checkStandardsWorkspace(projectRoot);
+  const validation = await validateWorkspace(projectRoot).then(({ report }) => report);
+  const checks = [
+    { name: 'standards', ok: standards.ok, errors: standards.errors ?? [] },
+    { name: 'validate', ok: validation.valid, errors: validation.errors ?? [] },
+  ];
+  if (context.activeChange) {
+    const change = await validateOpenSpecChangeWorkspace(projectRoot, { change: context.activeChange });
+    checks.push({ name: 'change', ok: change.ok, errors: change.errors ?? [] });
+  }
+  if (context.discovery) {
+    const discovery = await verifyOpenSpecDiscoveryWorkspace(projectRoot);
+    checks.push({ name: 'discovery', ok: discovery.ok, errors: discovery.verification.errors ?? [] });
+  }
+  const ok = checks.every((check) => check.ok);
+  await appendJsonl(harnessFile(projectRoot, OPENPRD_HARNESS_ITERATIONS), {
+    version: 1,
+    at: timestamp(),
+    type: 'verify',
+    ok,
+    checks: checks.map((check) => ({ name: check.name, ok: check.ok, errors: check.errors.length })),
+  });
+  return {
+    ok,
+    action: 'run-verify',
+    projectRoot,
+    context,
+    checks,
+    errors: checks.flatMap((check) => check.errors.map((error) => `${check.name}: ${error}`)),
+  };
+}
+
+async function runWorkspace(projectRoot, options = {}) {
+  if (options.recordHook) {
+    return recordRunHook(projectRoot, options);
+  }
+  if (options.verify) {
+    return verifyRunWorkspace(projectRoot);
+  }
+  return buildRunContext(projectRoot);
+}
+
+function normalizeCsvList(value) {
+  if (!value) {
+    return [];
+  }
+  return String(value)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parsePositiveInteger(value, fallback) {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function projectPathMatches(projectRoot, candidatePath, patterns) {
+  if (patterns.length === 0) {
+    return true;
+  }
+  const absolutePath = path.resolve(candidatePath);
+  const relativePath = path.relative(projectRoot, absolutePath) || '.';
+  return patterns.some((pattern) => {
+    const resolvedPattern = path.isAbsolute(pattern) ? path.resolve(pattern) : pattern;
+    return absolutePath === resolvedPattern
+      || absolutePath.includes(resolvedPattern)
+      || relativePath === pattern
+      || relativePath.includes(pattern);
+  });
+}
+
+function classifyFleetMarkers(markers) {
+  if (markers.includes('.openprd')) {
+    return 'openprd-workspace';
+  }
+  if (markers.some((marker) => FLEET_AGENT_MARKERS.includes(marker))) {
+    return 'agent-configured';
+  }
+  return 'plain-project';
+}
+
+function plannedFleetAction(category, options) {
+  if (category === 'openprd-workspace') {
+    if (options.updateOpenprd) {
+      return 'update';
+    }
+    if (options.doctor) {
+      return 'doctor';
+    }
+    return 'report';
+  }
+  if (category === 'agent-configured') {
+    return options.setupMissing ? 'setup' : 'report';
+  }
+  return 'skip';
+}
+
+async function detectFleetMarkers(projectPath) {
+  const entries = await fs.readdir(projectPath, { withFileTypes: true }).catch(() => []);
+  const names = new Set(entries.map((entry) => entry.name));
+  return FLEET_PROJECT_MARKERS.filter((marker) => names.has(marker));
+}
+
+async function scanFleetProjects(rootPath, options = {}) {
+  const root = path.resolve(rootPath);
+  const maxDepth = parsePositiveInteger(options.maxDepth, FLEET_DEFAULT_MAX_DEPTH);
+  const include = normalizeCsvList(options.include);
+  const exclude = normalizeCsvList(options.exclude);
+  const projects = [];
+  const seenRealPaths = new Set();
+
+  async function walk(currentPath, depth) {
+    if (depth > maxDepth) {
+      return;
+    }
+
+    const name = path.basename(currentPath);
+    if (depth > 0 && FLEET_IGNORE_DIRS.has(name)) {
+      return;
+    }
+
+    const realPath = await fs.realpath(currentPath).catch(() => currentPath);
+    if (seenRealPaths.has(realPath)) {
+      return;
+    }
+    seenRealPaths.add(realPath);
+
+    const markers = await detectFleetMarkers(currentPath);
+    if (markers.length > 0) {
+      const category = classifyFleetMarkers(markers);
+      const included = projectPathMatches(root, currentPath, include);
+      const excluded = exclude.length > 0 && projectPathMatches(root, currentPath, exclude);
+      if (included && !excluded) {
+        projects.push({
+          path: currentPath,
+          relativePath: path.relative(root, currentPath) || '.',
+          category,
+          markers,
+        });
+      }
+    }
+
+    let entries = [];
+    try {
+      entries = await fs.readdir(currentPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.isSymbolicLink?.()) {
+        continue;
+      }
+      if (FLEET_IGNORE_DIRS.has(entry.name)) {
+        continue;
+      }
+      await walk(cjoin(currentPath, entry.name), depth + 1);
+    }
+  }
+
+  await walk(root, 0);
+  return projects.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function summarizeFleetProjects(projects) {
+  const summary = {
+    total: projects.length,
+    openprd: 0,
+    agentConfigured: 0,
+    plain: 0,
+    planned: 0,
+    updated: 0,
+    setup: 0,
+    doctored: 0,
+    skipped: 0,
+    failed: 0,
+  };
+  for (const project of projects) {
+    if (project.category === 'openprd-workspace') {
+      summary.openprd += 1;
+    } else if (project.category === 'agent-configured') {
+      summary.agentConfigured += 1;
+    } else {
+      summary.plain += 1;
+    }
+    if (project.status === 'planned') {
+      summary.planned += 1;
+    } else if (project.status === 'updated') {
+      summary.updated += 1;
+    } else if (project.status === 'setup') {
+      summary.setup += 1;
+    } else if (project.status === 'doctored') {
+      summary.doctored += 1;
+    } else if (project.status === 'failed') {
+      summary.failed += 1;
+    } else if (project.status === 'skipped') {
+      summary.skipped += 1;
+    }
+  }
+  return summary;
+}
+
+async function fleetWorkspace(rootPath, options = {}) {
+  const root = path.resolve(rootPath);
+  if (!(await exists(root))) {
+    throw new Error(`Fleet root does not exist: ${root}`);
+  }
+
+  const dryRun = Boolean(options.dryRun) || (!options.updateOpenprd && !options.setupMissing && !options.doctor);
+  const scanned = await scanFleetProjects(root, options);
+  const projects = [];
+
+  for (const project of scanned) {
+    const plannedAction = plannedFleetAction(project.category, options);
+    const item = {
+      ...project,
+      plannedAction,
+      status: plannedAction === 'skip' ? 'skipped' : (dryRun ? 'planned' : 'skipped'),
+      ok: true,
+      changes: [],
+      errors: [],
+    };
+
+    if (plannedAction === 'skip' || plannedAction === 'report') {
+      item.status = dryRun ? 'planned' : 'skipped';
+      projects.push(item);
+      continue;
+    }
+
+    if (dryRun) {
+      projects.push(item);
+      continue;
+    }
+
+    try {
+      if (plannedAction === 'update') {
+        const update = await updateAgentIntegrationWorkspace(project.path, {
+          tools: options.tools ?? 'all',
+          force: Boolean(options.force),
+          enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
+          codexHome: options.codexHome,
+        });
+        const doctor = await doctorWorkspace(project.path, {
+          tools: options.tools ?? 'all',
+          enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
+          codexHome: options.codexHome,
+        });
+        item.status = update.ok && doctor.ok ? 'updated' : 'failed';
+        item.ok = update.ok && doctor.ok;
+        item.changes = [
+          ...(update.migration?.changes ?? []).map((change) => ({ ...change, source: 'workspace' })),
+          ...(update.changes ?? []).map((change) => ({ ...change, source: 'agent' })),
+        ];
+        item.doctorOk = doctor.ok;
+        item.errors = [...(update.doctor?.errors ?? []), ...(doctor.errors ?? [])];
+      } else if (plannedAction === 'setup') {
+        const setup = await setupAgentIntegrationWorkspace(project.path, {
+          tools: options.tools ?? 'all',
+          force: Boolean(options.force),
+          enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
+          codexHome: options.codexHome,
+        });
+        item.status = setup.ok ? 'setup' : 'failed';
+        item.ok = setup.ok;
+        item.changes = [
+          ...(setup.migration?.changes ?? []).map((change) => ({ ...change, source: 'workspace' })),
+          ...(setup.changes ?? []).map((change) => ({ ...change, source: 'agent' })),
+        ];
+        item.errors = setup.doctor?.errors ?? [];
+      } else if (plannedAction === 'doctor') {
+        const doctor = await doctorWorkspace(project.path, {
+          tools: options.tools ?? 'all',
+          enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
+          codexHome: options.codexHome,
+        });
+        item.status = doctor.ok ? 'doctored' : 'failed';
+        item.ok = doctor.ok;
+        item.doctorOk = doctor.ok;
+        item.errors = doctor.errors ?? [];
+      }
+    } catch (error) {
+      item.status = 'failed';
+      item.ok = false;
+      item.errors = [error instanceof Error ? error.message : String(error)];
+    }
+    projects.push(item);
+  }
+
+  const result = {
+    ok: projects.every((project) => project.ok),
+    action: 'fleet',
+    root,
+    dryRun,
+    tools: options.tools ?? 'all',
+    maxDepth: parsePositiveInteger(options.maxDepth, FLEET_DEFAULT_MAX_DEPTH),
+    include: normalizeCsvList(options.include),
+    exclude: normalizeCsvList(options.exclude),
+    requestedActions: {
+      updateOpenprd: Boolean(options.updateOpenprd),
+      setupMissing: Boolean(options.setupMissing),
+      doctor: Boolean(options.doctor),
+    },
+    scannedAt: timestamp(),
+    summary: summarizeFleetProjects(projects),
+    projects,
+    errors: projects.flatMap((project) => project.errors.map((error) => `${project.relativePath}: ${error}`)),
+  };
+
+  if (options.report) {
+    const reportPath = path.resolve(options.report);
+    await writeJson(reportPath, result);
+    result.reportPath = reportPath;
+  }
+
+  return result;
 }
 
 async function freezeWorkspace(projectRoot) {
@@ -2027,9 +3025,9 @@ async function freezeWorkspace(projectRoot) {
       warnings: report.warnings,
     });
     await appendVerification(validation.ws, [
-      'Freeze validation failed.',
-      ...report.errors.map((error) => `Error: ${error}`),
-      ...report.warnings.map((warning) => `Warning: ${warning}`),
+      'Freeze 验证失败。',
+      ...report.errors.map((error) => `错误: ${error}`),
+      ...report.warnings.map((warning) => `警告: ${warning}`),
     ]);
     return { ok: false, report, ws: validation.ws };
   }
@@ -2074,18 +3072,18 @@ async function freezeWorkspace(projectRoot) {
     digest,
   });
   await appendVerification(ws, [
-    'Freeze validation passed.',
-    `Version: ${snapshot.latestVersionId}`,
+    'Freeze 验证通过。',
+    `版本: ${snapshot.latestVersionId}`,
     `Digest: ${digest}`,
-    `PRD version: ${snapshot.prdVersion}`,
+    `PRD 版本: ${snapshot.prdVersion}`,
   ]);
   await appendProgress(ws, [
-    `Frozen PRD version ${snapshot.latestVersionId}.`,
+    `已 freeze PRD 版本 ${snapshot.latestVersionId}。`,
     `Digest: ${digest}`,
   ]);
   await appendDecision(ws, [
-    `Frozen version ${snapshot.latestVersionId}.`,
-    `Ready for handoff to ${resolveActiveTemplatePack(ws) === 'base' ? 'downstream execution' : 'execution systems'}.`,
+    `已 freeze 版本 ${snapshot.latestVersionId}。`,
+    `已准备好交接给 ${resolveActiveTemplatePack(ws) === 'base' ? '下游执行方' : '执行系统'}。`,
   ]);
   await writeJson(ws.paths.taskGraph, buildWorkflowTaskGraph(currentState));
 
@@ -2124,13 +3122,13 @@ async function handoffWorkspace(projectRoot, target) {
       ...((await exists(ws.paths.activeProductFlowDiagramJson)) ? ['engagements/active/product-flow-diagram.json'] : []),
       ...((await exists(ws.paths.activeProductFlowDiagramMermaid)) ? ['engagements/active/product-flow-diagram.mmd'] : []),
     ],
-    nextStep: target === 'openspec'
-      ? 'Import the PRD snapshot into an OpenSpec change and continue with specs/design/tasks.'
+    nextStep: target === 'openprd' || target === 'openspec'
+      ? 'Generate an OpenPrd change and continue with specs/design/tasks.'
       : 'Consume the handoff bundle in the downstream system.',
   };
 
   await writeJson(cjoin(exportDir, 'handoff.json'), handoff);
-  await writeText(cjoin(exportDir, 'handoff.md'), `# Handoff\n\n- Target: ${target}\n- Version: ${handoff.versionId}\n- Schema: ${handoff.schema}\n- Template pack: ${handoff.templatePack}\n- Digest: ${handoff.digest}\n- Next step: ${handoff.nextStep}\n`);
+  await writeText(cjoin(exportDir, 'handoff.md'), `# 交接\n\n- 目标: ${target}\n- 版本: ${handoff.versionId}\n- Schema: ${handoff.schema}\n- 模板包: ${handoff.templatePack}\n- Digest: ${handoff.digest}\n- 下一步: ${handoff.nextStep}\n`);
   if (await exists(ws.paths.activeArchitectureDiagramHtml)) {
     await fs.copyFile(ws.paths.activeArchitectureDiagramHtml, cjoin(exportDir, 'architecture-diagram.html'));
   }
@@ -2154,12 +3152,12 @@ async function handoffWorkspace(projectRoot, target) {
     versionId: handoff.versionId,
   });
   await appendProgress(ws, [
-    `Generated handoff bundle for ${target}.`,
-    `Version: ${handoff.versionId}`,
+    `已生成面向 ${target} 的交接包。`,
+    `版本: ${handoff.versionId}`,
   ]);
   await appendDecision(ws, [
-    `Handoff target set to ${target}.`,
-    `Version ${handoff.versionId} exported to ${exportDir}.`,
+    `交接目标已设置为 ${target}。`,
+    `版本 ${handoff.versionId} 已导出到 ${exportDir}。`,
   ]);
 
   const currentState = {
@@ -2174,9 +3172,853 @@ async function handoffWorkspace(projectRoot, target) {
   return { ok: true, ws, report: freeze.report, snapshot, handoff, exportDir };
 }
 
+async function generateOpenSpecChangeWorkspace(projectRoot, options = {}) {
+  const ws = await loadWorkspace(projectRoot);
+  const versionIndex = await readVersionIndex(ws);
+  const latest = await loadLatestVersionSnapshot(ws);
+  const currentState = ws.data.currentState ?? {};
+  const snapshot = latest?.snapshot ?? buildPrdSnapshot(ws, {
+    ...currentState,
+    versionNumber: currentState.prdVersion ?? (versionIndex.at(-1)?.versionNumber ?? 0),
+    versionId: currentState.prdVersion > 0
+      ? formatVersionId(currentState.prdVersion)
+      : (versionIndex.at(-1)?.versionId ?? 'v0000'),
+    productType: resolveCurrentProductType(ws),
+    templatePack: resolveActiveTemplatePack(ws),
+  });
+  const analysis = analyzePrdSnapshot(snapshot);
+  const result = await writeOpenSpecChangeWorkspace(projectRoot, {
+    ...options,
+    snapshot,
+    analysis,
+  });
+  const validation = await validateOpenSpecChangeWorkspace(projectRoot, { change: result.changeId });
+  await activateOpenPrdChangeWorkspace(projectRoot, { change: result.changeId });
+
+  await appendWorkflowEvent(ws, 'openprd_change_generated', {
+    changeId: result.changeId,
+    taskCount: result.taskCount,
+    valid: validation.valid,
+  });
+  await appendProgress(ws, [
+    `已生成 OpenPrd change ${result.changeId}。`,
+    `任务数: ${result.taskCount}。`,
+    `验证: ${validation.valid ? '通过' : '失败'}。`,
+  ]);
+
+  return {
+    ...result,
+    ws,
+    snapshot,
+    analysis,
+    validation,
+    ok: result.ok && validation.ok,
+  };
+}
+
+function slugify(value, fallback = 'item') {
+  const slug = String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return slug || fallback;
+}
+
+function normalizeDiscoveryMode(mode) {
+  const normalized = String(mode ?? 'auto').trim().toLowerCase();
+  if (!OPENSPEC_DISCOVERY_MODES.includes(normalized)) {
+    throw new Error(`Unsupported OpenPrd discovery mode: ${mode}`);
+  }
+  return normalized;
+}
+
+async function resolveDiscoveryMode(projectRoot, options = {}) {
+  const requested = String(options.mode ?? 'auto').trim().toLowerCase();
+  if (requested && requested !== 'auto') {
+    return normalizeDiscoveryMode(requested);
+  }
+  if (options.reference) {
+    return 'reference';
+  }
+
+  let entries = [];
+  try {
+    entries = await fs.readdir(projectRoot, { withFileTypes: true });
+  } catch {
+    return 'requirement';
+  }
+
+  const hasProjectMaterial = entries.some((entry) => {
+    if (shouldIgnoreSourceDirectory(entry.name)) {
+      return false;
+    }
+    if (entry.isDirectory()) {
+      return true;
+    }
+    return entry.isFile() && shouldInventorySourceFile(entry.name);
+  });
+
+  return hasProjectMaterial ? 'brownfield' : 'requirement';
+}
+
+function normalizeDiscoveryMaxIterations(value) {
+  const normalized = Number(value ?? OPENSPEC_DISCOVERY_DEFAULT_MAX_ITERATIONS);
+  if (!Number.isInteger(normalized) || normalized < 1) {
+    throw new Error(`Invalid OpenPrd discovery max iterations: ${value}`);
+  }
+  return normalized;
+}
+
+function normalizeCoverageStatus(status) {
+  const normalized = String(status ?? 'covered').trim().toLowerCase();
+  if (!OPENSPEC_DISCOVERY_COVERAGE_STATUSES.includes(normalized)) {
+    throw new Error(`Unsupported OpenPrd discovery coverage status: ${status}`);
+  }
+  return normalized;
+}
+
+function normalizeClaimConfidence(value) {
+  const normalized = Number(value ?? 0.7);
+  if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
+    throw new Error(`Invalid OpenPrd discovery claim confidence: ${value}`);
+  }
+  return normalized;
+}
+
+function buildDiscoveryRunId(mode, now = new Date()) {
+  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  return `${stamp}-${mode}`;
+}
+
+function shouldInventorySourceFile(name) {
+  if (SOURCE_INVENTORY_SPECIAL_FILES.has(name)) {
+    return true;
+  }
+  return SOURCE_INVENTORY_EXTENSIONS.has(path.extname(name).toLowerCase());
+}
+
+function compareSourceInventoryEntries(a, b) {
+  const aHidden = a.name.startsWith('.');
+  const bHidden = b.name.startsWith('.');
+  if (aHidden !== bHidden) {
+    return aHidden ? 1 : -1;
+  }
+  if (a.isDirectory() !== b.isDirectory()) {
+    return a.isDirectory() ? -1 : 1;
+  }
+  return a.name.localeCompare(b.name);
+}
+
+function classifyInventoryFile(relativePath) {
+  const lower = relativePath.toLowerCase();
+  const base = path.basename(lower);
+  if (base.includes('test') || base.includes('spec') || lower.includes('/test/') || lower.includes('/tests/')) {
+    return 'test';
+  }
+  if (lower.endsWith('.md') || lower.includes('/docs/') || base === 'readme') {
+    return 'document';
+  }
+  if (['package.json', 'tsconfig.json', 'vite.config.ts', 'next.config.js', 'dockerfile', 'makefile'].includes(base) || lower.endsWith('.yaml') || lower.endsWith('.yml') || lower.endsWith('.toml')) {
+    return 'configuration';
+  }
+  if (lower.includes('/schema/') || lower.endsWith('.sql')) {
+    return 'schema';
+  }
+  return 'implementation';
+}
+
+function sourceLanguage(relativePath) {
+  const ext = path.extname(relativePath).toLowerCase().replace('.', '');
+  if (!ext) {
+    return path.basename(relativePath);
+  }
+  if (['js', 'jsx', 'mjs', 'cjs'].includes(ext)) return 'javascript';
+  if (['ts', 'tsx'].includes(ext)) return 'typescript';
+  if (['yml', 'yaml'].includes(ext)) return 'yaml';
+  if (ext === 'md') return 'markdown';
+  return ext;
+}
+
+async function collectSourceInventory(sourceRoot, options = {}) {
+  const maxDepth = Number(options.maxDepth ?? 6);
+  const maxFiles = Number(options.maxFiles ?? 250);
+  const files = [];
+  const directories = [];
+  const languageBreakdown = {};
+  let truncated = false;
+
+  if (!(await exists(sourceRoot))) {
+    throw new Error(`Missing source root for OpenPrd discovery: ${sourceRoot}`);
+  }
+
+  async function walk(currentDir, depth) {
+    if (files.length >= maxFiles) {
+      truncated = true;
+      return;
+    }
+
+    let entries = [];
+    try {
+      entries = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    entries.sort(compareSourceInventoryEntries);
+
+    for (const entry of entries) {
+      if (files.length >= maxFiles) {
+        truncated = true;
+        return;
+      }
+
+      const absolutePath = cjoin(currentDir, entry.name);
+      const relativePath = path.relative(sourceRoot, absolutePath);
+      if (!relativePath || relativePath.startsWith('..')) {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        if (shouldIgnoreSourceDirectory(entry.name)) {
+          continue;
+        }
+        directories.push(relativePath);
+        if (depth < maxDepth) {
+          await walk(absolutePath, depth + 1);
+        } else {
+          truncated = true;
+        }
+        continue;
+      }
+
+      if (!entry.isFile() || !shouldInventorySourceFile(entry.name)) {
+        continue;
+      }
+
+      let stats = null;
+      try {
+        stats = await fs.stat(absolutePath);
+      } catch {
+        stats = null;
+      }
+
+      const language = sourceLanguage(relativePath);
+      languageBreakdown[language] = (languageBreakdown[language] ?? 0) + 1;
+      files.push({
+        path: relativePath,
+        kind: classifyInventoryFile(relativePath),
+        language,
+        sizeBytes: stats?.size ?? null,
+      });
+    }
+  }
+
+  await walk(sourceRoot, 0);
+
+  return {
+    version: 1,
+    generatedAt: timestamp(),
+    sourceRoot,
+    summary: {
+      files: files.length,
+      directories: directories.length,
+      truncated,
+      languageBreakdown,
+      topLevelDirectories: [...new Set(directories.map((dir) => dir.split(path.sep)[0]))].slice(0, 30),
+    },
+    files,
+    directories,
+  };
+}
+
+function claimValuePreview(value) {
+  if (Array.isArray(value)) {
+    return value.slice(0, 5).map((item) => String(item)).join(', ');
+  }
+  if (value && typeof value === 'object') {
+    return JSON.stringify(value).slice(0, 240);
+  }
+  return String(value ?? '').slice(0, 240);
+}
+
+function buildSeedClaims(analysis) {
+  return analysis.completeFields.slice(0, 80).map((field) => ({
+    id: `claim:${slugify(field.path)}`,
+    status: 'seeded',
+    source: 'openprd-snapshot',
+    confidence: 0.7,
+    path: field.path,
+    summary: `${field.label}: ${claimValuePreview(field.value)}`,
+  }));
+}
+
+function buildCoverageItems({ mode, inventory, analysis }) {
+  const missingFieldItems = analysis.missingFields.map((field) => ({
+    id: `field:${slugify(field.path)}`,
+    title: field.label,
+    kind: 'missing-prd-field',
+    status: 'pending',
+    priority: 'high',
+    target: field.path,
+    prompt: field.prompt,
+    source: 'openprd-analysis',
+    claimIds: [],
+  }));
+
+  const sourceItems = inventory.files.slice(0, 120).map((file) => ({
+    id: `source:${slugify(file.path)}`,
+    title: file.path,
+    kind: `${file.kind}-evidence`,
+    status: 'pending',
+    priority: file.kind === 'implementation' || file.kind === 'schema' ? 'medium' : 'low',
+    source: file.path,
+    claimIds: [],
+  }));
+
+  const items = mode === 'requirement'
+    ? missingFieldItems
+    : [...missingFieldItems, ...sourceItems];
+
+  if (items.length === 0) {
+    items.push({
+      id: 'review:openprd-completeness',
+      title: 'OpenPrd completeness review',
+      kind: 'review',
+      status: 'pending',
+      priority: 'medium',
+      source: 'generated',
+      claimIds: [],
+    });
+  }
+
+  const pendingItems = items.filter((item) => item.status === 'pending');
+  return {
+    version: 1,
+    generatedAt: timestamp(),
+    mode,
+    summary: {
+      total: items.length,
+      pending: pendingItems.length,
+      covered: items.filter((item) => item.status === 'covered').length,
+      blocked: items.filter((item) => item.status === 'blocked').length,
+    },
+    nextPendingItem: pendingItems[0] ?? null,
+    items,
+  };
+}
+
+function summarizeCoverageItems(items) {
+  const pendingItems = items.filter((item) => item.status === 'pending');
+  return {
+    summary: {
+      total: items.length,
+      pending: pendingItems.length,
+      covered: items.filter((item) => item.status === 'covered').length,
+      blocked: items.filter((item) => item.status === 'blocked').length,
+    },
+    nextPendingItem: pendingItems[0] ?? null,
+  };
+}
+
+function refreshCoverageMatrix(coverageMatrix) {
+  const { summary, nextPendingItem } = summarizeCoverageItems(coverageMatrix.items ?? []);
+  return {
+    ...coverageMatrix,
+    generatedAt: timestamp(),
+    summary,
+    nextPendingItem,
+  };
+}
+
+function renderDiscoveryContext({ mode, projectRoot, sourceRoot, snapshot, analysis, coverageMatrix }) {
+  const next = coverageMatrix.nextPendingItem;
+  return [
+    '# OpenPrd Discovery Context',
+    '',
+    `- 模式: ${mode}`,
+    `- 项目根目录: ${projectRoot}`,
+    `- 来源根目录: ${sourceRoot}`,
+    `- PRD 版本: ${snapshot.versionId}`,
+    `- 产品类型: ${snapshot.productType ?? '未分类'}`,
+    `- 必填字段完成度: ${analysis.completedRequiredFields}/${analysis.totalRequiredFields}`,
+    `- 覆盖项: ${coverageMatrix.summary.pending}/${coverageMatrix.summary.total} 待处理`,
+    next ? `- 下一项: ${next.title}` : '- 下一项: 无',
+    '',
+    '## 执行循环',
+    '',
+    '1. 从本次运行目录和 OpenPrd 工作区重建上下文。',
+    '2. 选择下一个待处理覆盖项。',
+    '3. 在写入新的 OpenPrd claim 前先收集证据。',
+    '4. 更新 OpenPrd 文档、claims、覆盖状态、开放问题和迭代记录。',
+    '5. 只有在覆盖项处理完成、被阻断或达到迭代预算时才停止。',
+    '',
+  ].join('\n');
+}
+
+function renderDiscoveryOpenQuestions(analysis, mode) {
+  const questions = analysis.missingFields.map((field) => `- [ ] ${field.prompt} (${field.path})`);
+  if (questions.length === 0) {
+    questions.push('- [ ] 检查是否仍有隐含行为缺少 OpenPrd 覆盖。');
+  }
+  return [
+    '# 开放问题',
+    '',
+    `模式: ${mode}`,
+    '',
+    ...questions,
+    '',
+  ].join('\n');
+}
+
+async function openspecDiscoveryWorkspace(projectRoot, options = {}) {
+  if (options.verify) {
+    return verifyOpenSpecDiscoveryWorkspace(projectRoot);
+  }
+
+  if (options.advance) {
+    return advanceOpenSpecDiscoveryWorkspace(projectRoot, options);
+  }
+
+  if (options.resume) {
+    return resumeOpenSpecDiscoveryWorkspace(projectRoot);
+  }
+
+  const mode = await resolveDiscoveryMode(projectRoot, options);
+  const maxIterations = normalizeDiscoveryMaxIterations(options.maxIterations);
+  const ws = await loadWorkspace(projectRoot);
+  if (!(await exists(ws.workspaceRoot))) {
+    throw new Error(`Missing workspace: ${ws.workspaceRoot}`);
+  }
+
+  const versionIndex = await readVersionIndex(ws);
+  const latest = await loadLatestVersionSnapshot(ws).catch(() => null);
+  const currentState = ws.data.currentState ?? {};
+  const snapshot = latest?.snapshot ?? buildPrdSnapshot(ws, {
+    ...currentState,
+    versionNumber: currentState.prdVersion ?? (versionIndex.at(-1)?.versionNumber ?? 0),
+    versionId: currentState.prdVersion > 0
+      ? formatVersionId(currentState.prdVersion)
+      : (versionIndex.at(-1)?.versionId ?? 'v0000'),
+    productType: resolveCurrentProductType(ws),
+    templatePack: resolveActiveTemplatePack(ws),
+  });
+  const analysis = analyzePrdSnapshot(snapshot);
+
+  const sourceRoot = mode === 'reference' && options.reference
+    ? path.resolve(projectRoot, options.reference)
+    : projectRoot;
+  const inventory = await collectSourceInventory(sourceRoot, {
+    maxDepth: options.maxDepth,
+    maxFiles: options.maxFiles,
+  });
+  const coverageMatrix = buildCoverageItems({ mode, inventory, analysis });
+  const claims = buildSeedClaims(analysis);
+  const runId = options.runId ?? buildDiscoveryRunId(mode);
+  const discoveryRoot = openPrdDiscoveryDir(projectRoot);
+  const runDir = cjoin(discoveryRoot, 'runs', runId);
+  const now = timestamp();
+  const control = {
+    version: 1,
+    runId,
+    mode,
+    status: coverageMatrix.summary.pending > 0 ? 'active' : 'ready_for_review',
+    iteration: 1,
+    maxIterations,
+    createdAt: now,
+    updatedAt: now,
+    projectRoot,
+    openprdWorkspaceRoot: ws.workspaceRoot,
+    sourceRoot,
+    referencePath: mode === 'reference' ? (options.reference ?? null) : null,
+    latestPrdVersion: snapshot.versionId,
+    nextAction: coverageMatrix.nextPendingItem
+      ? `Investigate ${coverageMatrix.nextPendingItem.title}`
+      : 'Review OpenPrd completeness',
+  };
+  const firstIteration = {
+    iteration: 1,
+    at: now,
+    action: 'initialized',
+    mode,
+    nextCoverageItemId: coverageMatrix.nextPendingItem?.id ?? null,
+    pendingCoverageItems: coverageMatrix.summary.pending,
+    seededClaims: claims.length,
+  };
+
+  await fs.mkdir(runDir, { recursive: true });
+  await writeJson(cjoin(discoveryRoot, 'current.json'), {
+    version: 1,
+    activeRunId: runId,
+    activeRunDir: runDir,
+    mode,
+    updatedAt: now,
+  });
+  await writeText(cjoin(discoveryRoot, 'README.md'), [
+    '# OpenPrd Discovery',
+    '',
+    'This directory stores continuous discovery state for OpenPrd work.',
+    '',
+    '## Files',
+    '',
+    '- `control.json` tracks the active loop state and iteration budget.',
+    '- `coverage-matrix.json` tracks what still needs to be mined into OpenPrd specs and tasks.',
+    '- `claims.jsonl` records evidence-backed requirement claims.',
+    '- `open-questions.md` keeps unresolved user or product questions visible.',
+    '- `iterations.jsonl` records each loop pass.',
+    '',
+    '## Task Sharding',
+    '',
+    '- Keep `tasks.md` as the first task entry.',
+    '- Continue long changes with `tasks-002.md`, `tasks-003.md`, and so on.',
+    '- The last checkbox in every non-final task file must hand off to the next file.',
+    '- Projects may override the max task count in `.openprd/discovery/config.json` at `taskSharding.maxItemsPerFile`.',
+    '- For structured tasks, use only `deps`, `done`, and `verify` metadata under a stable task id.',
+    '',
+    '```md',
+    '- [ ] T009.07 Port legacy database import preview',
+    '  - deps: T001.14, T007.06',
+    '  - done: preview shows counts, conflicts, skipped items, warnings',
+    '  - verify: npm run test -- migration',
+    '```',
+    '',
+    '- Omit `deps` when there are no dependencies.',
+    '',
+  ].join('\n'));
+  await writeJson(cjoin(runDir, 'control.json'), control);
+  await writeText(cjoin(runDir, 'context.md'), renderDiscoveryContext({
+    mode,
+    projectRoot,
+    sourceRoot,
+    snapshot,
+    analysis,
+    coverageMatrix,
+  }));
+  await writeJson(cjoin(runDir, 'source-inventory.json'), inventory);
+  await writeJson(cjoin(runDir, 'coverage-matrix.json'), coverageMatrix);
+  await writeText(cjoin(runDir, 'claims.jsonl'), `${claims.map((claim) => JSON.stringify(claim)).join('\n')}${claims.length > 0 ? '\n' : ''}`);
+  await writeText(cjoin(runDir, 'open-questions.md'), renderDiscoveryOpenQuestions(analysis, mode));
+  await writeText(cjoin(runDir, 'iterations.jsonl'), `${JSON.stringify(firstIteration)}\n`);
+
+  await appendWorkflowEvent(ws, 'openspec_discovery_initialized', {
+    runId,
+    mode,
+    pendingCoverageItems: coverageMatrix.summary.pending,
+  });
+  await appendProgress(ws, [
+    `Initialized OpenPrd discovery run ${runId}.`,
+    `Mode: ${mode}.`,
+    `Pending coverage items: ${coverageMatrix.summary.pending}.`,
+  ]);
+
+  return {
+    ok: true,
+    resumed: false,
+    ws,
+    runId,
+    runDir,
+    discoveryRoot,
+    control,
+    inventory,
+    coverageMatrix,
+    claims,
+    openQuestionsPath: cjoin(runDir, 'open-questions.md'),
+  };
+}
+
+async function loadOpenSpecDiscoveryRun(projectRoot) {
+  let discoveryRoot = openPrdDiscoveryDir(projectRoot);
+  if (!(await exists(cjoin(discoveryRoot, 'current.json')))) {
+    const legacyRoot = legacyOpenSpecDiscoveryDir(projectRoot);
+    if (await exists(cjoin(legacyRoot, 'current.json'))) {
+      discoveryRoot = legacyRoot;
+    }
+  }
+  const currentPath = cjoin(discoveryRoot, 'current.json');
+  if (!(await exists(currentPath))) {
+    throw new Error(`Missing OpenPrd discovery state: ${currentPath}`);
+  }
+
+  const current = await readJson(currentPath);
+  const runDir = current.activeRunDir;
+  const control = await readJson(cjoin(runDir, 'control.json'));
+  const inventory = await readJson(cjoin(runDir, 'source-inventory.json'));
+  const coverageMatrix = await readJson(cjoin(runDir, 'coverage-matrix.json'));
+  const claims = await readJsonl(cjoin(runDir, 'claims.jsonl')).catch(() => []);
+
+  return {
+    current,
+    runId: current.activeRunId,
+    runDir,
+    discoveryRoot,
+    control,
+    inventory,
+    coverageMatrix,
+    claims,
+    openQuestionsPath: cjoin(runDir, 'open-questions.md'),
+  };
+}
+
+async function resumeOpenSpecDiscoveryWorkspace(projectRoot) {
+  const state = await loadOpenSpecDiscoveryRun(projectRoot);
+
+  return {
+    ok: true,
+    resumed: true,
+    runId: state.runId,
+    runDir: state.runDir,
+    discoveryRoot: state.discoveryRoot,
+    control: state.control,
+    inventory: state.inventory,
+    coverageMatrix: state.coverageMatrix,
+    claims: state.claims,
+    openQuestionsPath: state.openQuestionsPath,
+  };
+}
+
+async function advanceOpenSpecDiscoveryWorkspace(projectRoot, options = {}) {
+  const state = await loadOpenSpecDiscoveryRun(projectRoot);
+  const coverageMatrix = state.coverageMatrix;
+  const items = Array.isArray(coverageMatrix.items) ? coverageMatrix.items : [];
+  const nextPending = coverageMatrix.nextPendingItem ?? items.find((item) => item.status === 'pending');
+  const itemId = options.item ?? nextPending?.id;
+  if (!itemId) {
+    throw new Error('No pending OpenPrd discovery coverage item to advance.');
+  }
+
+  const itemIndex = items.findIndex((item) => item.id === itemId);
+  if (itemIndex < 0) {
+    throw new Error(`Unknown OpenPrd discovery coverage item: ${itemId}`);
+  }
+
+  const status = normalizeCoverageStatus(options.status);
+  const claimSummary = options.claim ?? null;
+  const notes = options.notes ?? null;
+  if (status === 'covered' && !claimSummary && !notes) {
+    throw new Error('Covering an OpenPrd discovery item requires --claim or --notes.');
+  }
+  if (status === 'blocked' && !notes && !claimSummary) {
+    throw new Error('Blocking an OpenPrd discovery item requires --notes or --claim.');
+  }
+
+  const now = timestamp();
+  const item = {
+    ...items[itemIndex],
+    status,
+    updatedAt: now,
+  };
+  if (notes) {
+    item.notes = notes;
+  }
+  if (options.evidence) {
+    item.evidence = [...new Set([...(item.evidence ?? []), options.evidence])];
+  }
+
+  let claim = null;
+  if (claimSummary) {
+    const nextIteration = Number(state.control.iteration ?? 0) + 1;
+    claim = {
+      id: `claim:${slugify(item.id)}:${nextIteration}`,
+      status: 'active',
+      source: options.source ?? (options.evidence ? 'project-derived' : 'agent-inferred'),
+      confidence: normalizeClaimConfidence(options.confidence),
+      coverageItemId: item.id,
+      summary: claimSummary,
+      evidence: options.evidence ? [options.evidence] : [],
+      notes,
+      createdAt: now,
+    };
+    item.claimIds = [...new Set([...(item.claimIds ?? []), claim.id])];
+    await appendJsonl(cjoin(state.runDir, 'claims.jsonl'), claim);
+  }
+
+  items[itemIndex] = item;
+  const updatedCoverageMatrix = refreshCoverageMatrix({
+    ...coverageMatrix,
+    items,
+  });
+  const nextIteration = Number(state.control.iteration ?? 0) + 1;
+  const updatedControl = {
+    ...state.control,
+    iteration: nextIteration,
+    updatedAt: now,
+    status: updatedCoverageMatrix.summary.pending > 0 ? 'active' : 'ready_for_review',
+    nextAction: updatedCoverageMatrix.nextPendingItem
+      ? `Investigate ${updatedCoverageMatrix.nextPendingItem.title}`
+      : 'Review OpenPrd completeness',
+  };
+  const iterationEntry = {
+    iteration: nextIteration,
+    at: now,
+    action: 'advance',
+    coverageItemId: item.id,
+    status,
+    claimId: claim?.id ?? null,
+    evidence: options.evidence ?? null,
+    notes,
+    pendingCoverageItems: updatedCoverageMatrix.summary.pending,
+  };
+
+  await writeJson(cjoin(state.runDir, 'coverage-matrix.json'), updatedCoverageMatrix);
+  await writeJson(cjoin(state.runDir, 'control.json'), updatedControl);
+  await appendJsonl(cjoin(state.runDir, 'iterations.jsonl'), iterationEntry);
+
+  return {
+    ok: true,
+    advanced: true,
+    runId: state.runId,
+    runDir: state.runDir,
+    discoveryRoot: state.discoveryRoot,
+    control: updatedControl,
+    inventory: state.inventory,
+    coverageMatrix: updatedCoverageMatrix,
+    claims: claim ? [...state.claims, claim] : state.claims,
+    advancedItem: item,
+    claim,
+    openQuestionsPath: state.openQuestionsPath,
+  };
+}
+
+function verifyOpenSpecDiscoveryState(state) {
+  const errors = [];
+  const warnings = [];
+  const checks = [];
+  const items = Array.isArray(state.coverageMatrix.items) ? state.coverageMatrix.items : [];
+
+  if (!state.control.runId) {
+    errors.push('control.json is missing runId.');
+  }
+  if (!OPENSPEC_DISCOVERY_MODES.includes(state.control.mode)) {
+    errors.push(`control.json has unsupported mode: ${state.control.mode}`);
+  }
+  if (!Number.isInteger(Number(state.control.iteration)) || Number(state.control.iteration) < 1) {
+    errors.push('control.json has invalid iteration.');
+  }
+  if (!Number.isInteger(Number(state.control.maxIterations)) || Number(state.control.maxIterations) < 1) {
+    errors.push('control.json has invalid maxIterations.');
+  }
+  if (Number(state.control.iteration) > Number(state.control.maxIterations)) {
+    warnings.push('OpenPrd discovery iteration budget has been reached.');
+  }
+
+  if (!Array.isArray(state.coverageMatrix.items)) {
+    errors.push('coverage-matrix.json is missing items.');
+  }
+
+  for (const item of items) {
+    if (!item.id) {
+      errors.push('coverage item is missing id.');
+    }
+    if (!OPENSPEC_DISCOVERY_COVERAGE_STATUSES.includes(item.status)) {
+      errors.push(`coverage item ${item.id ?? '<unknown>'} has unsupported status: ${item.status}`);
+    }
+    if (item.status === 'covered' && (!Array.isArray(item.claimIds) || item.claimIds.length === 0) && !item.notes) {
+      warnings.push(`covered item ${item.id} has no claimIds or notes.`);
+    }
+  }
+
+  const recomputed = summarizeCoverageItems(items);
+  const storedSummary = state.coverageMatrix.summary ?? {};
+  for (const key of ['total', 'pending', 'covered', 'blocked']) {
+    if (Number(storedSummary[key] ?? 0) !== recomputed.summary[key]) {
+      errors.push(`coverage summary mismatch for ${key}: expected ${recomputed.summary[key]}, found ${storedSummary[key]}`);
+    }
+  }
+
+  for (const claim of state.claims) {
+    if (!claim.id) {
+      errors.push('claim is missing id.');
+    }
+    if (!claim.summary) {
+      errors.push(`claim ${claim.id ?? '<unknown>'} is missing summary.`);
+    }
+    if (!claim.source) {
+      warnings.push(`claim ${claim.id ?? '<unknown>'} is missing source.`);
+    }
+    if (claim.source !== 'user-confirmed' && claim.source !== 'openprd-snapshot' && (!Array.isArray(claim.evidence) || claim.evidence.length === 0)) {
+      warnings.push(`claim ${claim.id ?? '<unknown>'} has no evidence path.`);
+    }
+  }
+
+  checks.push(`Coverage: ${recomputed.summary.covered}/${recomputed.summary.total} covered, ${recomputed.summary.pending} pending, ${recomputed.summary.blocked} blocked.`);
+  checks.push(`Claims: ${state.claims.length}.`);
+
+  return {
+    valid: errors.length === 0,
+    complete: recomputed.summary.pending === 0,
+    errors,
+    warnings,
+    checks,
+    coverage: recomputed.summary,
+    nextPendingItem: recomputed.nextPendingItem,
+  };
+}
+
+async function verifyOpenSpecDiscoveryWorkspace(projectRoot) {
+  const state = await loadOpenSpecDiscoveryRun(projectRoot);
+  const verification = verifyOpenSpecDiscoveryState(state);
+  const discoveryConfig = await readDiscoveryConfig(projectRoot, readJson);
+  let openSpecChange = null;
+  let taskVolume = null;
+  let standards = null;
+  if (discoveryConfig?.activeChange) {
+    openSpecChange = await validateOpenSpecChangeWorkspace(projectRoot, { change: discoveryConfig.activeChange });
+    taskVolume = openSpecChange.taskVolume;
+    standards = openSpecChange.standards ?? null;
+    verification.errors.push(...openSpecChange.errors);
+    verification.warnings.push(...openSpecChange.warnings);
+    verification.checks.push(...openSpecChange.checks);
+  } else {
+    taskVolume = await analyzeOpenSpecTaskVolumes(projectRoot);
+    verification.errors.push(...taskVolume.errors);
+    verification.checks.push(...taskVolume.checks);
+    standards = await checkStandardsWorkspace(projectRoot, { optional: !(await exists(cjoin(projectRoot, '.openprd'))) });
+    if (!standards.skipped) {
+      verification.errors.push(...standards.errors);
+      verification.warnings.push(...standards.warnings);
+      verification.checks.push(...standards.checks);
+    }
+  }
+  verification.valid = verification.errors.length === 0;
+  const now = timestamp();
+  const updatedControl = {
+    ...state.control,
+    status: verification.complete && verification.valid ? 'ready_for_review' : state.control.status,
+    lastVerifiedAt: now,
+    updatedAt: now,
+  };
+  await writeJson(cjoin(state.runDir, 'control.json'), updatedControl);
+  await appendJsonl(cjoin(state.runDir, 'iterations.jsonl'), {
+    iteration: state.control.iteration,
+    at: now,
+    action: 'verify',
+    valid: verification.valid,
+    complete: verification.complete,
+    errors: verification.errors.length,
+    warnings: verification.warnings.length,
+  });
+
+  return {
+    ok: verification.valid,
+    verified: true,
+    runId: state.runId,
+    runDir: state.runDir,
+    discoveryRoot: state.discoveryRoot,
+    control: updatedControl,
+    inventory: state.inventory,
+    coverageMatrix: state.coverageMatrix,
+    claims: state.claims,
+    verification,
+    openSpecChange,
+    taskVolume,
+    standards,
+    openQuestionsPath: state.openQuestionsPath,
+  };
+}
+
 function parseCommandArgs(argv) {
   const args = [...argv];
-  const flags = { json: false, force: false, open: false, append: false, mark: null, type: 'architecture', input: null, field: null, value: null, jsonFile: null, source: null, templatePack: null, target: 'openspec', path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null };
+  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, dryRun: false, updateOpenprd: false, setupMissing: false, doctor: false, context: false, recordHook: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, source: null, reference: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', templatePack: null, target: 'openprd', path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, event: null, risk: null, outcome: null, preview: null, learn: null };
   const positionals = [];
 
   while (args.length > 0) {
@@ -2197,6 +4039,82 @@ function parseCommandArgs(argv) {
       flags.append = true;
       continue;
     }
+    if (arg === '--init') {
+      flags.init = true;
+      continue;
+    }
+    if (arg === '--check') {
+      flags.check = true;
+      continue;
+    }
+    if (arg === '--resume') {
+      flags.resume = true;
+      continue;
+    }
+    if (arg === '--advance') {
+      flags.advance = true;
+      continue;
+    }
+    if (arg === '--verify') {
+      flags.verify = true;
+      continue;
+    }
+    if (arg === '--generate') {
+      flags.generate = true;
+      continue;
+    }
+    if (arg === '--validate') {
+      flags.validate = true;
+      continue;
+    }
+    if (arg === '--apply') {
+      flags.apply = true;
+      continue;
+    }
+    if (arg === '--archive') {
+      flags.archive = true;
+      continue;
+    }
+    if (arg === '--activate') {
+      flags.activate = true;
+      continue;
+    }
+    if (arg === '--close') {
+      flags.close = true;
+      continue;
+    }
+    if (arg === '--keep') {
+      flags.keep = true;
+      continue;
+    }
+    if (arg === '--dry-run') {
+      flags.dryRun = true;
+      continue;
+    }
+    if (arg === '--update-openprd') {
+      flags.updateOpenprd = true;
+      continue;
+    }
+    if (arg === '--setup-missing') {
+      flags.setupMissing = true;
+      continue;
+    }
+    if (arg === '--doctor') {
+      flags.doctor = true;
+      continue;
+    }
+    if (arg === '--context') {
+      flags.context = true;
+      continue;
+    }
+    if (arg === '--record-hook') {
+      flags.recordHook = true;
+      continue;
+    }
+    if (arg === '--next') {
+      flags.next = true;
+      continue;
+    }
     if (arg === '--mark') {
       flags.mark = args.shift() ?? null;
       continue;
@@ -2205,12 +4123,20 @@ function parseCommandArgs(argv) {
       flags.templatePack = args.shift() ?? null;
       continue;
     }
+    if (arg === '--tools') {
+      flags.tools = args.shift() ?? 'all';
+      continue;
+    }
     if (arg === '--product-type' || arg === '-P') {
       flags.productType = args.shift() ?? null;
       continue;
     }
     if (arg === '--type') {
       flags.type = args.shift() ?? 'architecture';
+      continue;
+    }
+    if (arg === '--mode') {
+      flags.mode = args.shift() ?? 'auto';
       continue;
     }
     if (arg === '--input') {
@@ -2233,6 +4159,58 @@ function parseCommandArgs(argv) {
       flags.source = args.shift() ?? null;
       continue;
     }
+    if (arg === '--reference') {
+      flags.reference = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--max-iterations') {
+      flags.maxIterations = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--max-depth') {
+      flags.maxDepth = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--include') {
+      flags.include = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--exclude') {
+      flags.exclude = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--report') {
+      flags.report = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--item') {
+      flags.item = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--id') {
+      flags.id = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--status') {
+      flags.status = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--claim') {
+      flags.claim = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--notes') {
+      flags.notes = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--confidence') {
+      flags.confidence = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--change') {
+      flags.change = args.shift() ?? null;
+      continue;
+    }
     if (arg === '--title') {
       flags.title = args.shift() ?? null;
       continue;
@@ -2253,6 +4231,26 @@ function parseCommandArgs(argv) {
       flags.evidence = args.shift() ?? null;
       continue;
     }
+    if (arg === '--event') {
+      flags.event = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--risk') {
+      flags.risk = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--outcome') {
+      flags.outcome = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--preview') {
+      flags.preview = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--learn') {
+      flags.learn = args.shift() ?? null;
+      continue;
+    }
     if (arg === '--from') {
       flags.from = args.shift() ?? null;
       continue;
@@ -2262,7 +4260,7 @@ function parseCommandArgs(argv) {
       continue;
     }
     if (arg === '--target') {
-      flags.target = args.shift() ?? 'openspec';
+      flags.target = args.shift() ?? 'openprd';
       continue;
     }
     if (arg === '--path' || arg === '-p') {
@@ -2280,7 +4278,36 @@ function parseCommandArgs(argv) {
 }
 
 function usage() {
-  return `OpenPrd CLI\n\nUsage:\n  openprd init [path] [--template-pack <base|consumer|b2b|agent>] [--force]\n  openprd classify [path] <consumer|b2b|agent>\n  openprd clarify [path] [--json]\n  openprd capture [path] (--field <section.path> --value <text|json> | --json-file <answers.json>) [--source <user-confirmed|project-derived|agent-inferred>] [--append] [--json]\n  openprd interview [path] [--product-type <consumer|b2b|agent>]\n  openprd synthesize [path] [--title <text>] [--owner <text>] [--problem <text>] [--why-now <text>]\n  openprd diagram [path] [--type <architecture|product-flow>] [--input <contract.json>] [--mark <pending-confirmation|confirmed|needs-revision>] [--open] [--json]\n  openprd diff [path] [--from <version>] [--to <version>]\n  openprd history [path]\n  openprd validate [path] [--json]\n  openprd status [path] [--json]\n  openprd freeze [path] [--json]\n  openprd handoff [path] [--target openspec] [--json]\n`;
+  return [
+    'OpenPrd CLI',
+    '',
+    'Usage:',
+    '  openprd init [path] [--template-pack <base|consumer|b2b|agent>] [--tools <all|codex,claude,cursor>] [--force]',
+    '  openprd setup [path] [--tools <all|codex,claude,cursor>] [--force] [--json]',
+    '  openprd update [path] [--tools <all|codex,claude,cursor>] [--force] [--json]',
+    '  openprd doctor [path] [--tools <all|codex,claude,cursor>] [--json]',
+    '  openprd fleet <root> [--dry-run|--doctor|--update-openprd|--setup-missing] [--max-depth <n>] [--include <csv>] [--exclude <csv>] [--report <file>] [--json]',
+    '  openprd run [path] [--context|--verify|--record-hook --event <name> --risk <level> --outcome <text> --preview <text>] [--json]',
+    '  openprd classify [path] <consumer|b2b|agent>',
+    '  openprd clarify [path] [--json]',
+    '  openprd capture [path] (--field <section.path> --value <text|json> | --json-file <answers.json>) [--source <user-confirmed|project-derived|agent-inferred>] [--append] [--json]',
+    '  openprd interview [path] [--product-type <consumer|b2b|agent>]',
+    '  openprd synthesize [path] [--title <text>] [--owner <text>] [--problem <text>] [--why-now <text>]',
+    '  openprd diagram [path] [--type <architecture|product-flow>] [--input <contract.json>] [--mark <pending-confirmation|confirmed|needs-revision>] [--open] [--json]',
+    '  openprd diff [path] [--from <version>] [--to <version>]',
+    '  openprd history [path]',
+    '  openprd validate [path] [--json]',
+    '  openprd status [path] [--json]',
+    '  openprd freeze [path] [--json]',
+    '  openprd handoff [path] [--target openprd] [--json]',
+    '  openprd standards [path] [--init] [--check|--verify] [--force] [--json]',
+    '  openprd change [path] (--generate|--validate|--apply|--archive|--activate|--close) [--change <id>] [--force] [--keep] [--json]',
+    '  openprd changes [path] [--json]',
+    '  openprd specs [path] [--json]',
+    '  openprd tasks [path] [--next] [--advance] [--verify] [--item <task-id>] [--change <id>] [--evidence <path>] [--notes <text>] [--json]',
+    '  openprd discovery [path] [--mode <auto|brownfield|reference|requirement>] [--reference <path>] [--max-iterations <n>] [--resume] [--advance] [--verify] [--item <id>] [--status <covered|blocked|pending>] [--claim <text>] [--evidence <path>] [--notes <text>] [--confidence <0..1>] [--json]',
+    '',
+  ].join('\n');
 }
 
 function printValidation(report, json) {
@@ -2338,35 +4365,35 @@ function printStatus(ws, report, guidance, json) {
     return;
   }
 
-  console.log(`Workspace: ${summary.workspaceRoot}`);
+  console.log(`工作区: ${summary.workspaceRoot}`);
   console.log(`Schema: ${summary.schema}`);
-  console.log(`Template pack: ${summary.templatePack}`);
-  console.log(`Product types: ${summary.productTypes.join(', ')}`);
-  console.log(`PRD version: ${summary.prdVersion}`);
-  console.log(`Latest version: ${summary.latestVersionId ?? 'none'}`);
-  console.log(`Version count: ${summary.versionCount}`);
-  console.log(`State: ${summary.activeEngagementStatus}`);
+  console.log(`模板包: ${summary.templatePack}`);
+  console.log(`产品类型: ${summary.productTypes.join(', ')}`);
+  console.log(`PRD 版本: ${summary.prdVersion}`);
+  console.log(`最新版本: ${summary.latestVersionId ?? '无'}`);
+  console.log(`版本数量: ${summary.versionCount}`);
+  console.log(`状态: ${summary.activeEngagementStatus}`);
   if (summary.scenario) {
-    console.log(`Scenario: ${summary.scenario}`);
+    console.log(`场景: ${summary.scenario}`);
   }
   if (summary.userParticipationMode) {
-    console.log(`User participation mode: ${summary.userParticipationMode}`);
+    console.log(`用户参与模式: ${summary.userParticipationMode}`);
   }
   if (summary.currentGate) {
-    console.log(`Current gate: ${summary.currentGate}`);
+    console.log(`当前门禁: ${summary.currentGate}`);
   }
   if (summary.upcomingGate) {
-    console.log(`Upcoming gate: ${summary.upcomingGate}`);
+    console.log(`后续门禁: ${summary.upcomingGate}`);
   }
-  console.log(`Validation: ${summary.valid ? 'passed' : 'failed'}`);
+  console.log(`验证: ${summary.valid ? '通过' : '失败'}`);
   if (summary.errors.length > 0) {
-    console.log('Errors:');
+    console.log('错误:');
     for (const error of summary.errors) {
       console.log(`- ${error}`);
     }
   }
   if (summary.warnings.length > 0) {
-    console.log('Warnings:');
+    console.log('警告:');
     for (const warning of summary.warnings) {
       console.log(`- ${warning}`);
     }
@@ -2379,8 +4406,8 @@ function printClassifyResult(result, json) {
     return;
   }
 
-  console.log(`Classified product type: ${result.currentState.productType}`);
-  console.log(`Template pack: ${result.currentState.templatePack}`);
+  console.log(`已分类产品类型: ${result.currentState.productType}`);
+  console.log(`模板包: ${result.currentState.templatePack}`);
 }
 
 function printClarifyResult(result, json) {
@@ -2389,16 +4416,16 @@ function printClarifyResult(result, json) {
     return;
   }
 
-  console.log(`Clarification needed for ${result.ws.workspaceRoot}`);
-  console.log(`Scenario: ${result.clarification.scenario.label}`);
-  console.log(`User participation: ${result.clarification.scenario.userParticipation}`);
-  console.log(`Missing required fields: ${result.clarification.missingRequiredFields}`);
-  console.log('Ask the user:');
+  console.log(`需要澄清: ${result.ws.workspaceRoot}`);
+  console.log(`场景: ${result.clarification.scenario.label}`);
+  console.log(`用户参与: ${result.clarification.scenario.userParticipation}`);
+  console.log(`缺少必填字段: ${result.clarification.missingRequiredFields}`);
+  console.log('需要询问用户:');
   for (const item of result.clarification.mustAskUser) {
     console.log(`- ${item.prompt}`);
   }
   if (result.clarification.canInferLater.length > 0) {
-    console.log('Can infer or refine later:');
+    console.log('之后可以推断或细化:');
     for (const item of result.clarification.canInferLater.slice(0, 5)) {
       console.log(`- ${item.prompt}`);
     }
@@ -2412,17 +4439,17 @@ function printCaptureResult(result, json) {
   }
 
   if (result.applied?.length > 1) {
-    console.log(`Captured ${result.applied.length} fields`);
+    console.log(`已捕获 ${result.applied.length} 个字段`);
     for (const item of result.applied) {
       console.log(`- ${item.field} (${item.source}): ${JSON.stringify(item.value)}`);
     }
   } else {
-    console.log(`Captured ${result.field}`);
-    console.log(`State key: ${result.stateKey}`);
-    console.log(`Source: ${result.source}`);
-    console.log(`Value: ${JSON.stringify(result.value)}`);
+    console.log(`已捕获 ${result.field}`);
+    console.log(`状态 key: ${result.stateKey}`);
+    console.log(`来源: ${result.source}`);
+    console.log(`值: ${JSON.stringify(result.value)}`);
   }
-  console.log(`Missing required fields remaining: ${result.analysis.missingRequiredFields}`);
+  console.log(`剩余缺失必填字段: ${result.analysis.missingRequiredFields}`);
 }
 
 function printInterviewResult(result, json) {
@@ -2431,8 +4458,8 @@ function printInterviewResult(result, json) {
     return;
   }
 
-  console.log(`Interview mode: ${result.productType ?? 'unclassified'}`);
-  console.log(`Source files: ${result.sourceFiles.join(', ')}`);
+  console.log(`访谈模式: ${result.productType ?? '未分类'}`);
+  console.log(`来源文件: ${result.sourceFiles.join(', ')}`);
   console.log(result.transcript);
 }
 
@@ -2443,9 +4470,9 @@ function printSynthesizeResult(result, json) {
     return;
   }
 
-  console.log(`Synthesized PRD version ${result.snapshot.versionId}`);
-  console.log(`Title: ${result.snapshot.title}`);
-  console.log(`Product type: ${result.snapshot.productType ?? 'unclassified'}`);
+  console.log(`已合成 PRD 版本 ${result.snapshot.versionId}`);
+  console.log(`标题: ${result.snapshot.title}`);
+  console.log(`产品类型: ${result.snapshot.productType ?? '未分类'}`);
   console.log(`Digest: ${result.snapshot.digest}`);
 }
 
@@ -2455,9 +4482,9 @@ function printHistoryResult(result, json) {
     return;
   }
 
-  console.log(`Version history for ${result.ws.workspaceRoot}`);
+  console.log(`版本历史: ${result.ws.workspaceRoot}`);
   for (const entry of result.versions) {
-    console.log(`- ${entry.versionId} | ${entry.title} | ${entry.productType ?? 'unclassified'} | ${entry.createdAt}`);
+    console.log(`- ${entry.versionId} | ${entry.title} | ${entry.productType ?? '未分类'} | ${entry.createdAt}`);
   }
 }
 
@@ -2468,7 +4495,7 @@ function printDiffResult(result, json) {
   }
 
   console.log(`Diff ${result.diff.fromVersionId} -> ${result.diff.toVersionId}`);
-  console.log(`Changed sections: ${result.diff.changedSections.length > 0 ? result.diff.changedSections.join(', ') : 'none'}`);
+  console.log(`变更章节: ${result.diff.changedSections.length > 0 ? result.diff.changedSections.join(', ') : '无'}`);
   for (const change of result.diff.changes) {
     console.log(`- ${change.path}: ${JSON.stringify(change.before)} -> ${JSON.stringify(change.after)}`);
   }
@@ -2482,27 +4509,27 @@ function printNextResult(result, json) {
   }
 
   const { recommendation, analysis, workflow, taskGraph } = result;
-  console.log(`Next action: ${recommendation.nextAction}`);
+  console.log(`下一步动作: ${recommendation.nextAction}`);
   if (recommendation.currentGate) {
-    console.log(`Current gate: ${recommendation.currentGate}`);
+    console.log(`当前门禁: ${recommendation.currentGate}`);
   }
   if (recommendation.upcomingGate) {
-    console.log(`Upcoming gate: ${recommendation.upcomingGate}`);
+    console.log(`后续门禁: ${recommendation.upcomingGate}`);
   }
-  console.log(`Reason: ${recommendation.reason}`);
-  console.log(`Suggested command: ${recommendation.suggestedCommand}`);
-  console.log(`Completion: ${analysis.completedRequiredFields}/${analysis.totalRequiredFields}`);
+  console.log(`原因: ${recommendation.reason}`);
+  console.log(`建议命令: ${recommendation.suggestedCommand}`);
+  console.log(`完成度: ${analysis.completedRequiredFields}/${analysis.totalRequiredFields}`);
   if (taskGraph?.nextReadyNode) {
-    console.log(`Next ready node: ${taskGraph.nextReadyNode}`);
+    console.log(`下一个就绪节点: ${taskGraph.nextReadyNode}`);
   }
   if (result.diagramState?.needed) {
-    console.log(`Diagram gate: ${result.diagramState.shouldGateFreeze ? 'active' : 'satisfied'}`);
-    console.log(`Preferred diagram: ${result.diagramState.preferredType}`);
+    console.log(`图表门禁: ${result.diagramState.shouldGateFreeze ? '激活' : '已满足'}`);
+    console.log(`建议图表: ${result.diagramState.preferredType}`);
   }
-  console.log('Workflow:');
+  console.log('工作流:');
   console.log(`  ${workflow.join(' -> ')}`);
   if (recommendation.suggestedQuestions.length > 0) {
-    console.log('Suggested questions:');
+    console.log('建议问题:');
     for (const question of recommendation.suggestedQuestions) {
       console.log(`- ${question}`);
     }
@@ -2515,9 +4542,194 @@ function printInitResult(result, json) {
     return;
   }
 
-  console.log(`Initialized OpenPrd workspace at ${result.ws.workspaceRoot}`);
-  console.log(`Template pack: ${result.currentState.templatePack}`);
-  console.log(`Seed files copied: ${result.created}`);
+  console.log(`已初始化 OpenPrd 工作区: ${result.ws.workspaceRoot}`);
+  console.log(`模板包: ${result.currentState.templatePack}`);
+  console.log(`已复制种子文件: ${result.created}`);
+  if (result.standards) {
+    console.log(`标准化文档: ${result.standards.docsRoot}`);
+  }
+  if (result.agentIntegration) {
+    console.log(`Agent 引导: ${result.agentIntegration.ok ? '已启用' : '需修复'} (${result.agentIntegration.tools.join(', ')})`);
+  }
+}
+
+function printAgentIntegrationResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`OpenPrd agent ${result.action}: ${result.ok ? '通过' : '需修复'}`);
+  console.log(`项目: ${result.projectRoot}`);
+  console.log(`工具: ${result.tools.join(', ')}`);
+  if (result.initialized) {
+    console.log(`已初始化工作区: ${result.init.workspaceRoot}`);
+  }
+  if (result.standards) {
+    console.log(`标准化文档: ${result.standards.docsRoot}`);
+  }
+  if (result.migration) {
+    const changed = result.migration.changes.filter((change) => change.status !== 'unchanged').length;
+    console.log(`工作区迁移: ${changed} 项`);
+  }
+  console.log('变更:');
+  for (const change of result.changes) {
+    console.log(`- ${change.status}: ${change.path}`);
+  }
+  if (result.doctor?.errors?.length > 0) {
+    console.log('待处理:');
+    for (const error of result.doctor.errors) {
+      console.log(`- ${error}`);
+    }
+  }
+}
+
+function printDoctorResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`OpenPrd doctor: ${result.ok ? '通过' : '失败'}`);
+  console.log(`项目: ${result.projectRoot}`);
+  console.log(`工具: ${result.tools.join(', ')}`);
+  console.log(`标准化: ${result.standards.ok ? '通过' : '失败'}`);
+  console.log(`工作区验证: ${result.validation.valid ? '通过' : '失败'}`);
+  if (result.agentIntegration.drift) {
+    console.log(`生成物漂移: ${result.agentIntegration.drift.ok ? '无' : '存在'}`);
+  }
+  console.log('Agent 集成检查:');
+  for (const check of result.agentIntegration.checks) {
+    console.log(`- ${check.ok ? 'ok' : 'missing'}: ${check.path}`);
+  }
+  if (result.errors.length > 0) {
+    console.log('错误:');
+    for (const error of result.errors) {
+      console.log(`- ${error}`);
+    }
+  }
+}
+
+function printFleetResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  const mode = result.dryRun
+    ? 'dry-run'
+    : Object.entries(result.requestedActions)
+      .filter(([, enabled]) => enabled)
+      .map(([name]) => name)
+      .join(', ');
+  console.log(`OpenPrd fleet: ${result.ok ? '通过' : '需处理'}`);
+  console.log(`根目录: ${result.root}`);
+  console.log(`模式: ${mode || 'report'}`);
+  console.log(`最大深度: ${result.maxDepth}`);
+  console.log(`项目: ${result.summary.total}`);
+  console.log(`- OpenPrd: ${result.summary.openprd}`);
+  console.log(`- Agent-only: ${result.summary.agentConfigured}`);
+  console.log(`- Plain: ${result.summary.plain}`);
+  console.log(`结果: planned ${result.summary.planned}, updated ${result.summary.updated}, setup ${result.summary.setup}, doctored ${result.summary.doctored}, failed ${result.summary.failed}, skipped ${result.summary.skipped}`);
+
+  const visibleProjects = result.projects
+    .filter((project) => project.category !== 'plain-project' || project.status === 'failed')
+    .slice(0, 50);
+  if (visibleProjects.length > 0) {
+    console.log('项目明细:');
+    for (const project of visibleProjects) {
+      console.log(`- ${project.status}: ${project.relativePath} (${project.category}) -> ${project.plannedAction}`);
+      for (const error of project.errors.slice(0, 3)) {
+        console.log(`  error: ${error}`);
+      }
+    }
+  }
+  const hiddenCount = result.projects.length - visibleProjects.length;
+  if (hiddenCount > 0) {
+    console.log(`还有 ${hiddenCount} 个 plain/skipped 项目未展开；使用 --json 查看完整明细。`);
+  }
+  if (result.reportPath) {
+    console.log(`报告: ${result.reportPath}`);
+  }
+}
+
+function printRunResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.action === 'run-record-hook') {
+    console.log(`OpenPrd run hook recorded: ${result.event.eventName} -> ${result.event.outcome}`);
+    console.log(`Iterations: ${result.files.iterations}`);
+    return;
+  }
+
+  if (result.action === 'run-verify') {
+    console.log(`OpenPrd run verify: ${result.ok ? '通过' : '失败'}`);
+    for (const check of result.checks) {
+      console.log(`- ${check.ok ? 'ok' : 'failed'}: ${check.name}`);
+    }
+    if (result.errors.length > 0) {
+      console.log('错误:');
+      for (const error of result.errors) {
+        console.log(`- ${error}`);
+      }
+    }
+    return;
+  }
+
+  console.log('OpenPrd run context');
+  console.log(`项目: ${result.projectRoot}`);
+  console.log(`验证: ${result.validation.valid ? '通过' : '失败'}`);
+  if (result.activeChange) {
+    console.log(`Active change: ${result.activeChange}`);
+  }
+  if (result.taskSummary) {
+    console.log(`任务: ${result.taskSummary.completed}/${result.taskSummary.total} 完成，${result.taskSummary.pending} 待处理，${result.taskSummary.blocked} 阻塞`);
+  }
+  if (result.discovery) {
+    console.log(`Discovery: ${result.discovery.runId} ${result.discovery.summary.covered}/${result.discovery.summary.total} covered, ${result.discovery.summary.pending} pending`);
+  }
+  console.log(`下一步类型: ${result.recommendation.type}`);
+  console.log(`下一步: ${result.recommendation.title}`);
+  console.log(`原因: ${result.recommendation.reason}`);
+  console.log(`建议命令: ${result.recommendation.command}`);
+  console.log(`验证命令: ${result.recommendation.verifyCommand}`);
+  console.log(`状态文件: ${result.files.runState}`);
+}
+
+function printStandardsResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.action === 'init') {
+    console.log(`已初始化 OpenPrd standards: ${result.docsRoot}`);
+    for (const item of result.changed) {
+      console.log(`- ${item.status}: ${item.path}`);
+    }
+    return;
+  }
+
+  console.log(`OpenPrd standards: ${result.ok ? '通过' : '失败'}`);
+  console.log(`Docs root: ${result.docsRoot}`);
+  for (const check of result.checks) {
+    console.log(`- ${check}`);
+  }
+  if (result.errors.length > 0) {
+    console.log('错误:');
+    for (const error of result.errors) {
+      console.log(`- ${error}`);
+    }
+  }
+  if (result.warnings.length > 0) {
+    console.log('警告:');
+    for (const warning of result.warnings) {
+      console.log(`- ${warning}`);
+    }
+  }
 }
 
 function printFreezeResult(result, json) {
@@ -2526,10 +4738,10 @@ function printFreezeResult(result, json) {
     return;
   }
 
-  console.log(`Frozen OpenPrd workspace at ${result.ws.workspaceRoot}`);
-  console.log(`Version: ${result.snapshot.latestVersionId}`);
+  console.log(`已 freeze OpenPrd 工作区: ${result.ws.workspaceRoot}`);
+  console.log(`版本: ${result.snapshot.latestVersionId}`);
   console.log(`Digest: ${result.snapshot.digest}`);
-  console.log(`State file: ${result.ws.paths.freezeState}`);
+  console.log(`状态文件: ${result.ws.paths.freezeState}`);
 }
 
 function printDiagramResult(result, json) {
@@ -2539,22 +4751,22 @@ function printDiagramResult(result, json) {
   }
 
   if (result.snapshot) {
-    console.log(`${result.type === 'product-flow' ? 'Product flow' : 'Architecture'} diagram generated for ${result.snapshot.title}`);
+    console.log(`已为 ${result.snapshot.title} 生成${result.type === 'product-flow' ? '产品流程' : '架构'}图`);
   } else {
-    console.log(`${result.type === 'product-flow' ? 'Product flow' : 'Architecture'} diagram updated`);
+    console.log(`已更新${result.type === 'product-flow' ? '产品流程' : '架构'}图`);
   }
   console.log(`HTML: ${result.htmlPath}`);
   console.log(`JSON: ${result.jsonPath}`);
   console.log(`Mermaid: ${result.mermaidPath}`);
   if (result.inputPath) {
-    console.log(`Input contract: ${result.inputPath}`);
+    console.log(`输入 contract: ${result.inputPath}`);
   }
   if (result.marked) {
-    console.log(`Review status: ${result.marked}`);
+    console.log(`评审状态: ${result.marked}`);
   } else if (result.model?.metadata?.reviewStatus) {
-    console.log(`Review status: ${result.model.metadata.reviewStatus}`);
+    console.log(`评审状态: ${result.model.metadata.reviewStatus}`);
   }
-  console.log(`Opened: ${result.opened ? 'yes' : 'no'}`);
+  console.log(`已打开: ${result.opened ? '是' : '否'}`);
 }
 
 function printHandoffResult(result, json) {
@@ -2563,10 +4775,200 @@ function printHandoffResult(result, json) {
     return;
   }
 
-  console.log(`Handoff bundle written to ${result.exportDir}`);
-  console.log(`Target: ${result.handoff.target}`);
-  console.log(`Version: ${result.handoff.versionId}`);
+  console.log(`交接包已写入: ${result.exportDir}`);
+  console.log(`目标: ${result.handoff.target}`);
+  console.log(`版本: ${result.handoff.versionId}`);
   console.log(`Digest: ${result.handoff.digest}`);
+}
+
+function printOpenSpecDiscoveryResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`OpenPrd discovery 运行: ${result.runId}`);
+  if (result.advanced) {
+    console.log(`已推进条目: ${result.advancedItem.id}`);
+    console.log(`条目状态: ${result.advancedItem.status}`);
+    if (result.claim) {
+      console.log(`Claim: ${result.claim.id}`);
+    }
+  }
+  if (result.verified) {
+    console.log(`验证: ${result.verification.valid ? '通过' : '失败'}`);
+    console.log(`完成: ${result.verification.complete ? '是' : '否'}`);
+    for (const check of result.verification.checks) {
+      console.log(`- ${check}`);
+    }
+    if (result.verification.errors.length > 0) {
+      console.log('错误:');
+      for (const error of result.verification.errors) {
+        console.log(`- ${error}`);
+      }
+    }
+    if (result.verification.warnings.length > 0) {
+      console.log('警告:');
+      for (const warning of result.verification.warnings) {
+        console.log(`- ${warning}`);
+      }
+    }
+  }
+  console.log(`是否恢复: ${result.resumed ? '是' : '否'}`);
+  console.log(`运行目录: ${result.runDir}`);
+  console.log(`模式: ${result.control.mode}`);
+  console.log(`状态: ${result.control.status}`);
+  console.log(`已索引来源文件: ${result.inventory.summary.files}`);
+  console.log(`覆盖待处理: ${result.coverageMatrix.summary.pending}/${result.coverageMatrix.summary.total}`);
+  console.log(`下一步动作: ${result.control.nextAction}`);
+}
+
+function printOpenSpecChangeValidationResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`OpenPrd change 验证: ${result.valid ? '通过' : '失败'}`);
+  console.log(`Change: ${result.changeId}`);
+  for (const check of result.checks) {
+    console.log(`- ${check}`);
+  }
+  if (result.errors.length > 0) {
+    console.log('错误:');
+    for (const error of result.errors) {
+      console.log(`- ${error}`);
+    }
+  }
+  if (result.warnings.length > 0) {
+    console.log('警告:');
+    for (const warning of result.warnings) {
+      console.log(`- ${warning}`);
+    }
+  }
+}
+
+function printOpenSpecGenerateResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`已生成 OpenPrd change: ${result.changeId}`);
+  console.log(`Capability: ${result.capability}`);
+  console.log(`任务数: ${result.taskCount}`);
+  console.log(`验证: ${result.validation.valid ? '通过' : '失败'}`);
+  console.log('文件:');
+  for (const file of result.files) {
+    console.log(`- ${file}`);
+  }
+  if (result.validation.errors.length > 0) {
+    console.log('错误:');
+    for (const error of result.validation.errors) {
+      console.log(`- ${error}`);
+    }
+  }
+}
+
+function printOpenSpecTaskResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`OpenPrd 任务: ${result.changeId}`);
+  if (result.action === 'list') {
+    console.log(`进度: ${result.summary.completed}/${result.summary.total} 已完成，${result.summary.pending} 待处理，${result.summary.blocked} 阻塞`);
+    if (result.nextTask) {
+      console.log(`下一任务: ${result.nextTask.id} ${result.nextTask.title}`);
+      console.log(`验证命令: ${result.nextTask.metadata.verify}`);
+    } else {
+      console.log('下一任务: 无');
+    }
+    if (result.blockedTasks.length > 0) {
+      console.log('阻塞任务:');
+      for (const task of result.blockedTasks.slice(0, 10)) {
+        console.log(`- ${task.id}: ${[...task.missing, ...task.incomplete].join(', ')}`);
+      }
+    }
+    return;
+  }
+
+  console.log(`任务: ${result.task.id} ${result.task.title}`);
+  if (result.verification) {
+    console.log(`验证: ${result.verification.ok ? '通过' : '失败'} (${result.verification.command})`);
+    if (!result.verification.ok && result.verification.stderr) {
+      console.log(result.verification.stderr.trim());
+    }
+  }
+  if (result.action === 'advance') {
+    console.log(`已推进: ${result.advanced ? '是' : '否'}`);
+    if (result.summary) {
+      console.log(`进度: ${result.summary.completed}/${result.summary.total} 已完成`);
+    }
+    if (result.nextTask) {
+      console.log(`下一任务: ${result.nextTask.id} ${result.nextTask.title}`);
+    }
+  }
+}
+
+function printOpenPrdChangesResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`OpenPrd changes: ${result.changes.length}`);
+  console.log(`当前激活 change: ${result.activeChange ?? '无'}`);
+  for (const change of result.changes) {
+    const marker = change.active ? '*' : '-';
+    console.log(`${marker} ${change.id} | ${change.status} | ${change.source} | 任务 ${change.taskTotal - change.taskIncomplete}/${change.taskTotal}`);
+  }
+}
+
+function printOpenPrdChangeActionResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`OpenPrd change ${result.action}: ${result.changeId}`);
+  if (result.action === 'apply') {
+    console.log(`已应用: ${result.ok ? '是' : '否'}`);
+    if (result.appliedSpecs?.length > 0) {
+      console.log('已接受 specs:');
+      for (const spec of result.appliedSpecs) {
+        console.log(`- ${spec.capability}: ${spec.specPath}`);
+      }
+    }
+    if (result.errors?.length > 0) {
+      console.log('错误:');
+      for (const error of result.errors) {
+        console.log(`- ${error}`);
+      }
+    }
+  }
+  if (result.action === 'archive') {
+    console.log(`归档目录: ${result.archiveDir}`);
+    console.log(`已移除来源: ${result.removedSource ? '是' : '否'}`);
+  }
+  if (result.action === 'activate') {
+    console.log(`当前激活 change: ${result.changeId}`);
+  }
+}
+
+function printAcceptedSpecsResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`已接受 specs: ${result.specs.length}`);
+  for (const spec of result.specs) {
+    const source = spec.metadata?.sourceChange ? ` 来自 ${spec.metadata.sourceChange}` : '';
+    console.log(`- ${spec.capability}${source}: ${spec.specPath}`);
+  }
+  console.log(`已应用 changes: ${result.appliedChanges.length}`);
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -2578,13 +4980,90 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   const { flags, positionals } = parseCommandArgs(rest);
+  if (positionals.includes('--help') || positionals.includes('-h')) {
+    console.log(usage());
+    return 0;
+  }
   const projectPath = path.resolve(flags.path ?? positionals[0] ?? process.cwd());
 
   try {
     if (command === 'init') {
-      const result = await initWorkspace(projectPath, { force: flags.force, templatePack: flags.templatePack });
+      const result = await initWorkspace(projectPath, {
+        force: flags.force,
+        templatePack: flags.templatePack,
+        tools: flags.tools,
+        enableUserCodexConfig: true,
+      });
       printInitResult(result, flags.json);
       return 0;
+    }
+
+    if (command === 'setup') {
+      const result = await setupAgentIntegrationWorkspace(projectPath, {
+        force: flags.force,
+        templatePack: flags.templatePack,
+        tools: flags.tools,
+        enableUserCodexConfig: true,
+      });
+      printAgentIntegrationResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'update') {
+      const result = await updateAgentIntegrationWorkspace(projectPath, {
+        force: flags.force,
+        tools: flags.tools,
+        enableUserCodexConfig: true,
+      });
+      printAgentIntegrationResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'doctor') {
+      const result = await doctorWorkspace(projectPath, { tools: flags.tools, enableUserCodexConfig: true });
+      printDoctorResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'fleet') {
+      const result = await fleetWorkspace(projectPath, {
+        tools: flags.tools,
+        force: flags.force,
+        dryRun: flags.dryRun,
+        updateOpenprd: flags.updateOpenprd,
+        setupMissing: flags.setupMissing,
+        doctor: flags.doctor,
+        maxDepth: flags.maxDepth,
+        include: flags.include,
+        exclude: flags.exclude,
+        report: flags.report,
+        enableUserCodexConfig: true,
+      });
+      printFleetResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'run') {
+      const result = await runWorkspace(projectPath, {
+        context: flags.context,
+        verify: flags.verify,
+        recordHook: flags.recordHook,
+        event: flags.event,
+        risk: flags.risk,
+        outcome: flags.outcome,
+        preview: flags.preview,
+        learn: flags.learn,
+      });
+      printRunResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'standards') {
+      const result = flags.init
+        ? await initStandardsWorkspace(projectPath, { force: flags.force })
+        : await checkStandardsWorkspace(projectPath);
+      printStandardsResult(result, flags.json);
+      return result.ok ? 0 : 1;
     }
 
     if (command === 'classify') {
@@ -2693,6 +5172,125 @@ export async function main(argv = process.argv.slice(2)) {
       return 0;
     }
 
+    if (command === 'changes') {
+      const result = await listOpenPrdChangesWorkspace(projectPath);
+      printOpenPrdChangesResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'specs') {
+      const result = await listAcceptedSpecsWorkspace(projectPath);
+      printAcceptedSpecsResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'change') {
+      if (flags.generate) {
+        const result = await generateOpenSpecChangeWorkspace(projectPath, {
+          change: flags.change ?? positionals[1] ?? null,
+          force: flags.force,
+        });
+        printOpenSpecGenerateResult(result, flags.json);
+        return result.ok ? 0 : 1;
+      }
+      if (flags.validate) {
+        const result = await validateOpenSpecChangeWorkspace(projectPath, {
+          change: flags.change ?? positionals[1] ?? null,
+        });
+        printOpenSpecChangeValidationResult(result, flags.json);
+        return result.ok ? 0 : 1;
+      }
+      if (flags.apply) {
+        const result = await applyOpenPrdChangeWorkspace(projectPath, {
+          change: flags.change ?? positionals[1] ?? null,
+          force: flags.force,
+        });
+        printOpenPrdChangeActionResult(result, flags.json);
+        return result.ok ? 0 : 1;
+      }
+      if (flags.archive) {
+        const result = await archiveOpenPrdChangeWorkspace(projectPath, {
+          change: flags.change ?? positionals[1] ?? null,
+          force: flags.force,
+          keep: flags.keep,
+        });
+        printOpenPrdChangeActionResult(result, flags.json);
+        return result.ok ? 0 : 1;
+      }
+      if (flags.activate) {
+        const result = await activateOpenPrdChangeWorkspace(projectPath, {
+          change: flags.change ?? positionals[1] ?? null,
+        });
+        printOpenPrdChangeActionResult(result, flags.json);
+        return result.ok ? 0 : 1;
+      }
+      if (flags.close) {
+        const result = await closeOpenPrdChangeWorkspace(projectPath, {
+          change: flags.change ?? positionals[1] ?? null,
+          notes: flags.notes,
+        });
+        printOpenPrdChangeActionResult(result, flags.json);
+        return result.ok ? 0 : 1;
+      }
+      const result = await listOpenPrdChangesWorkspace(projectPath);
+      printOpenPrdChangesResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'tasks' || command === 'openspec-tasks') {
+      const taskOptions = {
+        change: flags.change ?? null,
+        item: flags.item ?? flags.id ?? positionals[1] ?? null,
+        verify: flags.verify,
+        evidence: flags.evidence,
+        notes: flags.notes,
+      };
+      const result = flags.advance
+        ? await advanceOpenSpecTaskWorkspace(projectPath, taskOptions)
+        : flags.verify
+          ? await verifyOpenSpecTaskWorkspace(projectPath, taskOptions)
+          : await listOpenSpecTaskWorkspace(projectPath, taskOptions);
+      printOpenSpecTaskResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'openspec-generate') {
+      const result = await generateOpenSpecChangeWorkspace(projectPath, {
+        change: flags.change ?? positionals[1] ?? null,
+        force: flags.force,
+      });
+      printOpenSpecGenerateResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'openspec-validate') {
+      const result = await validateOpenSpecChangeWorkspace(projectPath, {
+        change: flags.change ?? positionals[1] ?? null,
+      });
+      printOpenSpecChangeValidationResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'discovery' || command === 'openspec-discovery') {
+      const result = await openspecDiscoveryWorkspace(projectPath, {
+        mode: flags.mode,
+        reference: flags.reference,
+        maxIterations: flags.maxIterations,
+        resume: flags.resume,
+        advance: flags.advance,
+        verify: flags.verify,
+        item: flags.item,
+        status: flags.status,
+        claim: flags.claim,
+        evidence: flags.evidence,
+        notes: flags.notes,
+        confidence: flags.confidence,
+        source: flags.source,
+      });
+      printOpenSpecDiscoveryResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
     console.log(usage());
     return 1;
   } catch (error) {
@@ -2704,6 +5302,11 @@ export async function main(argv = process.argv.slice(2)) {
 export {
   validateWorkspace,
   initWorkspace,
+  setupAgentIntegrationWorkspace,
+  updateAgentIntegrationWorkspace,
+  doctorWorkspace,
+  fleetWorkspace,
+  runWorkspace,
   clarifyWorkspace,
   captureWorkspace,
   synthesizeWorkspace,
@@ -2712,8 +5315,22 @@ export {
   historyWorkspace,
   freezeWorkspace,
   handoffWorkspace,
+  generateOpenSpecChangeWorkspace,
+  validateOpenSpecChangeWorkspace,
+  openspecDiscoveryWorkspace,
+  listOpenSpecTaskWorkspace,
+  advanceOpenSpecTaskWorkspace,
+  verifyOpenSpecTaskWorkspace,
+  listOpenPrdChangesWorkspace,
+  activateOpenPrdChangeWorkspace,
+  closeOpenPrdChangeWorkspace,
+  applyOpenPrdChangeWorkspace,
+  archiveOpenPrdChangeWorkspace,
+  listAcceptedSpecsWorkspace,
   diagramWorkspace,
   classifyWorkspace,
   interviewWorkspace,
   loadWorkspace,
+  initStandardsWorkspace,
+  checkStandardsWorkspace,
 };

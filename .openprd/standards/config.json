@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "docsRoot": "docs/basic",
+  "requiredDocs": [
+    "file-structure.md",
+    "app-flow.md",
+    "prd.md",
+    "frontend-guidelines.md",
+    "backend-structure.md",
+    "tech-stack.md"
+  ],
+  "fileManual": {
+    "enabled": true,
+    "template": "file-manual-template.md",
+    "requiredSections": [
+      "核心功能",
+      "输入",
+      "输出",
+      "定位",
+      "依赖",
+      "维护规则"
+    ],
+    "placement": "file-header"
+  },
+  "folderManual": {
+    "enabled": true,
+    "template": "folder-readme-template.md",
+    "naming": "[module]_[folder]_README.md",
+    "requiredSections": [
+      "核心功能",
+      "输入",
+      "输出",
+      "定位",
+      "依赖",
+      "维护规则"
+    ]
+  },
+  "qualityGates": {
+    "changeValidateRequiresStandards": true,
+    "taskVerifyUsesStandards": true,
+    "discoveryVerifyRequiresStandards": true
+  }
+}

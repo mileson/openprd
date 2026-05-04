@@ -1,57 +1,57 @@
-# PRD Draft
+# PRD 草稿
 
-## Meta
+## 元信息
 
-- Title:
-- Owner:
-- Status:
-- Version:
-- Product Type:
+- 标题:
+- 负责人:
+- 状态:
+- 版本:
+- 产品类型:
 
-## Problem
+## 问题
 
-- Problem statement:
-- Why now:
-- Evidence:
+- 问题陈述:
+- 为什么现在做:
+- 证据:
 
-## Users / Stakeholders
+## 用户与相关方
 
-- Primary users:
-- Secondary users:
-- Stakeholders:
+- 主要用户:
+- 次要用户:
+- 相关方:
 
-## Goals / Success
+## 目标与成功标准
 
-- Goals:
-- Success metrics:
-- Acceptance goals:
+- 目标:
+- 成功指标:
+- 验收目标:
 
-## Scope / Non-goals
+## 范围与非目标
 
-- In scope:
-- Out of scope:
+- 范围内:
+- 范围外:
 
-## Scenarios / Flows
+## 场景与流程
 
-- Primary flows:
-- Edge cases:
-- Failure modes:
+- 主流程:
+- 边界情况:
+- 失败模式:
 
-## Requirements
+## 需求
 
-- Functional requirements:
-- Non-functional requirements:
-- Business rules:
+- 功能需求:
+- 非功能需求:
+- 业务规则:
 
-## Constraints / Dependencies / Risks
+## 约束、依赖与风险
 
-- Technical constraints:
-- Dependencies:
-- Risks:
-- Open questions:
+- 技术约束:
+- 依赖:
+- 风险:
+- 开放问题:
 
-## Type-Specific Block
+## 类型专项模块
 
-- Consumer: persona / journey / activation / retention
-- B2B: roles / as-is / to-be / permission / approval
-- Agent: human-agent contract / autonomy / tools / state / eval
+- Consumer: 用户画像 / 用户旅程 / 激活 / 留存
+- B2B: 角色 / 现状 / 目标 / 权限 / 审批
+- Agent: Human-Agent contract / 自主 / 工具 / 状态 / 评估

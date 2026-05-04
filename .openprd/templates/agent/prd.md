@@ -4,18 +4,18 @@
 
 - `base/prd.md`
 
-## Agent-Specific Fields
+## Agent 专项字段
 
 - Human-Agent contract:
-- Autonomy boundary:
-- Tool boundary:
-- Memory / state model:
-- Fallback path:
-- Eval plan:
+- 自主边界:
+- 工具边界:
+- 状态模型:
+- 兜底路径:
+- 评估计划:
 
-## Agent Notes
+## Agent 备注
 
-- What must remain human-approved?
-- What can the agent execute safely?
-- How is success measured across tasks?
-- How is failure recovered?
+- 哪些事项必须由人确认？
+- Agent 可以安全执行什么？
+- 如何跨任务衡量成功？
+- 失败后如何恢复？

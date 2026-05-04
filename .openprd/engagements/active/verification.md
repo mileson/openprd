@@ -1,3 +1,3 @@
-# Verification
+# 验证
 
-- Seeded OpenPrd verification tracking.
+- 已初始化 OpenPrd 验证跟踪。

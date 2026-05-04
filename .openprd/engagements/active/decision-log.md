@@ -1,3 +1,3 @@
-# Decision Log
+# 决策记录
 
-- Seeded OpenPrd decision tracking.
+- 已初始化 OpenPrd 决策跟踪。

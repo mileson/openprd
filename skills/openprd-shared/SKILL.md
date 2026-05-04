@@ -14,13 +14,15 @@ Use this skill as the shared rulebook for all OpenPrd work. It plays the same ro
 1. Rebuild context from the workspace before acting.
    - Prefer reading `.openprd/state/current.json`, `.openprd/state/task-graph.json`, latest version snapshots, and active engagement files over relying on chat history.
 2. Distinguish read-only commands from mutating commands.
-   - Read-only: `status`, `validate`, `next`, `history`, `diff`, `interview`
-   - Mutating: `init`, `classify`, `synthesize`, `diagram`, `freeze`, `handoff`
+   - Read-only: `status`, `validate`, `next`, `history`, `diff`, `interview`, `doctor`
+   - Mutating: `init`, `setup`, `update`, `classify`, `synthesize`, `diagram`, `freeze`, `handoff`
 3. Never invent OpenPrd commands or artifact types.
    - Confirm against `openprd --help` if unsure.
 4. Keep shared rules here and domain-specific rules in the relevant skill.
    - Workflow sequencing belongs in `$openprd-harness`.
    - Diagram generation and review belongs in `$openprd-diagram-review`.
+   - Project documentation standards belong in `$openprd-standards`.
+   - Agent setup and hook health belong in `$openprd-harness` through `openprd setup/update/doctor`.
 5. Follow the user’s language in all user-facing artifacts.
    - Labels, review notes, summary cards, and instructions should follow the user’s current primary language.
    - Keep proper nouns, product names, protocols, API names, framework names, and cloud product names unchanged when translation would be harmful.
@@ -30,6 +32,11 @@ Use this skill as the shared rulebook for all OpenPrd work. It plays the same ro
    - Do not claim readiness if the workspace still has blocking uncertainty that should be surfaced to the user.
 8. Prefer graph/state reasoning over freeform narration.
    - Use `nextReadyNode`, blockers, active artifacts, and validation status to justify the next step.
+9. Prefer hook-stable run state for execution loops.
+   - Use `openprd run <path> --context` to select the next task, discovery item, or workflow action.
+   - Use `openprd run <path> --verify` before claiming readiness.
+   - Use `.openprd/harness/run-state.json`, `iterations.jsonl`, and `learnings.md` to survive fresh contexts.
+   - Use `.openprd/harness/install-manifest.json`, `hook-state.json`, `events.jsonl`, and `drift-report.json` to reason about generated guidance health.
 9. When critical product facts are missing, ask the user before pushing the workspace forward.
    - If the current mode cannot use a structured ask-user tool, ask directly in plain language.
    - Do not treat “tool unavailable” as permission to silently guess.
@@ -48,3 +55,6 @@ Use this skill as the shared rulebook for all OpenPrd work. It plays the same ro
   - `references/operating-rules.md`
   - `references/language-and-review.md`
   - `references/skill-architecture.md`
+- Need project baseline docs, file manuals, folder README rules, or standards verification? Use `$openprd-standards`.
+- Need generated adapter drift, hooks, or user-level Codex feature checks? Use `$openprd-harness` and `openprd doctor/update`.
+- Need Ralph-style hook-driven execution? Use `$openprd-harness` and `openprd run`.

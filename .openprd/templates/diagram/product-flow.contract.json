@@ -1,74 +1,74 @@
 {
   "type": "product-flow",
-  "locale": "en",
-  "title": "Example Product Flow Review",
-  "subtitle": "Explain the intended user/system sequence for confirmation",
+  "locale": "zh-CN",
+  "title": "示例产品流程评审",
+  "subtitle": "说明预期用户与系统顺序，便于确认",
   "actors": [
-    "User",
-    "System"
+    "用户",
+    "系统"
   ],
   "steps": [
     {
       "id": "step-1",
-      "name": "User enters flow",
+      "name": "用户进入流程",
       "type": "user_action",
-      "lane": "User",
-      "description": "The flow starts here"
+      "lane": "用户",
+      "description": "流程从这里开始"
     },
     {
       "id": "step-2",
-      "name": "System processes request",
+      "name": "系统处理请求",
       "type": "system_process",
-      "lane": "System",
+      "lane": "系统",
       "details": [
-        "Core system response"
+        "核心系统响应"
       ]
     },
     {
       "id": "step-3",
-      "name": "Decision point",
+      "name": "决策点",
       "type": "decision",
-      "lane": "System",
-      "description": "Branch based on outcome"
+      "lane": "系统",
+      "description": "根据结果分支"
     },
     {
       "id": "step-4",
-      "name": "Successful completion",
+      "name": "成功完成",
       "type": "success",
-      "lane": "System",
-      "description": "Happy path outcome"
+      "lane": "系统",
+      "description": "顺利路径结果"
     }
   ],
   "transitions": [
     {
       "from_step_id": "step-1",
       "to_step_id": "step-2",
-      "label": "Start"
+      "label": "开始"
     },
     {
       "from_step_id": "step-2",
       "to_step_id": "step-3",
-      "label": "Continue"
+      "label": "继续"
     },
     {
       "from_step_id": "step-3",
       "to_step_id": "step-4",
-      "label": "Success",
+      "label": "成功",
       "type": "standard"
     }
   ],
   "summaryCards": [
     {
-      "title": "Review Focus",
+      "title": "评审重点",
       "color": "decision",
       "items": [
-        "Confirm the step order",
-        "Confirm missing recovery paths"
+        "确认步骤顺序",
+        "确认缺失的恢复路径"
       ]
     }
   ],
   "reviewInstructions": [
-    "Confirm missing steps, decisions, and error paths."
+    "确认缺失步骤、决策点和错误路径。"
   ],
   "metadata": {
     "reviewStatus": "pending-confirmation"

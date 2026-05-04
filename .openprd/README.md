@@ -16,6 +16,7 @@ classify -> interview -> synthesize -> validate -> freeze -> handoff
 - `schema/diagram-product-flow.schema.yaml` - minimal contract schema for product flow diagrams
 - `templates/` - starter packs and registry
 - `templates/diagram/` - contract templates for diagram artifacts
+- `standards/` - project standards contract and manual templates
 - `engagements/active/` - default active PRD draft, flow, role, and handoff docs
 - `engagements/active/decision-log.md` - durable decision history
 - `engagements/active/open-questions.md` - unresolved questions and discovery gaps
@@ -50,6 +51,22 @@ Rules:
 - `diff` compares version snapshots.
 - `history` lists the version index.
 - Freeze requires validation to pass.
+- `standards` verifies `docs/basic/`, file manual templates, and folder README templates.
+
+## Project Standards
+
+The canonical project baseline docs path is `docs/basic/`.
+
+Required docs:
+
+- `docs/basic/file-structure.md`
+- `docs/basic/app-flow.md`
+- `docs/basic/prd.md`
+- `docs/basic/frontend-guidelines.md`
+- `docs/basic/backend-structure.md`
+- `docs/basic/tech-stack.md`
+
+Use `openprd standards <path> --verify` before reporting a change as ready.
 
 ## Supported Product Types
 

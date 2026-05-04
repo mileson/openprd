@@ -4,16 +4,16 @@
 
 - `base/prd.md`
 
-## Consumer-Specific Fields
+## 消费端专项字段
 
-- Persona:
-- Segment:
-- Journey:
-- Activation metric:
-- Retention metric:
+- 用户画像:
+- 用户分层:
+- 用户旅程:
+- 激活指标:
+- 留存指标:
 
-## Consumer Notes
+## 消费端备注
 
-- What emotional or lifestyle value does this product create?
-- What is the first success moment for the user?
-- What keeps the user coming back?
+- 这个产品创造什么情绪价值或生活方式价值？
+- 用户的第一个成功时刻是什么？
+- 什么会让用户持续回来？

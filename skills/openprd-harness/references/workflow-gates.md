@@ -34,6 +34,14 @@ Freeze is appropriate when:
 - the user has reviewed the latest critical artifact(s)
 - there are no blockers hidden behind assumptions that should be reviewed first
 
+## Standards Gate
+
+Implementation readiness is appropriate when:
+
+- `openprd standards <path> --verify` passes
+- `docs/basic/` reflects the latest product, flow, structure, and tech-stack facts
+- changed files and folders have had their file manuals and folder README docs checked
+
 ## Handoff Gate
 
 Handoff is appropriate when:

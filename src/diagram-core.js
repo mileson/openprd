@@ -9,7 +9,7 @@ function escapeHtml(value) {
 
 function trimText(value, max = 96) {
   const text = `${value ?? ''}`.trim();
-  if (!text) return 'TBD';
+  if (!text) return '待补充';
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }
 
@@ -35,7 +35,7 @@ function mermaidText(value, max = 64) {
 function mermaidNodeLabel(primary, secondary) {
   const title = mermaidText(primary, 34);
   const subtitle = mermaidText(secondary, 64);
-  return subtitle && subtitle !== 'TBD' ? `${title}<br/>${subtitle}` : title;
+  return subtitle && subtitle !== '待补充' ? `${title}<br/>${subtitle}` : title;
 }
 
 function mermaidNodeDeclaration(id, label, type) {
@@ -54,7 +54,7 @@ function mermaidNodeDeclaration(id, label, type) {
 function mermaidEdge(source, target, label, type = 'standard') {
   const cleanLabel = mermaidText(label, 42);
   const arrow = type === 'security' || type === 'error_path' ? '-.->' : '-->';
-  return cleanLabel && cleanLabel !== 'TBD'
+  return cleanLabel && cleanLabel !== '待补充'
     ? `  ${source} ${arrow}|"${cleanLabel}"| ${target}`
     : `  ${source} ${arrow} ${target}`;
 }
@@ -72,7 +72,7 @@ function takeList(value, count, fallback = []) {
   return normalizeList(value, fallback).slice(0, count);
 }
 
-function joinList(value, fallback = 'TBD', separator = ' · ') {
+function joinList(value, fallback = '待补充', separator = ' · ') {
   const items = normalizeList(value);
   return items.length > 0 ? items.join(separator) : fallback;
 }
@@ -101,24 +101,24 @@ function theme(type) {
   return themes[type] ?? themes.external;
 }
 
-function normalizeCard(card, fallbackTitle = 'Summary', fallbackColor = 'external') {
+function normalizeCard(card, fallbackTitle = '摘要', fallbackColor = 'external') {
   return {
     title: pickValue(card?.title, fallbackTitle),
     color: pickValue(card?.color, fallbackColor),
-    items: normalizeList(card?.items, ['TBD']),
+    items: normalizeList(card?.items, ['待补充']),
   };
 }
 
-function normalizePanel(panel, fallbackTitle = 'Review Notes', fallbackColor = 'external') {
+function normalizePanel(panel, fallbackTitle = '评审备注', fallbackColor = 'external') {
   return {
     title: pickValue(panel?.title, fallbackTitle),
     color: pickValue(panel?.color, fallbackColor),
-    items: normalizeList(panel?.items, ['TBD']),
+    items: normalizeList(panel?.items, ['待补充']),
   };
 }
 
 function normalizeLocale(contract) {
-  return pickValue(contract?.locale, contract?.lang ?? 'en');
+  return pickValue(contract?.locale, contract?.lang ?? 'zh-CN');
 }
 
 function normalizeReviewStatus(value) {
@@ -137,7 +137,7 @@ function hasValue(value) {
   return true;
 }
 
-function renderShell({ lang = 'en', title, subtitle, projectName, svgMarkup, summaryCards, sidePanels, footer }) {
+function renderShell({ lang = 'zh-CN', title, subtitle, projectName, svgMarkup, summaryCards, sidePanels, footer }) {
   const cards = summaryCards.map((card) => {
     const cardTheme = theme(card.color);
     const items = (card.items ?? []).map((item) => `<li>${escapeHtml(trimText(item, 132))}</li>`).join('');
@@ -284,10 +284,10 @@ function renderArrow(def) {
 }
 
 function resolveProductLayerTitle(productType) {
-  if (productType === 'consumer') return 'Consumer Experience Layer';
-  if (productType === 'b2b') return 'Business Workflow Layer';
-  if (productType === 'agent') return 'Agent Runtime Layer';
-  return 'Product Experience Layer';
+  if (productType === 'consumer') return '消费端体验层';
+  if (productType === 'b2b') return 'B2B 工作流层';
+  if (productType === 'agent') return 'Agent 运行层';
+  return '产品体验层';
 }
 
 function buildArchitectureComponents(snapshot) {
@@ -296,37 +296,37 @@ function buildArchitectureComponents(snapshot) {
   return [
     {
       id: 'users',
-      name: 'Primary Users',
+      name: '主要用户',
       type: 'external',
-      subtitle: joinList(sections.users.primaryUsers, 'Users'),
-      details: takeList(sections.users.stakeholders, 3, ['Stakeholders need confirmation']),
+      subtitle: joinList(sections.users.primaryUsers, '用户'),
+      details: takeList(sections.users.stakeholders, 3, ['相关方需要确认']),
     },
     {
       id: 'experience',
       name: resolveProductLayerTitle(snapshot.productType),
       type: 'frontend',
       subtitle: trimText(joinList(sections.scenarios.primaryFlows, sections.meta.title)),
-      details: takeList(sections.scope.inScope, 3, ['Scope still needs refinement']),
+      details: takeList(sections.scope.inScope, 3, ['范围仍需细化']),
     },
     {
       id: 'core',
-      name: 'Core Product Logic',
+      name: '核心产品逻辑',
       type: 'backend',
-      subtitle: trimText(sections.problem.problemStatement ?? 'Core logic to be clarified'),
-      details: takeList(sections.requirements.functional, 3, ['Functional requirements TBD']),
+      subtitle: trimText(sections.problem.problemStatement ?? '核心逻辑待澄清'),
+      details: takeList(sections.requirements.functional, 3, ['功能需求待补充']),
     },
     {
       id: 'integrations',
-      name: 'Dependencies & Integrations',
+      name: '依赖与集成',
       type: 'cloud',
-      subtitle: trimText(joinList(sections.constraints.dependencies, 'No external dependencies recorded')),
-      details: takeList(sections.constraints.dependencies, 4, ['Dependencies not confirmed']),
+      subtitle: trimText(joinList(sections.constraints.dependencies, '暂无外部依赖记录')),
+      details: takeList(sections.constraints.dependencies, 4, ['依赖尚未确认']),
     },
     {
       id: 'governance',
-      name: 'Guardrails & Reliability',
+      name: '约束与可靠性',
       type: 'security',
-      subtitle: trimText(joinList(sections.constraints.compliance, joinList(sections.requirements.nonFunctional, 'No explicit guardrails yet'))),
+      subtitle: trimText(joinList(sections.constraints.compliance, joinList(sections.requirements.nonFunctional, '暂无明确约束'))),
       details: [
         ...takeList(sections.constraints.compliance, 2),
         ...takeList(sections.requirements.nonFunctional, 2),
@@ -334,12 +334,12 @@ function buildArchitectureComponents(snapshot) {
     },
     {
       id: 'delivery',
-      name: 'Validation & Handoff',
+      name: '验证与交接',
       type: 'database',
-      subtitle: trimText(joinList(sections.goals.successMetrics, 'Success metrics to confirm')),
+      subtitle: trimText(joinList(sections.goals.successMetrics, '成功指标待确认')),
       details: [
-        `Target: ${reviewTarget}`,
-        `Next: ${trimText(sections.handoff.nextStep ?? 'Confirm next step', 48)}`,
+        `目标: ${reviewTarget}`,
+        `下一步: ${trimText(sections.handoff.nextStep ?? '确认下一步', 48)}`,
         ...takeList(sections.goals.acceptanceGoals, 2),
       ].slice(0, 4),
     },
@@ -347,73 +347,73 @@ function buildArchitectureComponents(snapshot) {
 }
 
 export function buildArchitectureDiagramModel(snapshot) {
-  const scopeIn = takeList(snapshot.sections.scope.inScope, 3, ['Scope to be clarified']);
-  const scopeOut = takeList(snapshot.sections.scope.outOfScope, 2, ['Out-of-scope not yet explicit']);
-  const assumptions = takeList(snapshot.sections.risks.assumptions, 4, ['Assumptions still need review']);
-  const openQuestions = takeList(snapshot.sections.risks.openQuestions, 4, ['No open questions captured yet']);
-  const primaryFlows = takeList(snapshot.sections.scenarios.primaryFlows, 3, ['Primary flow still needs confirmation']);
+  const scopeIn = takeList(snapshot.sections.scope.inScope, 3, ['范围待澄清']);
+  const scopeOut = takeList(snapshot.sections.scope.outOfScope, 2, ['范围外内容尚未明确']);
+  const assumptions = takeList(snapshot.sections.risks.assumptions, 4, ['假设仍需评审']);
+  const openQuestions = takeList(snapshot.sections.risks.openQuestions, 4, ['暂无开放问题记录']);
+  const primaryFlows = takeList(snapshot.sections.scenarios.primaryFlows, 3, ['主流程仍需确认']);
 
   return {
     type: 'architecture',
     version: 1,
     generatedAt: new Date().toISOString(),
-    locale: 'en',
-    title: 'Architecture Review',
-    subtitle: 'Review the proposed system boundaries, dependencies, and handoff shape before freeze.',
+    locale: 'zh-CN',
+    title: '架构评审',
+    subtitle: '在 freeze 前评审系统边界、依赖和交接形态。',
     components: buildArchitectureComponents(snapshot),
     flows: [
-      { source: 'users', target: 'experience', label: trimText(primaryFlows[0] ?? 'User enters the product flow', 40), type: 'standard' },
-      { source: 'experience', target: 'core', label: 'Product actions + orchestration', type: 'standard' },
-      { source: 'core', target: 'integrations', label: 'Dependencies / external services', type: 'standard' },
-      { source: 'core', target: 'governance', label: 'Policies / reliability / compliance', type: 'security' },
-      { source: 'core', target: 'delivery', label: 'Success criteria + handoff', type: 'standard' },
-      { source: 'integrations', target: 'delivery', label: 'Operational readiness', type: 'standard' },
-      { source: 'governance', target: 'delivery', label: 'Review + sign-off', type: 'security' },
+      { source: 'users', target: 'experience', label: trimText(primaryFlows[0] ?? '用户进入产品流程', 40), type: 'standard' },
+      { source: 'experience', target: 'core', label: '产品动作与编排', type: 'standard' },
+      { source: 'core', target: 'integrations', label: '依赖与外部服务', type: 'standard' },
+      { source: 'core', target: 'governance', label: '策略、可靠性与合规', type: 'security' },
+      { source: 'core', target: 'delivery', label: '成功标准与交接', type: 'standard' },
+      { source: 'integrations', target: 'delivery', label: '运营就绪', type: 'standard' },
+      { source: 'governance', target: 'delivery', label: '评审与确认', type: 'security' },
     ],
     summaryCards: [
       {
-        title: 'Scope',
+        title: '范围',
         color: 'frontend',
         items: [
-          `In scope: ${scopeIn.join(' / ')}`,
-          `Out of scope: ${scopeOut.join(' / ')}`,
-          `Primary flow: ${primaryFlows.join(' / ')}`,
+          `范围内: ${scopeIn.join(' / ')}`,
+          `范围外: ${scopeOut.join(' / ')}`,
+          `主流程: ${primaryFlows.join(' / ')}`,
         ],
       },
       {
-        title: 'Architecture Checks',
+        title: '架构检查',
         color: 'backend',
         items: [
-          `Core logic: ${takeList(snapshot.sections.requirements.functional, 2, ['Functional requirements TBD']).join(' / ')}`,
-          `Dependencies: ${takeList(snapshot.sections.constraints.dependencies, 2, ['Dependencies TBD']).join(' / ')}`,
-          `Guardrails: ${takeList(snapshot.sections.constraints.compliance, 2, takeList(snapshot.sections.requirements.nonFunctional, 2, ['Guardrails TBD'])).join(' / ')}`,
+          `核心逻辑: ${takeList(snapshot.sections.requirements.functional, 2, ['功能需求待补充']).join(' / ')}`,
+          `依赖: ${takeList(snapshot.sections.constraints.dependencies, 2, ['依赖待补充']).join(' / ')}`,
+          `约束: ${takeList(snapshot.sections.constraints.compliance, 2, takeList(snapshot.sections.requirements.nonFunctional, 2, ['约束待补充'])).join(' / ')}`,
         ],
       },
       {
-        title: 'Review Focus',
+        title: '评审重点',
         color: 'cloud',
         items: [
-          `Confirm missing assumptions: ${assumptions.join(' / ')}`,
-          `Open questions: ${openQuestions.join(' / ')}`,
-          'Ask the user to confirm boxes, boundaries, and missing systems before freeze.',
+          `确认缺失假设: ${assumptions.join(' / ')}`,
+          `开放问题: ${openQuestions.join(' / ')}`,
+          '在 freeze 前请用户确认模块、边界和缺失系统。',
         ],
       },
     ],
     sidePanels: [
-      { title: 'Assumptions', color: 'database', items: assumptions },
+      { title: '假设', color: 'database', items: assumptions },
       {
-        title: 'Review Instructions',
+        title: '评审说明',
         color: 'cloud',
         items: [
-          'Confirm whether the boxes reflect the intended architecture after clarification.',
-          'Mark any missing systems, boundaries, or external dependencies.',
-          'Validate reliability, compliance, and handoff expectations before freeze.',
+          '确认这些模块是否反映澄清后的目标架构。',
+          '标记缺失系统、边界或外部依赖。',
+          '在 freeze 前验证可靠性、合规和交接预期。',
         ],
       },
     ],
     metadata: {
       projectName: snapshot.title,
-      productType: snapshot.productType ?? 'unclassified',
+      productType: snapshot.productType ?? '未分类',
       owner: snapshot.owner,
       versionId: snapshot.versionId,
       targetSystem: snapshot.sections.handoff.targetSystem ?? 'OpenSpec',
@@ -441,13 +441,13 @@ export function renderArchitectureDiagramHtml(model) {
   ];
 
   const arrows = [
-    { path: 'M 540 144 C 540 182, 215 176, 215 228', label: model.flows[0]?.label ?? 'User flow', labelX: 312, labelY: 176, type: model.flows[0]?.type ?? 'standard' },
-    { path: 'M 360 288 L 395 288', label: model.flows[1]?.label ?? 'Product actions', labelX: 366, labelY: 276, type: model.flows[1]?.type ?? 'standard' },
-    { path: 'M 685 288 L 720 288', label: model.flows[4]?.label ?? 'Success criteria', labelX: 694, labelY: 276, type: model.flows[4]?.type ?? 'standard' },
-    { path: 'M 540 348 C 540 392, 325 396, 325 448', label: model.flows[2]?.label ?? 'Dependencies', labelX: 300, labelY: 392, type: model.flows[2]?.type ?? 'standard' },
-    { path: 'M 540 348 C 540 392, 755 396, 755 448', label: model.flows[3]?.label ?? 'Guardrails', labelX: 692, labelY: 392, type: model.flows[3]?.type ?? 'security' },
-    { path: 'M 470 568 C 470 610, 820 610, 820 348', label: model.flows[5]?.label ?? 'Operational readiness', labelX: 596, labelY: 614, type: model.flows[5]?.type ?? 'standard' },
-    { path: 'M 820 568 C 920 612, 920 416, 865 348', label: model.flows[6]?.label ?? 'Review + sign-off', labelX: 850, labelY: 612, type: model.flows[6]?.type ?? 'security' },
+    { path: 'M 540 144 C 540 182, 215 176, 215 228', label: model.flows[0]?.label ?? '用户流程', labelX: 312, labelY: 176, type: model.flows[0]?.type ?? 'standard' },
+    { path: 'M 360 288 L 395 288', label: model.flows[1]?.label ?? '产品动作', labelX: 366, labelY: 276, type: model.flows[1]?.type ?? 'standard' },
+    { path: 'M 685 288 L 720 288', label: model.flows[4]?.label ?? '成功标准', labelX: 694, labelY: 276, type: model.flows[4]?.type ?? 'standard' },
+    { path: 'M 540 348 C 540 392, 325 396, 325 448', label: model.flows[2]?.label ?? '依赖', labelX: 300, labelY: 392, type: model.flows[2]?.type ?? 'standard' },
+    { path: 'M 540 348 C 540 392, 755 396, 755 448', label: model.flows[3]?.label ?? '约束', labelX: 692, labelY: 392, type: model.flows[3]?.type ?? 'security' },
+    { path: 'M 470 568 C 470 610, 820 610, 820 348', label: model.flows[5]?.label ?? '运营就绪', labelX: 596, labelY: 614, type: model.flows[5]?.type ?? 'standard' },
+    { path: 'M 820 568 C 920 612, 920 416, 865 348', label: model.flows[6]?.label ?? '评审确认', labelX: 850, labelY: 612, type: model.flows[6]?.type ?? 'security' },
   ];
 
   const componentMarkup = model.components
@@ -462,83 +462,83 @@ export function renderArchitectureDiagramHtml(model) {
         </marker>
       </defs>
       <rect x="40" y="172" width="1000" height="430" rx="18" fill="none" stroke="#f59e0b" stroke-opacity="0.55" stroke-width="1.5" stroke-dasharray="8,5"></rect>
-      <text x="58" y="194" class="legend-label">Proposed Solution Boundary</text>
+      <text x="58" y="194" class="legend-label">方案边界</text>
       ${arrowMarkup}
       ${componentMarkup}
       <g>
-        <text x="54" y="652" class="legend-label">Legend</text>
-        <rect x="54" y="666" width="12" height="12" rx="3" fill="#22d3ee"></rect><text x="74" y="676" class="legend-label">Experience</text>
-        <rect x="182" y="666" width="12" height="12" rx="3" fill="#34d399"></rect><text x="202" y="676" class="legend-label">Core Logic</text>
-        <rect x="330" y="666" width="12" height="12" rx="3" fill="#c084fc"></rect><text x="350" y="676" class="legend-label">Validation</text>
-        <rect x="476" y="666" width="12" height="12" rx="3" fill="#f59e0b"></rect><text x="496" y="676" class="legend-label">Dependencies</text>
-        <rect x="640" y="666" width="12" height="12" rx="3" fill="#fb7185"></rect><text x="660" y="676" class="legend-label">Guardrails</text>
-        <rect x="798" y="666" width="12" height="12" rx="3" fill="#94a3b8"></rect><text x="818" y="676" class="legend-label">External / Users</text>
+        <text x="54" y="652" class="legend-label">图例</text>
+        <rect x="54" y="666" width="12" height="12" rx="3" fill="#22d3ee"></rect><text x="74" y="676" class="legend-label">体验</text>
+        <rect x="182" y="666" width="12" height="12" rx="3" fill="#34d399"></rect><text x="202" y="676" class="legend-label">核心逻辑</text>
+        <rect x="330" y="666" width="12" height="12" rx="3" fill="#c084fc"></rect><text x="350" y="676" class="legend-label">验证</text>
+        <rect x="476" y="666" width="12" height="12" rx="3" fill="#f59e0b"></rect><text x="496" y="676" class="legend-label">依赖</text>
+        <rect x="640" y="666" width="12" height="12" rx="3" fill="#fb7185"></rect><text x="660" y="676" class="legend-label">约束</text>
+        <rect x="798" y="666" width="12" height="12" rx="3" fill="#94a3b8"></rect><text x="818" y="676" class="legend-label">外部/用户</text>
       </g>
     </svg>
   `;
 
   return renderShell({
-    lang: model.locale ?? 'en',
+    lang: model.locale ?? 'zh-CN',
     title: model.title,
     subtitle: model.subtitle,
     projectName: model.metadata?.projectName ?? model.title,
     svgMarkup,
     summaryCards: model.summaryCards,
     sidePanels: model.sidePanels,
-    footer: `Owner: ${model.metadata.owner} · Version: ${model.metadata.versionId} · Target: ${model.metadata.targetSystem} · Generated: ${model.generatedAt}`,
+    footer: `负责人: ${model.metadata.owner} · 版本: ${model.metadata.versionId} · 目标: ${model.metadata.targetSystem} · 生成时间: ${model.generatedAt}`,
   });
 }
 
 export function buildProductFlowDiagramModel(snapshot) {
-  const primaryUsers = takeList(snapshot.sections.users.primaryUsers, 2, ['Primary user']);
-  const primaryFlows = takeList(snapshot.sections.scenarios.primaryFlows, 4, ['Primary flow still needs confirmation']);
-  const edgeCases = takeList(snapshot.sections.scenarios.edgeCases, 3, ['Edge cases still need clarification']);
-  const failureModes = takeList(snapshot.sections.scenarios.failureModes, 3, ['Failure paths still need clarification']);
-  const goals = takeList(snapshot.sections.goals.goals, 2, ['Goal still needs confirmation']);
-  const successMetrics = takeList(snapshot.sections.goals.successMetrics, 2, ['Success metric still needs confirmation']);
-  const openQuestions = takeList(snapshot.sections.risks.openQuestions, 4, ['No open questions captured yet']);
+  const primaryUsers = takeList(snapshot.sections.users.primaryUsers, 2, ['主要用户']);
+  const primaryFlows = takeList(snapshot.sections.scenarios.primaryFlows, 4, ['主流程仍需确认']);
+  const edgeCases = takeList(snapshot.sections.scenarios.edgeCases, 3, ['边界情况仍需澄清']);
+  const failureModes = takeList(snapshot.sections.scenarios.failureModes, 3, ['失败路径仍需澄清']);
+  const goals = takeList(snapshot.sections.goals.goals, 2, ['目标仍需确认']);
+  const successMetrics = takeList(snapshot.sections.goals.successMetrics, 2, ['成功指标仍需确认']);
+  const openQuestions = takeList(snapshot.sections.risks.openQuestions, 4, ['暂无开放问题记录']);
   const steps = [
     {
       id: 'entry',
-      name: 'Entry Trigger',
+      name: '入口触发',
       type: 'user_action',
       lane: primaryUsers[0],
-      subtitle: trimText(primaryFlows[0] ?? 'User enters the flow'),
-      details: takeList(snapshot.sections.scope.inScope, 2, ['Scope still needs refinement']),
+      subtitle: trimText(primaryFlows[0] ?? '用户进入流程'),
+      details: takeList(snapshot.sections.scope.inScope, 2, ['范围仍需细化']),
     },
     {
       id: 'experience',
-      name: 'In-Product Step',
+      name: '产品内步骤',
       type: 'system_process',
-      lane: 'Product',
-      subtitle: trimText(primaryFlows[1] ?? snapshot.sections.problem.problemStatement ?? 'Core product step'),
-      details: takeList(snapshot.sections.requirements.functional, 2, ['Functional requirements TBD']),
+      lane: '产品',
+      subtitle: trimText(primaryFlows[1] ?? snapshot.sections.problem.problemStatement ?? '核心产品步骤'),
+      details: takeList(snapshot.sections.requirements.functional, 2, ['功能需求待补充']),
     },
     {
       id: 'decision',
-      name: 'Decision Point',
+      name: '决策点',
       type: 'decision',
-      lane: 'Decision',
-      subtitle: trimText(edgeCases[0] ?? 'Decision criteria need clarification'),
+      lane: '决策',
+      subtitle: trimText(edgeCases[0] ?? '决策标准待澄清'),
       details: [
-        `Goal: ${trimText(goals[0], 40)}`,
-        `Metric: ${trimText(successMetrics[0], 40)}`,
+        `目标: ${trimText(goals[0], 40)}`,
+        `指标: ${trimText(successMetrics[0], 40)}`,
       ],
     },
     {
       id: 'success',
-      name: 'Success Outcome',
+      name: '成功结果',
       type: 'success',
-      lane: 'Outcome',
-      subtitle: trimText(successMetrics[0] ?? 'Success still needs confirmation'),
-      details: takeList(snapshot.sections.goals.acceptanceGoals, 2, ['Acceptance goal TBD']),
+      lane: '结果',
+      subtitle: trimText(successMetrics[0] ?? '成功结果仍需确认'),
+      details: takeList(snapshot.sections.goals.acceptanceGoals, 2, ['验收目标待补充']),
     },
     {
       id: 'failure',
-      name: 'Failure / Recovery',
+      name: '失败与恢复',
       type: 'error_path',
-      lane: 'Outcome',
-      subtitle: trimText(failureModes[0] ?? 'Failure path needs clarification'),
+      lane: '结果',
+      subtitle: trimText(failureModes[0] ?? '失败路径待澄清'),
       details: [
         ...failureModes.slice(0, 2),
         ...openQuestions.slice(0, 2),
@@ -550,61 +550,61 @@ export function buildProductFlowDiagramModel(snapshot) {
     type: 'product-flow',
     version: 1,
     generatedAt: new Date().toISOString(),
-    locale: 'en',
-    title: 'Product Flow Review',
-    subtitle: 'Review the primary journey, decision points, and recovery paths before freeze.',
+    locale: 'zh-CN',
+    title: '产品流程评审',
+    subtitle: '在 freeze 前评审主要旅程、决策点和恢复路径。',
     actors: primaryUsers,
     steps,
     transitions: [
-      { from: 'entry', to: 'experience', label: primaryFlows[0] ?? 'Start journey', type: 'standard' },
-      { from: 'experience', to: 'decision', label: primaryFlows[1] ?? 'System processes request', type: 'standard' },
-      { from: 'decision', to: 'success', label: goals[0] ?? 'Success path', type: 'standard' },
-      { from: 'decision', to: 'failure', label: failureModes[0] ?? 'Failure path', type: 'error_path' },
+      { from: 'entry', to: 'experience', label: primaryFlows[0] ?? '开始旅程', type: 'standard' },
+      { from: 'experience', to: 'decision', label: primaryFlows[1] ?? '系统处理请求', type: 'standard' },
+      { from: 'decision', to: 'success', label: goals[0] ?? '成功路径', type: 'standard' },
+      { from: 'decision', to: 'failure', label: failureModes[0] ?? '失败路径', type: 'error_path' },
     ],
     summaryCards: [
       {
-        title: 'Actors & Scope',
+        title: '参与者与范围',
         color: 'user_action',
         items: [
-          `Actors: ${primaryUsers.join(' / ')}`,
-          `In scope: ${takeList(snapshot.sections.scope.inScope, 2, ['Scope TBD']).join(' / ')}`,
-          `Out of scope: ${takeList(snapshot.sections.scope.outOfScope, 2, ['Out-of-scope TBD']).join(' / ')}`,
+          `参与者: ${primaryUsers.join(' / ')}`,
+          `范围内: ${takeList(snapshot.sections.scope.inScope, 2, ['范围待补充']).join(' / ')}`,
+          `范围外: ${takeList(snapshot.sections.scope.outOfScope, 2, ['范围外内容待补充']).join(' / ')}`,
         ],
       },
       {
-        title: 'Flow Checks',
+        title: '流程检查',
         color: 'system_process',
         items: [
-          `Primary flow: ${primaryFlows.join(' / ')}`,
-          `Edge cases: ${edgeCases.join(' / ')}`,
-          `Failure modes: ${failureModes.join(' / ')}`,
+          `主流程: ${primaryFlows.join(' / ')}`,
+          `边界情况: ${edgeCases.join(' / ')}`,
+          `失败模式: ${failureModes.join(' / ')}`,
         ],
       },
       {
-        title: 'Review Focus',
+        title: '评审重点',
         color: 'decision',
         items: [
-          `Goals: ${goals.join(' / ')}`,
-          `Success metrics: ${successMetrics.join(' / ')}`,
-          'Confirm steps, decision points, and missing recovery paths before freeze.',
+          `目标: ${goals.join(' / ')}`,
+          `成功指标: ${successMetrics.join(' / ')}`,
+          '在 freeze 前确认步骤、决策点和缺失的恢复路径。',
         ],
       },
     ],
     sidePanels: [
-      { title: 'Open Questions', color: 'error_path', items: openQuestions },
+      { title: '开放问题', color: 'error_path', items: openQuestions },
       {
-        title: 'Review Instructions',
+        title: '评审说明',
         color: 'decision',
         items: [
-          'Confirm whether the user journey and system responses are in the right order.',
-          'Mark missing decision points, failure paths, and recovery steps.',
-          'Confirm that this flow is complete enough to support freeze.',
+          '确认用户旅程和系统响应顺序是否正确。',
+          '标记缺失的决策点、失败路径和恢复步骤。',
+          '确认该流程是否足以支持 freeze。',
         ],
       },
     ],
     metadata: {
       projectName: snapshot.title,
-      productType: snapshot.productType ?? 'unclassified',
+      productType: snapshot.productType ?? '未分类',
       owner: snapshot.owner,
       versionId: snapshot.versionId,
       targetSystem: snapshot.sections.handoff.targetSystem ?? 'OpenSpec',
@@ -630,9 +630,9 @@ export function renderProductFlowDiagramHtml(model) {
   ];
 
   const laneMarkup = [
-    { y: 118, label: 'User / Trigger' },
-    { y: 220, label: 'Core Flow' },
-    { y: 438, label: 'Outcomes / Recovery' },
+    { y: 118, label: '用户/触发' },
+    { y: 220, label: '核心流程' },
+    { y: 438, label: '结果/恢复' },
   ].map((lane) => `
     <g>
       <line x1="70" y1="${lane.y}" x2="1020" y2="${lane.y}" stroke="#334155" stroke-width="1" stroke-dasharray="6,4"></line>
@@ -644,10 +644,10 @@ export function renderProductFlowDiagramHtml(model) {
     .map((step, index) => renderBox(step, layouts[step.id] ?? fallbackLayouts[index] ?? fallbackLayouts.at(-1)))
     .join('\n');
   const transitions = [
-    { path: 'M 280 306 L 330 306', label: model.transitions[0]?.label ?? 'Start', labelX: 288, labelY: 294, type: model.transitions[0]?.type ?? 'standard' },
-    { path: 'M 540 306 L 590 306', label: model.transitions[1]?.label ?? 'Core step', labelX: 546, labelY: 294, type: model.transitions[1]?.type ?? 'standard' },
-    { path: 'M 770 282 C 800 240, 820 220, 820 196', label: model.transitions[2]?.label ?? 'Success path', labelX: 786, labelY: 226, type: model.transitions[2]?.type ?? 'standard' },
-    { path: 'M 770 330 C 800 370, 820 400, 820 420', label: model.transitions[3]?.label ?? 'Failure path', labelX: 786, labelY: 388, type: model.transitions[3]?.type ?? 'error_path' },
+    { path: 'M 280 306 L 330 306', label: model.transitions[0]?.label ?? '开始', labelX: 288, labelY: 294, type: model.transitions[0]?.type ?? 'standard' },
+    { path: 'M 540 306 L 590 306', label: model.transitions[1]?.label ?? '核心步骤', labelX: 546, labelY: 294, type: model.transitions[1]?.type ?? 'standard' },
+    { path: 'M 770 282 C 800 240, 820 220, 820 196', label: model.transitions[2]?.label ?? '成功路径', labelX: 786, labelY: 226, type: model.transitions[2]?.type ?? 'standard' },
+    { path: 'M 770 330 C 800 370, 820 400, 820 420', label: model.transitions[3]?.label ?? '失败路径', labelX: 786, labelY: 388, type: model.transitions[3]?.type ?? 'error_path' },
   ].map(renderArrow).join('\n');
 
   const svgMarkup = `
@@ -658,30 +658,30 @@ export function renderProductFlowDiagramHtml(model) {
         </marker>
       </defs>
       <rect x="56" y="92" width="968" height="520" rx="18" fill="none" stroke="#f59e0b" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="8,5"></rect>
-      <text x="74" y="118" class="legend-label">Product Flow Boundary</text>
+      <text x="74" y="118" class="legend-label">产品流程边界</text>
       ${laneMarkup}
       ${transitions}
       ${stepMarkup}
       <g>
-        <text x="54" y="652" class="legend-label">Legend</text>
-        <rect x="54" y="666" width="12" height="12" rx="3" fill="#22d3ee"></rect><text x="74" y="676" class="legend-label">User Action</text>
-        <rect x="196" y="666" width="12" height="12" rx="3" fill="#34d399"></rect><text x="216" y="676" class="legend-label">System Process</text>
-        <rect x="372" y="666" width="12" height="12" rx="3" fill="#f59e0b"></rect><text x="392" y="676" class="legend-label">Decision</text>
-        <rect x="516" y="666" width="12" height="12" rx="3" fill="#c084fc"></rect><text x="536" y="676" class="legend-label">Success</text>
-        <rect x="648" y="666" width="12" height="12" rx="3" fill="#fb7185"></rect><text x="668" y="676" class="legend-label">Error / Recovery</text>
+        <text x="54" y="652" class="legend-label">图例</text>
+        <rect x="54" y="666" width="12" height="12" rx="3" fill="#22d3ee"></rect><text x="74" y="676" class="legend-label">用户动作</text>
+        <rect x="196" y="666" width="12" height="12" rx="3" fill="#34d399"></rect><text x="216" y="676" class="legend-label">系统处理</text>
+        <rect x="372" y="666" width="12" height="12" rx="3" fill="#f59e0b"></rect><text x="392" y="676" class="legend-label">决策</text>
+        <rect x="516" y="666" width="12" height="12" rx="3" fill="#c084fc"></rect><text x="536" y="676" class="legend-label">成功</text>
+        <rect x="648" y="666" width="12" height="12" rx="3" fill="#fb7185"></rect><text x="668" y="676" class="legend-label">错误/恢复</text>
       </g>
     </svg>
   `;
 
   return renderShell({
-    lang: model.locale ?? 'en',
+    lang: model.locale ?? 'zh-CN',
     title: model.title,
     subtitle: model.subtitle,
     projectName: model.metadata?.projectName ?? model.title,
     svgMarkup,
     summaryCards: model.summaryCards,
     sidePanels: model.sidePanels,
-    footer: `Owner: ${model.metadata.owner} · Version: ${model.metadata.versionId} · Target: ${model.metadata.targetSystem} · Generated: ${model.generatedAt}`,
+    footer: `负责人: ${model.metadata.owner} · 版本: ${model.metadata.versionId} · 目标: ${model.metadata.targetSystem} · 生成时间: ${model.generatedAt}`,
   });
 }
 
@@ -736,7 +736,7 @@ export function renderArchitectureMermaid(model) {
   return [
     'flowchart LR',
     ...external,
-    '  subgraph solution["Proposed Solution Boundary"]',
+    '  subgraph solution["方案边界"]',
     ...internal.map((line) => `  ${line}`),
     '  end',
     ...edges,
@@ -767,34 +767,34 @@ export function buildDiagramArtifact(snapshot, options = {}) {
       steps: Array.isArray(contract.steps) && contract.steps.length > 0
         ? contract.steps.map((step, index) => ({
           id: pickValue(step?.id, `step-${index + 1}`),
-          name: pickValue(step?.name, `Step ${index + 1}`),
+          name: pickValue(step?.name, `步骤 ${index + 1}`),
           type: pickValue(step?.type, 'system_process'),
-          lane: pickValue(step?.lane, 'Flow'),
-          subtitle: pickValue(step?.subtitle, step?.description ?? 'TBD'),
-          details: normalizeList(step?.details ?? step?.notes ?? step?.data_involved, ['TBD']),
+          lane: pickValue(step?.lane, '流程'),
+          subtitle: pickValue(step?.subtitle, step?.description ?? '待补充'),
+          details: normalizeList(step?.details ?? step?.notes ?? step?.data_involved, ['待补充']),
         }))
         : base.steps,
       transitions: Array.isArray(contract.transitions) && contract.transitions.length > 0
         ? contract.transitions.map((transition) => ({
           from: pickValue(transition?.from, transition?.from_step_id),
           to: pickValue(transition?.to, transition?.to_step_id),
-          label: pickValue(transition?.label, transition?.condition ?? 'Transition'),
+          label: pickValue(transition?.label, transition?.condition ?? '流转'),
           type: pickValue(transition?.type, 'standard'),
         }))
         : base.transitions,
       summaryCards: Array.isArray(contract.summaryCards) && contract.summaryCards.length > 0
-        ? contract.summaryCards.map((card, index) => normalizeCard(card, `Summary ${index + 1}`, 'system_process'))
+        ? contract.summaryCards.map((card, index) => normalizeCard(card, `摘要 ${index + 1}`, 'system_process'))
         : base.summaryCards,
       sidePanels: Array.isArray(contract.sidePanels) && contract.sidePanels.length > 0
-        ? contract.sidePanels.map((panel, index) => normalizePanel(panel, `Panel ${index + 1}`, 'decision'))
+        ? contract.sidePanels.map((panel, index) => normalizePanel(panel, `面板 ${index + 1}`, 'decision'))
         : [
           normalizePanel({
-            title: contract.openQuestionsTitle ?? 'Open Questions',
+            title: contract.openQuestionsTitle ?? '开放问题',
             color: 'error_path',
             items: contract.openQuestions,
           }),
           normalizePanel({
-            title: contract.reviewInstructionsTitle ?? 'Review Instructions',
+            title: contract.reviewInstructionsTitle ?? '评审说明',
             color: 'decision',
             items: contract.reviewInstructions,
           }),
@@ -823,33 +823,33 @@ export function buildDiagramArtifact(snapshot, options = {}) {
       components: Array.isArray(contract.components) && contract.components.length > 0
         ? contract.components.map((component, index) => ({
           id: pickValue(component?.id, `component-${index + 1}`),
-          name: pickValue(component?.name, `Component ${index + 1}`),
+          name: pickValue(component?.name, `组件 ${index + 1}`),
           type: pickValue(component?.type, 'external'),
-          subtitle: pickValue(component?.subtitle, component?.description ?? 'TBD'),
-          details: normalizeList(component?.details, ['TBD']),
+          subtitle: pickValue(component?.subtitle, component?.description ?? '待补充'),
+          details: normalizeList(component?.details, ['待补充']),
         }))
         : base.components,
       flows: Array.isArray(contract.flows) && contract.flows.length > 0
         ? contract.flows.map((flow) => ({
           source: pickValue(flow?.source, 'source'),
           target: pickValue(flow?.target, 'target'),
-          label: pickValue(flow?.label, 'Flow'),
+          label: pickValue(flow?.label, '流程'),
           type: pickValue(flow?.type, 'standard'),
         }))
         : base.flows,
       summaryCards: Array.isArray(contract.summaryCards) && contract.summaryCards.length > 0
-        ? contract.summaryCards.map((card, index) => normalizeCard(card, `Summary ${index + 1}`, 'frontend'))
+        ? contract.summaryCards.map((card, index) => normalizeCard(card, `摘要 ${index + 1}`, 'frontend'))
         : base.summaryCards,
       sidePanels: Array.isArray(contract.sidePanels) && contract.sidePanels.length > 0
-        ? contract.sidePanels.map((panel, index) => normalizePanel(panel, `Panel ${index + 1}`, 'database'))
+        ? contract.sidePanels.map((panel, index) => normalizePanel(panel, `面板 ${index + 1}`, 'database'))
         : [
           normalizePanel({
-            title: contract.assumptionsTitle ?? 'Assumptions',
+            title: contract.assumptionsTitle ?? '假设',
             color: 'database',
             items: contract.assumptions,
           }),
           normalizePanel({
-            title: contract.reviewInstructionsTitle ?? 'Review Instructions',
+            title: contract.reviewInstructionsTitle ?? '评审说明',
             color: 'cloud',
             items: contract.reviewInstructions,
           }),

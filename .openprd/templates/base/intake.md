@@ -1,16 +1,16 @@
-# Intake Template
+# Intake 模板
 
-## Discover
+## 发现
 
-- What problem are we solving?
-- Who is the primary user?
-- What is the current workaround?
-- What is the success metric?
-- What is not in scope?
+- 我们要解决什么问题？
+- 主要用户是谁？
+- 当前临时解决方式是什么？
+- 成功指标是什么？
+- 哪些内容不在范围内？
 
 ## Freeze Check
 
-- Is the product type known?
-- Are the key roles known?
-- Is there a success metric?
-- Are there open questions that block freeze?
+- 产品类型是否已明确？
+- 关键角色是否已明确？
+- 是否已有成功指标？
+- 是否存在阻塞 freeze 的开放问题？

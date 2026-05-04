@@ -6,7 +6,9 @@ Borrow the `lark-shared` pattern:
 
 - `openprd-shared` = common rules
 - `openprd-harness` = workflow sequencing
+- `openprd-standards` = docs/basic, file manual, and folder README standards
 - `openprd-diagram-review` = visual artifact generation and confirmation
+- generated adapters = Codex, Claude, and Cursor project-local rules from one OpenPrd source
 
 This avoids one oversized skill and keeps trigger logic precise.
 
@@ -26,6 +28,7 @@ This avoids one oversized skill and keeps trigger logic precise.
 - command choice
 - handoff readiness
 - clarification-first behavior across startup scenarios
+- setup/update/doctor for generated agent guidance and Codex hook health
 
 ### Diagram Review
 
@@ -33,6 +36,20 @@ This avoids one oversized skill and keeps trigger logic precise.
 - contract shaping
 - review checklist
 - artifact opening and user confirmation loop
+
+### Standards
+
+- `docs/basic/` baseline docs
+- file manual template and verification
+- folder README template and verification
+- standards gate before implementation readiness
+
+### Generated Adapters
+
+- Codex skills, prompts, config, hooks.json, and hook runner
+- Claude skills, commands, and `CLAUDE.md`
+- Cursor rules and commands
+- no symlink dependency between tools
 
 ## Startup Scenarios
 

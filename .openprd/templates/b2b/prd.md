@@ -4,21 +4,21 @@
 
 - `base/prd.md`
 
-## B2B-Specific Fields
+## B2B 专项字段
 
-- Buyer:
-- User:
-- Admin:
-- Operator:
-- Roles:
-- As-Is flow:
-- To-Be flow:
-- Permission matrix:
-- Approval flow:
+- 采购方:
+- 使用者:
+- 管理员:
+- 运营者:
+- 角色:
+- 现状流程:
+- 目标流程:
+- 权限矩阵:
+- 审批流程:
 
-## B2B Notes
+## B2B 备注
 
-- Which role owns the decision?
-- Which role performs the work?
-- Which workflow step needs auditability?
-- Which dependency can block rollout?
+- 哪个角色负责决策？
+- 哪个角色执行工作？
+- 哪个流程步骤需要可审计？
+- 哪个依赖可能阻塞上线？

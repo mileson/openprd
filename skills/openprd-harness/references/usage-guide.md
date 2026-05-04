@@ -4,6 +4,7 @@
 
 - 什么时候先 `clarify`
 - 什么时候先 `diagram`
+- 什么时候检查 `standards`
 - 什么时候可以直接 `freeze`
 - `status` / `next` 该怎么看
 - `batch capture` 怎么用
@@ -49,6 +50,7 @@ OpenPrd 现在会区分 3 种场景：
 - `openprd clarify`
 - 用 `openprd capture --source project-derived` 导入已有事实
 - 用 `openprd capture --source user-confirmed` 写回用户确认
+- 用 `openprd standards <path> --verify` 检查 `docs/basic/` 和说明书模板
 
 ### 3. Continuing workspace
 
@@ -67,6 +69,7 @@ OpenPrd 现在会区分 3 种场景：
 - `openprd status`
 - `openprd next`
 - 只补变化部分
+- 每次功能落地前检查 `openprd standards <path> --verify`
 
 ---
 

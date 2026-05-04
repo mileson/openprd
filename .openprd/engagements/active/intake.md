@@ -1,15 +1,15 @@
 # Intake
 
-## Product Type
+## 产品类型
 
 - consumer
 - b2b
 - agent
 
-## Questions
+## 问题
 
-- What problem are we solving?
-- Who is the primary user?
-- What does success look like?
-- What is explicitly out of scope?
-- What is the first milestone we want to freeze?
+- 我们要解决什么问题？
+- 主要用户是谁？
+- 成功是什么样？
+- 哪些内容明确不在范围内？
+- 我们希望 freeze 的第一个里程碑是什么？
