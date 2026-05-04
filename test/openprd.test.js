@@ -82,6 +82,78 @@ test('init creates a workspace and validate passes', async () => {
   assert.ok(logs.some((line) => line.includes('OpenPrd standards: 通过')));
 });
 
+test('standards require concrete docs plus file and folder manuals for source files', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await fs.mkdir(path.join(project, 'src'), { recursive: true });
+  await fs.writeFile(path.join(project, 'src', 'app.js'), 'export const app = true;\n');
+
+  const missingManuals = await checkStandardsWorkspace(project);
+  assert.equal(missingManuals.ok, false);
+  assert.ok(missingManuals.errors.some((error) => error.includes('docs/basic/file-structure.md 仍包含模板占位内容')));
+  assert.ok(missingManuals.errors.some((error) => error.includes('src/app.js 缺少文件说明书')));
+  assert.ok(missingManuals.errors.some((error) => error.includes('src/project_src_README.md')));
+
+  for (const doc of [
+    ['file-structure.md', '# 项目文件结构\n\n## 项目定位\n\n测试项目。\n\n## 核心目录\n\n- `src/`: 示例源码。\n\n## 文件组织规则\n\n- 源码放在 `src/`。\n\n## 维护规则\n\n- 修改源码后更新说明书。\n'],
+    ['app-flow.md', '# 产品流程说明\n\n## 核心流程\n\n用户运行示例。\n\n## 用户路径\n\n- 打开项目并执行命令。\n\n## 状态变化\n\n- 示例从未运行到已运行。\n\n## 维护规则\n\n- 流程变化后更新本文档。\n'],
+    ['prd.md', '# 产品逻辑说明\n\n## 问题与目标\n\n提供最小示例。\n\n## 用户故事\n\n- 用户可以运行示例。\n\n## 功能范围\n\n- 示例入口。\n\n## 验收标准\n\n- 命令可执行。\n\n## 维护规则\n\n- 需求变化后更新本文档。\n'],
+    ['frontend-guidelines.md', '# 前端开发规范\n\n## 适用范围\n\n无前端界面。\n\n## 界面结构\n\n- 当前没有页面。\n\n## 交互规范\n\n- 当前没有交互。\n\n## 维护规则\n\n- 新增界面后更新本文档。\n'],
+    ['backend-structure.md', '# 后端架构设计\n\n## 适用范围\n\n示例脚本。\n\n## 服务边界\n\n- `src/app.js` 提供入口。\n\n## 数据流\n\n- 无外部数据。\n\n## 维护规则\n\n- 模块变化后更新本文档。\n'],
+    ['tech-stack.md', '# 项目技术栈\n\n## 运行环境\n\n- Node.js。\n\n## 核心依赖\n\n- 无运行时依赖。\n\n## 工具链\n\n- `node --check`。\n\n## 维护规则\n\n- 依赖变化后更新本文档。\n'],
+  ]) {
+    await fs.writeFile(path.join(project, 'docs', 'basic', doc[0]), doc[1]);
+  }
+
+  const manual = [
+    '/*',
+    '## 核心功能',
+    '提供示例入口。',
+    '## 输入',
+    '无。',
+    '## 输出',
+    '导出 app 常量。',
+    '## 定位',
+    '位于源码入口。',
+    '## 依赖',
+    '无。',
+    '## 维护规则',
+    '修改行为后更新说明书。',
+    '*/',
+    'export const app = true;',
+    '',
+  ].join('\n');
+  await fs.writeFile(path.join(project, 'src', 'app.js'), manual);
+  const folderReadmeName = `${path.basename(project)}_src_README.md`;
+  await fs.writeFile(path.join(project, 'src', folderReadmeName), [
+    '# src 文件夹说明书',
+    '',
+    '## 核心功能',
+    '承载示例源码。',
+    '',
+    '## 输入',
+    '开发者编辑源码。',
+    '',
+    '## 输出',
+    '对外提供示例入口。',
+    '',
+    '## 定位',
+    '项目源码目录。',
+    '',
+    '## 依赖',
+    '无。',
+    '',
+    '## 维护规则',
+    '- 新增源码后更新本文档。',
+    '',
+  ].join('\n'));
+
+  const passed = await checkStandardsWorkspace(project);
+  assert.equal(passed.ok, true);
+  assert.ok(passed.checks.some((check) => check.includes('源文件说明书: 1/1。')));
+  assert.ok(passed.checks.some((check) => check.includes('文件夹说明书: 1/1。')));
+});
+
 test('setup enables Codex hooks while preserving user hook groups', async () => {
   const project = await makeTempProject();
   const codexHome = path.join(project, 'codex-home');

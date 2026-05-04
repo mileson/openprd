@@ -200,7 +200,11 @@ export async function validateOpenSpecChangeWorkspace(projectRoot, options = {})
   errors.push(...taskVolume.errors);
   checks.push(...taskVolume.checks);
 
-  const standards = await checkStandardsWorkspace(projectRoot, { optional: !(await exists(cjoin(projectRoot, '.openprd'))) });
+  const standards = await checkStandardsWorkspace(projectRoot, {
+    optional: !(await exists(cjoin(projectRoot, '.openprd'))),
+    sourceManuals: options.sourceManuals,
+    docsContent: options.docsContent,
+  });
   if (!standards.skipped) {
     errors.push(...standards.errors);
     warnings.push(...standards.warnings);

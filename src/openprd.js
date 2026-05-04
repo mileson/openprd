@@ -3992,7 +3992,11 @@ async function verifyOpenSpecDiscoveryWorkspace(projectRoot) {
   let taskVolume = null;
   let standards = null;
   if (discoveryConfig?.activeChange) {
-    openSpecChange = await validateOpenSpecChangeWorkspace(projectRoot, { change: discoveryConfig.activeChange });
+    openSpecChange = await validateOpenSpecChangeWorkspace(projectRoot, {
+      change: discoveryConfig.activeChange,
+      sourceManuals: false,
+      docsContent: false,
+    });
     taskVolume = openSpecChange.taskVolume;
     standards = openSpecChange.standards ?? null;
     verification.errors.push(...openSpecChange.errors);
@@ -4002,7 +4006,11 @@ async function verifyOpenSpecDiscoveryWorkspace(projectRoot) {
     taskVolume = await analyzeOpenSpecTaskVolumes(projectRoot);
     verification.errors.push(...taskVolume.errors);
     verification.checks.push(...taskVolume.checks);
-    standards = await checkStandardsWorkspace(projectRoot, { optional: !(await exists(cjoin(projectRoot, '.openprd'))) });
+    standards = await checkStandardsWorkspace(projectRoot, {
+      optional: !(await exists(cjoin(projectRoot, '.openprd'))),
+      sourceManuals: false,
+      docsContent: false,
+    });
     if (!standards.skipped) {
       verification.errors.push(...standards.errors);
       verification.warnings.push(...standards.warnings);

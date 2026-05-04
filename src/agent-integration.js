@@ -135,6 +135,7 @@ const CANONICAL_SKILLS = [
       '- `docs/basic/tech-stack.md`',
       '',
       'Run `openprd standards . --verify` before reporting implementation readiness.',
+      'For projects with source files, this gate also requires concrete `docs/basic/` content, file-header manuals, and `[project]_[folder]_README.md` folder manuals.',
       '',
       '## Synchronization Triggers',
       '',

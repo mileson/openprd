@@ -5,6 +5,36 @@ export const OPENPRD_STANDARDS_CONFIG = path.join('.openprd', 'standards', 'conf
 export const OPENPRD_STANDARDS_DIR = path.join('.openprd', 'standards');
 export const STANDARD_DOCS_ROOT = path.join('docs', 'basic');
 export const STANDARD_MANUAL_SECTIONS = ['核心功能', '输入', '输出', '定位', '依赖', '维护规则'];
+const SOURCE_FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.css', '.html', '.swift', '.py', '.go', '.rs']);
+const SOURCE_IGNORE_DIRS = new Set([
+  '.git',
+  '.openprd',
+  'openprd',
+  '.openspec',
+  '.codex',
+  '.claude',
+  '.cursor',
+  'docs',
+  'node_modules',
+  'vendor',
+  'dist',
+  'build',
+  'coverage',
+  '.next',
+  '.venv',
+  'venv',
+  '__pycache__',
+]);
+const DOC_PLACEHOLDER_PATTERNS = [
+  /待补充/,
+  /说明当前项目/,
+  /描述产品/,
+  /说明产品/,
+  /说明前端/,
+  /说明后端/,
+  /说明该文件/,
+  /说明该文件夹/,
+];
 
 export const STANDARD_DOCS = [
   {
@@ -275,9 +305,94 @@ function standardsConfigPath(projectRoot) {
 function validateTextSections(relativePath, text, sections, errors) {
   for (const section of sections) {
     if (!text.includes(`## ${section}`)) {
-      errors.push(`${relativePath} is missing section: ${section}`);
+      errors.push(`${relativePath} 缺少章节: ${section}`);
     }
   }
+}
+
+function sourceManualReadmeName(projectRoot, dirPath) {
+  const moduleName = path.basename(projectRoot).replace(/[^a-zA-Z0-9_-]+/g, '-');
+  const folderName = path.basename(dirPath).replace(/[^a-zA-Z0-9_-]+/g, '-');
+  return `${moduleName}_${folderName}_README.md`;
+}
+
+function shouldIgnoreDir(dirName) {
+  return SOURCE_IGNORE_DIRS.has(dirName);
+}
+
+async function collectSourceFiles(projectRoot, dirPath = projectRoot, files = []) {
+  const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const absolutePath = cjoin(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      if (!shouldIgnoreDir(entry.name)) {
+        await collectSourceFiles(projectRoot, absolutePath, files);
+      }
+      continue;
+    }
+    if (!entry.isFile()) {
+      continue;
+    }
+    if (SOURCE_FILE_EXTENSIONS.has(path.extname(entry.name))) {
+      files.push(absolutePath);
+    }
+  }
+  return files;
+}
+
+async function isOpenPrdToolProject(projectRoot) {
+  const packageJson = await readJson(cjoin(projectRoot, 'package.json')).catch(() => null);
+  return packageJson?.name === '@openprd/cli';
+}
+
+function hasAllManualSections(text) {
+  return STANDARD_MANUAL_SECTIONS.every((section) => text.includes(`## ${section}`));
+}
+
+function hasHeaderManual(text) {
+  const header = text.split(/\r?\n/).slice(0, 80).join('\n');
+  return hasAllManualSections(header);
+}
+
+async function validateSourceManuals(projectRoot, errors, checks) {
+  const sourceFiles = await collectSourceFiles(projectRoot);
+  const sourceDirs = new Set(sourceFiles.map((filePath) => path.dirname(filePath)));
+  const filesMissingManual = [];
+  const foldersMissingManual = [];
+
+  for (const filePath of sourceFiles) {
+    const relativePath = path.relative(projectRoot, filePath);
+    const text = await readText(filePath).catch(() => '');
+    if (!hasHeaderManual(text)) {
+      filesMissingManual.push(relativePath);
+    }
+  }
+
+  for (const dirPath of sourceDirs) {
+    const expectedPath = cjoin(dirPath, sourceManualReadmeName(projectRoot, dirPath));
+    const relativePath = path.relative(projectRoot, expectedPath);
+    const text = await readText(expectedPath).catch(() => null);
+    if (!text || !hasAllManualSections(text)) {
+      foldersMissingManual.push(relativePath);
+    }
+  }
+
+  for (const relativePath of filesMissingManual) {
+    errors.push(`${relativePath} 缺少文件说明书；请在文件头部补齐 ${STANDARD_MANUAL_SECTIONS.join('、')}。`);
+  }
+  for (const relativePath of foldersMissingManual) {
+    errors.push(`${relativePath} 缺少文件夹说明书或章节不完整。`);
+  }
+
+  checks.push(`源文件说明书: ${sourceFiles.length - filesMissingManual.length}/${sourceFiles.length}。`);
+  checks.push(`文件夹说明书: ${sourceDirs.size - foldersMissingManual.length}/${sourceDirs.size}。`);
+
+  return {
+    sourceFiles: sourceFiles.map((filePath) => path.relative(projectRoot, filePath)),
+    sourceDirs: [...sourceDirs].map((dirPath) => path.relative(projectRoot, dirPath) || '.'),
+    filesMissingManual,
+    foldersMissingManual,
+  };
 }
 
 async function writeIfNeeded(filePath, text, options = {}) {
@@ -310,6 +425,7 @@ function buildStandardsConfig() {
       changeValidateRequiresStandards: true,
       taskVerifyUsesStandards: true,
       discoveryVerifyRequiresStandards: true,
+      sourceManuals: true,
     },
   };
 }
@@ -395,6 +511,9 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
   }
 
   const requiredDocs = [];
+  const sourceFiles = await collectSourceFiles(projectRoot);
+  const hasProjectSource = sourceFiles.length > 0;
+  const openPrdToolProject = await isOpenPrdToolProject(projectRoot);
   for (const doc of STANDARD_DOCS) {
     const docPath = requiredDocPath(projectRoot, doc.fileName);
     const relativePath = path.relative(projectRoot, docPath);
@@ -406,9 +525,12 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
     }
     const text = await readText(docPath);
     if (!text.includes(`# ${doc.title}`)) {
-      errors.push(`${relativePath} is missing title: ${doc.title}`);
+      errors.push(`${relativePath} 缺少标题: ${doc.title}`);
     }
     validateTextSections(relativePath, text, doc.sections, errors);
+    if (hasProjectSource && !openPrdToolProject && options.docsContent !== false && DOC_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(text))) {
+      errors.push(`${relativePath} 仍包含模板占位内容，必须更新为当前项目事实。`);
+    }
   }
 
   const templateFiles = [];
@@ -425,6 +547,21 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
     validateTextSections(relativePath, text, STANDARD_MANUAL_SECTIONS, errors);
   }
 
+  const enforceSourceManuals = hasProjectSource
+    && options.sourceManuals !== false
+    && !openPrdToolProject
+    && config?.qualityGates?.sourceManuals !== false
+    && config?.fileManual?.enabled !== false
+    && config?.folderManual?.enabled !== false;
+  const manualReport = enforceSourceManuals
+    ? await validateSourceManuals(projectRoot, errors, checks)
+    : {
+      sourceFiles: [],
+      sourceDirs: [],
+      filesMissingManual: [],
+      foldersMissingManual: [],
+    };
+
   checks.push(`Standards docs root: ${STANDARD_DOCS_ROOT.replaceAll(path.sep, '/')}`);
   checks.push(`Required docs: ${requiredDocs.filter((doc) => doc.exists).length}/${STANDARD_DOCS.length}.`);
   checks.push(`Manual templates: ${templateFiles.filter((file) => file.exists).length}/${STANDARD_TEMPLATE_FILES.length}.`);
@@ -440,5 +577,6 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
     checks,
     requiredDocs,
     templateFiles,
+    manualReport,
   };
 }

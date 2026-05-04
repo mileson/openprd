@@ -179,6 +179,12 @@ openprd changes /path/to/project
 - `.openprd/standards/file-manual-template.md`
 - `.openprd/standards/folder-readme-template.md`
 
+当项目已经存在源码文件时，`openprd standards --verify` 不只检查文件是否存在，还会阻断以下情况：
+
+- `docs/basic/` 仍停留在“待补充”等模板占位内容。
+- 源码文件头部缺少文件说明书。
+- 承载源码的文件夹缺少 `[项目名]_[文件夹名]_README.md` 文件夹说明书。
+
 检查命令：
 
 ```bash
