@@ -58,6 +58,8 @@
 - Codex/Claude/Cursor guidance health is uncertain -> `doctor`
 - hook-driven execution unit is needed -> `run --context`
 - hook-driven loop needs gate validation -> `run --verify`
+- long-running implementation needs one fresh agent session per task -> `loop --plan --change <id>`, then `loop --run --agent codex|claude --dry-run`
+- one long-running task was completed and verified -> `loop --finish --item <task-id> --commit`
 - change structure needs isolated validation -> `change --validate --change <id>`
 - accepted specs need promotion -> `change --apply --change <id>`
 - completed change should be moved out of active work -> `change --archive --change <id>`

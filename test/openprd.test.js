@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { advanceOpenSpecTaskWorkspace, applyOpenPrdChangeWorkspace, archiveOpenPrdChangeWorkspace, captureWorkspace, checkStandardsWorkspace, clarifyWorkspace, classifyWorkspace, diagramWorkspace, diffWorkspace, doctorWorkspace, fleetWorkspace, freezeWorkspace, generateOpenSpecChangeWorkspace, handoffWorkspace, historyWorkspace, initWorkspace, interviewWorkspace, listAcceptedSpecsWorkspace, listOpenPrdChangesWorkspace, listOpenSpecTaskWorkspace, main, nextWorkspace, openspecDiscoveryWorkspace, runWorkspace, setupAgentIntegrationWorkspace, synthesizeWorkspace, validateOpenSpecChangeWorkspace, validateWorkspace } from '../src/openprd.js';
+import { advanceOpenSpecTaskWorkspace, applyOpenPrdChangeWorkspace, archiveOpenPrdChangeWorkspace, captureWorkspace, checkStandardsWorkspace, clarifyWorkspace, classifyWorkspace, diagramWorkspace, diffWorkspace, doctorWorkspace, finishLoopWorkspace, fleetWorkspace, freezeWorkspace, generateOpenSpecChangeWorkspace, handoffWorkspace, historyWorkspace, initLoopWorkspace, initWorkspace, interviewWorkspace, listAcceptedSpecsWorkspace, listOpenPrdChangesWorkspace, listOpenSpecTaskWorkspace, main, nextLoopWorkspace, nextWorkspace, openspecDiscoveryWorkspace, planLoopWorkspace, promptLoopWorkspace, runLoopWorkspace, runWorkspace, setupAgentIntegrationWorkspace, statusLoopWorkspace, synthesizeWorkspace, validateOpenSpecChangeWorkspace, validateWorkspace, verifyLoopWorkspace } from '../src/openprd.js';
 
 async function makeTempProject() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'openprd-test-'));
@@ -61,6 +61,9 @@ test('init creates a workspace and validate passes', async () => {
   assert.ok(await fs.stat(path.join(project, '.codex', 'prompts', 'openprd-fleet.md')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.claude', 'commands', 'openprd', 'fleet.md')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.cursor', 'commands', 'openprd-fleet.md')).then(() => true));
+  assert.ok(await fs.stat(path.join(project, '.codex', 'prompts', 'openprd-loop.md')).then(() => true));
+  assert.ok(await fs.stat(path.join(project, '.claude', 'commands', 'openprd', 'loop.md')).then(() => true));
+  assert.ok(await fs.stat(path.join(project, '.cursor', 'commands', 'openprd-loop.md')).then(() => true));
   const hookRunner = await fs.readFile(path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'utf8');
   assert.equal(hookRunner.startsWith('/* OPENPRD:GENERATED'), true);
   assert.equal(hookRunner.includes('#!/usr/bin/env node'), false);
@@ -765,6 +768,96 @@ test('openprd advances tasks by dependency order and verify command', async () =
 
   const taskEvents = await fs.readFile(path.join(changeDir, 'task-events.jsonl'), 'utf8');
   assert.match(taskEvents, /"taskId":"T001.01"/);
+});
+
+test('openprd loop plans prompts and finishes one verified task', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  const changeDir = path.join(project, 'openprd', 'changes', 'loop-demo');
+  await fs.mkdir(path.join(changeDir, 'specs', 'loop-demo'), { recursive: true });
+  await fs.writeFile(path.join(changeDir, 'proposal.md'), [
+    '# Proposal',
+    '',
+    '## Why',
+    'Long-running agent work needs isolated task sessions.',
+    '',
+    '## What Changes',
+    '- `loop-demo`: Add a loop-driven implementation path.',
+    '',
+    '## Impact',
+    'Agent execution gains deterministic task boundaries.',
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(changeDir, 'specs', 'loop-demo', 'spec.md'), [
+    '# loop-demo Spec',
+    '',
+    '## ADDED Requirements',
+    '',
+    '### Requirement: Loop task sessions SHALL be isolated',
+    'Each implementation task SHALL run in its own agent session.',
+    '',
+    '#### Scenario: Agent starts the next task',
+    '- **WHEN** a loop task is selected',
+    '- **THEN** the prompt limits the agent to that single task',
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(changeDir, 'tasks.md'), [
+    '- [ ] T001.01 Prepare loop state',
+    '  - done: loop state is ready',
+    '  - verify: node -e "process.exit(0)"',
+    '- [ ] T001.02 Launch one-task session',
+    '  - deps: T001.01',
+    '  - done: one-task session is launchable',
+    '  - verify: node -e "process.exit(0)"',
+    '',
+  ].join('\n'));
+
+  const init = await initLoopWorkspace(project, { agent: 'codex' });
+  assert.equal(init.ok, true);
+  assert.equal(init.featureList.policy.oneTaskPerSession, true);
+
+  const planned = await planLoopWorkspace(project, { change: 'loop-demo' });
+  assert.equal(planned.ok, true);
+  assert.equal(planned.summary.total, 2);
+  assert.equal(planned.next.id, 'T001.01');
+
+  const status = await statusLoopWorkspace(project);
+  assert.equal(status.next.id, 'T001.01');
+
+  const next = await nextLoopWorkspace(project, { item: 'T001.02' });
+  assert.equal(next.dependencyState.ready, false);
+  assert.deepEqual(next.dependencyState.incomplete, ['T001.01']);
+
+  const prompt = await promptLoopWorkspace(project, { agent: 'codex' });
+  assert.equal(prompt.ok, true);
+  assert.equal(prompt.task.id, 'T001.01');
+  assert.match(prompt.prompt, /Do not begin the next task/);
+  assert.match(prompt.invocation.display, /codex exec --full-auto/);
+  assert.ok(await fs.stat(path.join(project, prompt.promptPath)).then(() => true));
+
+  const dryRun = await runLoopWorkspace(project, { agent: 'claude', dryRun: true });
+  assert.equal(dryRun.ok, true);
+  assert.equal(dryRun.dryRun, true);
+  assert.match(dryRun.invocation.display, /claude --print/);
+
+  const verify = await verifyLoopWorkspace(project, { item: 'T001.01' });
+  assert.equal(verify.ok, true);
+
+  const finish = await finishLoopWorkspace(project, { item: 'T001.01', commit: false });
+  assert.equal(finish.ok, true);
+  assert.equal(finish.summary.done, 1);
+  assert.equal(finish.next.id, 'T001.02');
+
+  const featureList = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'feature-list.json'), 'utf8'));
+  assert.equal(featureList.tasks.find((task) => task.id === 'T001.01').status, 'done');
+  assert.equal(featureList.tasks.find((task) => task.id === 'T001.02').status, 'pending');
+
+  const tasksText = await fs.readFile(path.join(changeDir, 'tasks.md'), 'utf8');
+  assert.match(tasksText, /- \[x\] T001\.01 Prepare loop state/);
+
+  const sessions = await fs.readFile(path.join(project, '.openprd', 'harness', 'agent-sessions.jsonl'), 'utf8');
+  assert.match(sessions, /"action":"run-dry-run"/);
+  assert.match(sessions, /"action":"finish"/);
 });
 
 test('validate fails for an empty project', async () => {

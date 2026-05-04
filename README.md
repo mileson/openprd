@@ -39,6 +39,7 @@ It is especially useful when you want:
 - **OpenPrd discovery mode**: initialize durable coverage runs for existing projects, reference projects, or unclear requirements
 - **Project standards**: initialize and verify `docs/basic/`, file manual templates, and folder README templates as part of execution quality gates
 - **OpenPrd change and task execution**: materialize PRD snapshots into change files, validate them, apply accepted specs, archive changes, and advance structured tasks by dependency order
+- **Long-running agent loop**: turn accepted change tasks into one-task-per-session Codex or Claude execution prompts with verification, progress logs, and optional task commits
 - **Default agent integration**: generate Codex, Claude, and Cursor guidance from one OpenPrd source, including Codex hooks with `codex_hooks = true`
 - **Agent harness skills**: repo-local skills for shared rules, workflow control, and diagram review
 
@@ -215,6 +216,8 @@ openprd update /path/to/project
 openprd fleet /path/to/projects --dry-run
 openprd run /path/to/project --context
 openprd run /path/to/project --verify
+openprd loop /path/to/project --plan --change <change-id>
+openprd loop /path/to/project --run --agent codex --dry-run
 ```
 
 Installing the CLI alone does not mutate a project or user config. The full
@@ -244,6 +247,39 @@ change validation, and active discovery verification.
 `openprd run . --context` is the Ralph-style loop surface for agents. It selects
 the next executable unit from active change tasks, discovery coverage, or normal
 OpenPrd workflow state, and records hook turns in `.openprd/harness/iterations.jsonl`.
+
+### Long-Running Agent Loop
+
+For implementation work that should behave like the harness pattern described by
+Anthropic's long-running agent guidance, use `openprd loop`. The loop is stricter
+than `run --context`: it creates a durable feature list, writes a single-task
+prompt, starts a fresh Codex or Claude session for exactly one task, verifies the
+task, and can commit that task before moving on.
+
+```bash
+openprd loop . --init
+openprd loop . --plan --change <change-id>
+openprd loop . --next
+openprd loop . --prompt --agent codex
+openprd loop . --run --agent codex --dry-run
+openprd loop . --run --agent claude --dry-run
+openprd loop . --verify --item T001.01
+openprd loop . --finish --item T001.01 --commit --message "Complete T001.01"
+```
+
+The loop writes its durable state under `.openprd/harness/`:
+
+- `feature-list.json` is the ordered implementation task list.
+- `progress.md` is the human-readable progress log.
+- `agent-sessions.jsonl` records each prompt/run/finish event.
+- `bootstrap.sh` is the startup check each fresh agent session runs.
+- `loop-state.json` stores the current task and last agent session.
+- `loop-prompts/` stores generated single-task prompts for audit and reuse.
+
+Use `--dry-run` first when you want OpenPrd to prepare the prompt and exact command
+without launching an agent. Use `--agent codex` or `--agent claude` for the default
+CLI integrations. Use `--agent-command "<custom command>"` only when you want to
+pipe the OpenPrd prompt into a project-specific wrapper.
 
 For historical projects, use `fleet` instead of hand-writing shell loops. By
 default it scans and reports only. `--update-openprd` refreshes projects that

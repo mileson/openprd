@@ -15,10 +15,11 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
 2. Rebuild current workspace state from `.openprd/`.
 3. If the user expects automatic agent guidance, use `openprd doctor <path>` and repair with `openprd setup <path>` or `openprd update <path>`.
 4. Prefer `openprd run <path> --context` before choosing an execution unit.
-5. Use `openprd status` and `openprd next` when you need full workflow detail.
-6. If the user asks for baseline docs, file manuals, folder README standards, or implementation readiness, route to `$openprd-standards`.
-7. If the user asks for a visual explanation or the system/product shape is unclear, route to `$openprd-diagram-review` before freeze.
-8. Read `.openprd/harness/drift-report.json` when `doctor` reports generated guidance drift.
+5. For implementation tasks that must run for a long time, use `openprd loop <path> --plan --change <id>` and launch one fresh agent session per loop task.
+6. Use `openprd status` and `openprd next` when you need full workflow detail.
+7. If the user asks for baseline docs, file manuals, folder README standards, or implementation readiness, route to `$openprd-standards`.
+8. If the user asks for a visual explanation or the system/product shape is unclear, route to `$openprd-diagram-review` before freeze.
+9. Read `.openprd/harness/drift-report.json` when `doctor` reports generated guidance drift.
 
 ## Main Workflow
 
@@ -39,6 +40,16 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
   - `openprd run <path> --context`
   - `openprd run <path> --verify`
   - Keep `.openprd/harness/run-state.json`, `iterations.jsonl`, and `learnings.md` as durable loop state.
+- For long-running implementation loops, use:
+  - `openprd loop <path> --init`
+  - `openprd loop <path> --plan --change <id>`
+  - `openprd loop <path> --next`
+  - `openprd loop <path> --prompt --agent codex`
+  - `openprd loop <path> --run --agent codex --dry-run`
+  - `openprd loop <path> --run --agent claude --dry-run`
+  - `openprd loop <path> --finish --item <task-id> --commit`
+  - Keep `.openprd/harness/feature-list.json`, `progress.md`, `agent-sessions.jsonl`, `loop-state.json`, and `loop-prompts/` as durable implementation state.
+  - Each loop task is the full boundary for one fresh Codex or Claude session. Do not continue into the next task inside the same session.
 - For historical project fleets, audit before mutating:
   - `openprd fleet <root> --dry-run`
   - `openprd fleet <root> --update-openprd`
@@ -98,7 +109,8 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
 ## Safe Defaults
 
 - Prefer `openprd next` when there is ambiguity about the next action.
-- Prefer `openprd run --context` when the task is part of an execution loop.
+- Prefer `openprd run --context` when the task is part of a general execution loop.
+- Prefer `openprd loop --plan` and `openprd loop --run --dry-run` when the task is implementation work that should be split into one task per fresh agent session.
 - Prefer `openprd doctor` when the agent environment may not be following OpenPrd automatically.
 - Prefer repairing drift with `openprd update` instead of manually editing generated adapter files.
 - Prefer review before freeze when the shape of the solution is still unclear.

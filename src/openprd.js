@@ -14,6 +14,7 @@ import { activateOpenPrdChangeWorkspace, applyOpenPrdChangeWorkspace, archiveOpe
 import { legacyOpenSpecDiscoveryDir, openPrdDiscoveryDir, readDiscoveryConfig } from './openspec/paths.js';
 import { checkStandardsWorkspace, initStandardsWorkspace } from './standards.js';
 import { doctorOpenPrdAgentIntegration, setupOpenPrdAgentIntegration, updateOpenPrdAgentIntegration } from './agent-integration.js';
+import { finishLoopWorkspace, initLoopWorkspace, nextLoopWorkspace, planLoopWorkspace, promptLoopWorkspace, runLoopWorkspace, statusLoopWorkspace, verifyLoopWorkspace } from './loop.js';
 
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SEED_WORKSPACE = path.join(PACKAGE_ROOT, '.openprd');
@@ -4018,7 +4019,7 @@ async function verifyOpenSpecDiscoveryWorkspace(projectRoot) {
 
 function parseCommandArgs(argv) {
   const args = [...argv];
-  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, dryRun: false, updateOpenprd: false, setupMissing: false, doctor: false, context: false, recordHook: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, source: null, reference: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', templatePack: null, target: 'openprd', path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, event: null, risk: null, outcome: null, preview: null, learn: null };
+  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, dryRun: false, updateOpenprd: false, setupMissing: false, doctor: false, context: false, recordHook: false, plan: false, prompt: false, loopRun: false, finish: false, commit: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, source: null, reference: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', templatePack: null, target: 'openprd', path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, event: null, risk: null, outcome: null, preview: null, learn: null, agent: 'codex', agentCommand: null, message: null };
   const positionals = [];
 
   while (args.length > 0) {
@@ -4091,6 +4092,26 @@ function parseCommandArgs(argv) {
       flags.dryRun = true;
       continue;
     }
+    if (arg === '--plan') {
+      flags.plan = true;
+      continue;
+    }
+    if (arg === '--prompt') {
+      flags.prompt = true;
+      continue;
+    }
+    if (arg === '--run') {
+      flags.loopRun = true;
+      continue;
+    }
+    if (arg === '--finish') {
+      flags.finish = true;
+      continue;
+    }
+    if (arg === '--commit') {
+      flags.commit = true;
+      continue;
+    }
     if (arg === '--update-openprd') {
       flags.updateOpenprd = true;
       continue;
@@ -4125,6 +4146,14 @@ function parseCommandArgs(argv) {
     }
     if (arg === '--tools') {
       flags.tools = args.shift() ?? 'all';
+      continue;
+    }
+    if (arg === '--agent') {
+      flags.agent = args.shift() ?? 'codex';
+      continue;
+    }
+    if (arg === '--agent-command') {
+      flags.agentCommand = args.shift() ?? null;
       continue;
     }
     if (arg === '--product-type' || arg === '-P') {
@@ -4247,6 +4276,10 @@ function parseCommandArgs(argv) {
       flags.preview = args.shift() ?? null;
       continue;
     }
+    if (arg === '--message') {
+      flags.message = args.shift() ?? null;
+      continue;
+    }
     if (arg === '--learn') {
       flags.learn = args.shift() ?? null;
       continue;
@@ -4288,6 +4321,7 @@ function usage() {
     '  openprd doctor [path] [--tools <all|codex,claude,cursor>] [--json]',
     '  openprd fleet <root> [--dry-run|--doctor|--update-openprd|--setup-missing] [--max-depth <n>] [--include <csv>] [--exclude <csv>] [--report <file>] [--json]',
     '  openprd run [path] [--context|--verify|--record-hook --event <name> --risk <level> --outcome <text> --preview <text>] [--json]',
+    '  openprd loop [path] [--init|--plan|--next|--prompt|--run|--verify|--finish] [--change <id>] [--item <task-id>] [--agent <codex|claude>] [--agent-command <cmd>] [--commit] [--dry-run] [--message <text>] [--json]',
     '  openprd classify [path] <consumer|b2b|agent>',
     '  openprd clarify [path] [--json]',
     '  openprd capture [path] (--field <section.path> --value <text|json> | --json-file <answers.json>) [--source <user-confirmed|project-derived|agent-inferred>] [--append] [--json]',
@@ -4699,6 +4733,70 @@ function printRunResult(result, json) {
   console.log(`状态文件: ${result.files.runState}`);
 }
 
+function printLoopResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.action === 'loop-prompt') {
+    console.log(`OpenPrd loop prompt: ${result.ok ? 'ready' : 'blocked'}`);
+    if (result.task) {
+      console.log(`任务: ${result.task.id} ${result.task.title}`);
+    }
+    if (result.promptPath) {
+      console.log(`Prompt: ${result.promptPath}`);
+    }
+    if (result.invocation?.display) {
+      console.log(`执行: ${result.invocation.display}`);
+    }
+    if (result.errors?.length) {
+      for (const error of result.errors) console.log(`- ${error}`);
+    }
+    return;
+  }
+
+  if (result.action === 'loop-run') {
+    console.log(`OpenPrd loop run: ${result.ok ? '通过' : '失败'}${result.dryRun ? ' (dry-run)' : ''}`);
+    if (result.task) console.log(`任务: ${result.task.id} ${result.task.title}`);
+    if (result.promptPath) console.log(`Prompt: ${result.promptPath}`);
+    if (result.invocation?.display) console.log(`执行: ${result.invocation.display}`);
+    if (result.finish?.commit) {
+      console.log(`Commit: ${result.finish.commit.skipped ? 'skipped' : result.finish.commit.sha}`);
+    }
+    if (result.errors?.length) {
+      for (const error of result.errors) console.log(`- ${error}`);
+    }
+    return;
+  }
+
+  if (result.action === 'loop-finish') {
+    console.log(`OpenPrd loop finish: ${result.ok ? '通过' : '失败'}`);
+    if (result.task) console.log(`任务: ${result.task.id} ${result.task.title}`);
+    if (result.commit) console.log(`Commit: ${result.commit.skipped ? 'skipped' : result.commit.sha}`);
+    if (result.next) console.log(`下一任务: ${result.next.id} ${result.next.title}`);
+    if (result.errors?.length) {
+      for (const error of result.errors) console.log(`- ${error}`);
+    }
+    return;
+  }
+
+  console.log(`OpenPrd loop: ${result.action} ${result.ok ? '通过' : '失败'}`);
+  if (result.changeId) console.log(`Change: ${result.changeId}`);
+  if (result.summary) {
+    console.log(`任务: ${result.summary.done}/${result.summary.total} done, ${result.summary.pending} pending, ${result.summary.failed} failed, ${result.summary.blocked} blocked`);
+  }
+  if (result.next) {
+    console.log(`下一任务: ${result.next.id} ${result.next.title}`);
+  }
+  if (result.files) {
+    console.log(`Feature list: ${result.files.featureList}`);
+  }
+  if (result.errors?.length) {
+    for (const error of result.errors) console.log(`- ${error}`);
+  }
+}
+
 function printStandardsResult(result, json) {
   if (json) {
     console.log(JSON.stringify(result, null, 2));
@@ -5058,6 +5156,40 @@ export async function main(argv = process.argv.slice(2)) {
       return result.ok ? 0 : 1;
     }
 
+    if (command === 'loop') {
+      let result;
+      const options = {
+        change: flags.change,
+        item: flags.item,
+        agent: flags.agent,
+        agentCommand: flags.agentCommand,
+        dryRun: flags.dryRun,
+        commit: flags.commit,
+        message: flags.message,
+        evidence: flags.evidence,
+        notes: flags.notes,
+      };
+      if (flags.init) {
+        result = await initLoopWorkspace(projectPath, options);
+      } else if (flags.plan) {
+        result = await planLoopWorkspace(projectPath, options);
+      } else if (flags.prompt) {
+        result = await promptLoopWorkspace(projectPath, options);
+      } else if (flags.loopRun) {
+        result = await runLoopWorkspace(projectPath, options);
+      } else if (flags.verify) {
+        result = await verifyLoopWorkspace(projectPath, options);
+      } else if (flags.finish) {
+        result = await finishLoopWorkspace(projectPath, options);
+      } else if (flags.next) {
+        result = await nextLoopWorkspace(projectPath, options);
+      } else {
+        result = await statusLoopWorkspace(projectPath);
+      }
+      printLoopResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
     if (command === 'standards') {
       const result = flags.init
         ? await initStandardsWorkspace(projectPath, { force: flags.force })
@@ -5307,6 +5439,14 @@ export {
   doctorWorkspace,
   fleetWorkspace,
   runWorkspace,
+  initLoopWorkspace,
+  planLoopWorkspace,
+  statusLoopWorkspace,
+  nextLoopWorkspace,
+  promptLoopWorkspace,
+  runLoopWorkspace,
+  verifyLoopWorkspace,
+  finishLoopWorkspace,
   clarifyWorkspace,
   captureWorkspace,
   synthesizeWorkspace,

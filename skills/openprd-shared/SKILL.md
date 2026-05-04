@@ -58,3 +58,4 @@ Use this skill as the shared rulebook for all OpenPrd work. It plays the same ro
 - Need project baseline docs, file manuals, folder README rules, or standards verification? Use `$openprd-standards`.
 - Need generated adapter drift, hooks, or user-level Codex feature checks? Use `$openprd-harness` and `openprd doctor/update`.
 - Need Ralph-style hook-driven execution? Use `$openprd-harness` and `openprd run`.
+- Need long-running implementation with one fresh Codex or Claude session per task? Use `$openprd-harness` and `openprd loop`.
