@@ -149,8 +149,34 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     });
     assert.equal(hookResult.status, 0);
     const hookPayload = JSON.parse(hookResult.stdout);
-    assert.equal(hookPayload.should_stop, false);
-    assert.ok(hookPayload.additional_contexts.some((line) => line.includes('high-risk gate passed')));
+    assert.equal(hookPayload.continue, true);
+    assert.equal(hookPayload.should_stop, undefined);
+    assert.equal(hookPayload.additional_contexts, undefined);
+    assert.equal(hookPayload.hookSpecificOutput.hookEventName, 'PreToolUse');
+    assert.ok(hookPayload.hookSpecificOutput.additionalContext.includes('high-risk gate passed'));
+
+    for (const eventName of ['SessionStart', 'UserPromptSubmit']) {
+      const eventResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), eventName], {
+        cwd: project,
+        input: JSON.stringify({
+          cwd: project,
+          hook_event_name: eventName,
+          prompt: eventName === 'UserPromptSubmit' ? '继续推进 OpenPrd' : undefined,
+        }),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          OPENPRD_CLI: path.resolve('bin/openprd.js'),
+        },
+      });
+      assert.equal(eventResult.status, 0);
+      const eventPayload = JSON.parse(eventResult.stdout);
+      assert.equal(eventPayload.continue, true);
+      assert.equal(eventPayload.should_stop, undefined);
+      assert.equal(eventPayload.additional_contexts, undefined);
+      assert.equal(eventPayload.hookSpecificOutput.hookEventName, eventName);
+      assert.ok(eventPayload.hookSpecificOutput.additionalContext.includes('OpenPrd run context'));
+    }
     const events = await fs.readFile(path.join(project, '.openprd', 'harness', 'events.jsonl'), 'utf8');
     assert.ok(events.includes('allowed-high-risk'));
 

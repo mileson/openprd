@@ -790,6 +790,25 @@ function hookSuppressed(root) {
   return Boolean(state?.suppressions?.inputLock || (lock && lock.active));
 }
 
+function allowHook(additionalContext = null, outputEventName = eventName) {
+  const result = { continue: true };
+  if (additionalContext) {
+    result.hookSpecificOutput = {
+      hookEventName: outputEventName,
+      additionalContext,
+    };
+  }
+  return result;
+}
+
+function blockHook(reason) {
+  return {
+    decision: 'block',
+    reason,
+    systemMessage: reason,
+  };
+}
+
 function handle(eventName, cwd, payload) {
   const root = findProjectRoot(cwd);
   ensureHarness(root);
@@ -805,10 +824,7 @@ function handle(eventName, cwd, payload) {
   };
 
   if (eventName === 'SessionStart' || eventName === 'UserPromptSubmit') {
-    const result = {
-      should_stop: false,
-      additional_contexts: duplicate ? [] : [contextMessage(root)],
-    };
+    const result = allowHook(duplicate ? null : contextMessage(root));
     appendEvent(root, { ...baseEvent, outcome: 'context-injected' });
     recordRunHook(root, baseEvent, 'context-injected');
     updateHookState(root, baseEvent);
@@ -822,34 +838,25 @@ function handle(eventName, cwd, payload) {
       recordRunHook(root, baseEvent, gates.ok ? 'allowed-high-risk' : 'blocked-high-risk');
       updateHookState(root, baseEvent);
       if (!gates.ok) {
-        return {
-          should_block: true,
-          block_reason: [
-            'OpenPrd blocked a high-risk action because a harness gate failed.',
-            gates.summary,
-            ...gates.checks.filter((check) => !check.ok).map((check) => check.output).filter(Boolean),
-            'Run openprd run . --context and openprd doctor .; repair the failed gate, then retry.',
-          ].filter(Boolean).join('\\n'),
-        };
+        return blockHook([
+          'OpenPrd blocked a high-risk action because a harness gate failed.',
+          gates.summary,
+          ...gates.checks.filter((check) => !check.ok).map((check) => check.output).filter(Boolean),
+          'Run openprd run . --context and openprd doctor .; repair the failed gate, then retry.',
+        ].filter(Boolean).join('\\n'));
       }
-      return {
-        should_stop: false,
-        additional_contexts: [\`OpenPrd high-risk gate passed: \${gates.summary}.\`],
-      };
+      return allowHook(\`OpenPrd high-risk gate passed: \${gates.summary}.\`);
     }
     if (risk.level === 'medium') {
       appendEvent(root, { ...baseEvent, outcome: 'allowed-medium-risk' });
       recordRunHook(root, baseEvent, 'allowed-medium-risk');
       updateHookState(root, baseEvent);
-      return {
-        should_stop: false,
-        additional_contexts: ['OpenPrd detected a mutating action. Keep docs/basic, file manuals, folder README docs, and relevant OpenPrd change/task state synchronized before claiming readiness.'],
-      };
+      return allowHook('OpenPrd detected a mutating action. Keep docs/basic, file manuals, folder README docs, and relevant OpenPrd change/task state synchronized before claiming readiness.');
     }
     appendEvent(root, { ...baseEvent, outcome: 'allowed-low-risk' });
     recordRunHook(root, baseEvent, 'allowed-low-risk');
     updateHookState(root, baseEvent);
-    return { should_stop: false };
+    return allowHook();
   }
 
   if (eventName === 'PostToolUse') {
@@ -859,11 +866,9 @@ function handle(eventName, cwd, payload) {
     recordRunHook(root, baseEvent, failed ? 'tool-failure-detected' : 'tool-complete');
     updateHookState(root, baseEvent);
     if (failed && !duplicate) {
-      return {
-        additional_contexts: ['A tool command appears to have failed. Use openprd doctor ., openprd next ., and the relevant verification command to choose the repair path.'],
-      };
+      return allowHook('A tool command appears to have failed. Use openprd doctor ., openprd next ., and the relevant verification command to choose the repair path.');
     }
-    return { should_stop: false };
+    return allowHook();
   }
 
   if (eventName === 'Stop') {
@@ -871,7 +876,7 @@ function handle(eventName, cwd, payload) {
     recordRunHook(root, baseEvent, 'stop-check');
     updateHookState(root, baseEvent);
     if (hookSuppressed(root)) {
-      return { should_stop: false };
+      return allowHook();
     }
     const run = runOpenPrd(['run', '.', '--context', '--json'], root);
     if (run.ok) {
@@ -880,8 +885,8 @@ function handle(eventName, cwd, payload) {
         const command = parsed?.recommendation?.command || '';
         if (command && !/openprd\\s+next\\s+\\./.test(command)) {
           return {
-            should_stop: false,
-            additional_contexts: [\`OpenPrd still has a hook-driven next action:\\n\${parsed.recommendation.title}\\nSuggested command: \${command}\`],
+            continue: true,
+            systemMessage: \`OpenPrd still has a hook-driven next action:\\n\${parsed.recommendation.title}\\nSuggested command: \${command}\`,
           };
         }
       } catch {}
@@ -891,7 +896,7 @@ function handle(eventName, cwd, payload) {
   appendEvent(root, { ...baseEvent, outcome: 'noop' });
   recordRunHook(root, baseEvent, 'noop');
   updateHookState(root, baseEvent);
-return { should_stop: false };
+return allowHook();
 }
 `;
 }
