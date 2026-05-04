@@ -19,12 +19,49 @@ const SOURCE_IGNORE_DIRS = new Set([
   'vendor',
   'dist',
   'build',
+  'out',
+  'release',
+  'releases',
   'coverage',
+  'reports',
+  'test-results',
   '.next',
   '.venv',
   'venv',
   '__pycache__',
+  '.tmp',
+  'tmp',
+  'temp',
+  'third_party',
+  'third-party',
+  'external',
+  'generated',
+  '__fixtures__',
+  'fixtures',
 ]);
+const DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS = [
+  '.tmp/**',
+  'tmp/**',
+  'temp/**',
+  '**/marketplace-sources/**',
+  '**/marketplace-candidates/**',
+  '**/skill-sources/**',
+  '**/legacy-data/**',
+  '**/legacy-public/**',
+  '**/legacy-cache/**',
+  '**/cache/**',
+  '**/generated/**',
+  '**/vendor/**',
+  '**/out/**',
+  '**/release/**',
+  '**/releases/**',
+  '**/reports/**',
+  '**/test-results/**',
+  '**/third_party/**',
+  '**/third-party/**',
+  '**/__fixtures__/**',
+  '**/fixtures/**',
+];
 const DOC_PLACEHOLDER_PATTERNS = [
   /待补充/,
   /说明当前项目/,
@@ -320,20 +357,79 @@ function shouldIgnoreDir(dirName) {
   return SOURCE_IGNORE_DIRS.has(dirName);
 }
 
-async function collectSourceFiles(projectRoot, dirPath = projectRoot, files = []) {
+function toPosixPath(value) {
+  return String(value ?? '').split(path.sep).join('/');
+}
+
+function globToRegExp(pattern) {
+  const escaped = toPosixPath(pattern)
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '\u0000')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\u0000/g, '.*');
+  return new RegExp(`^${escaped}$`);
+}
+
+function matchesPattern(relativePath, patterns = []) {
+  const normalized = toPosixPath(relativePath).replace(/^\/+/, '');
+  return patterns.some((pattern) => globToRegExp(pattern).test(normalized));
+}
+
+function matchesIgnoredPath(relativePath, patterns = [], options = {}) {
+  const normalized = toPosixPath(relativePath).replace(/^\/+/, '');
+  if (!normalized) {
+    return false;
+  }
+  if (matchesPattern(normalized, patterns)) {
+    return true;
+  }
+  if (!options.directory) {
+    return false;
+  }
+  if (matchesPattern(`${normalized}/__openprd_dir__`, patterns)) {
+    return true;
+  }
+  return patterns.some((pattern) => {
+    const normalizedPattern = toPosixPath(pattern).replace(/^\/+/, '');
+    if (!normalizedPattern.endsWith('/**')) {
+      return false;
+    }
+    const prefix = normalizedPattern.slice(0, -3).replace(/\/$/, '');
+    return normalized === prefix || normalized.startsWith(`${prefix}/`);
+  });
+}
+
+function normalizeStringList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim());
+}
+
+function sourceManualIgnorePatterns(config = {}) {
+  return [
+    ...DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS,
+    ...normalizeStringList(config?.sourceManual?.ignorePaths),
+    ...normalizeStringList(config?.fileManual?.ignorePaths),
+    ...normalizeStringList(config?.folderManual?.ignorePaths),
+  ];
+}
+
+async function collectSourceFiles(projectRoot, dirPath = projectRoot, files = [], ignorePatterns = DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS) {
   const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     const absolutePath = cjoin(dirPath, entry.name);
+    const relativePath = toPosixPath(path.relative(projectRoot, absolutePath));
     if (entry.isDirectory()) {
-      if (!shouldIgnoreDir(entry.name)) {
-        await collectSourceFiles(projectRoot, absolutePath, files);
+      if (!shouldIgnoreDir(entry.name) && !matchesIgnoredPath(relativePath, ignorePatterns, { directory: true })) {
+        await collectSourceFiles(projectRoot, absolutePath, files, ignorePatterns);
       }
       continue;
     }
     if (!entry.isFile()) {
       continue;
     }
-    if (SOURCE_FILE_EXTENSIONS.has(path.extname(entry.name))) {
+    if (SOURCE_FILE_EXTENSIONS.has(path.extname(entry.name)) && !matchesIgnoredPath(relativePath, ignorePatterns)) {
       files.push(absolutePath);
     }
   }
@@ -354,8 +450,8 @@ function hasHeaderManual(text) {
   return hasAllManualSections(header);
 }
 
-async function validateSourceManuals(projectRoot, errors, checks) {
-  const sourceFiles = await collectSourceFiles(projectRoot);
+async function validateSourceManuals(projectRoot, errors, checks, options = {}) {
+  const sourceFiles = await collectSourceFiles(projectRoot, projectRoot, [], options.ignorePatterns);
   const sourceDirs = new Set(sourceFiles.map((filePath) => path.dirname(filePath)));
   const filesMissingManual = [];
   const foldersMissingManual = [];
@@ -388,6 +484,7 @@ async function validateSourceManuals(projectRoot, errors, checks) {
   checks.push(`文件夹说明书: ${sourceDirs.size - foldersMissingManual.length}/${sourceDirs.size}。`);
 
   return {
+    ignorePatterns: options.ignorePatterns ?? DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS,
     sourceFiles: sourceFiles.map((filePath) => path.relative(projectRoot, filePath)),
     sourceDirs: [...sourceDirs].map((dirPath) => path.relative(projectRoot, dirPath) || '.'),
     filesMissingManual,
@@ -414,12 +511,17 @@ function buildStandardsConfig() {
       template: 'file-manual-template.md',
       requiredSections: STANDARD_MANUAL_SECTIONS,
       placement: 'file-header',
+      ignorePaths: DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS,
     },
     folderManual: {
       enabled: true,
       template: 'folder-readme-template.md',
       naming: '[module]_[folder]_README.md',
       requiredSections: STANDARD_MANUAL_SECTIONS,
+      ignorePaths: DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS,
+    },
+    sourceManual: {
+      ignorePaths: DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS,
     },
     qualityGates: {
       changeValidateRequiresStandards: true,
@@ -510,8 +612,9 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
     }
   }
 
+  const ignorePatterns = sourceManualIgnorePatterns(config ?? {});
   const requiredDocs = [];
-  const sourceFiles = await collectSourceFiles(projectRoot);
+  const sourceFiles = await collectSourceFiles(projectRoot, projectRoot, [], ignorePatterns);
   const hasProjectSource = sourceFiles.length > 0;
   const openPrdToolProject = await isOpenPrdToolProject(projectRoot);
   for (const doc of STANDARD_DOCS) {
@@ -554,8 +657,9 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
     && config?.fileManual?.enabled !== false
     && config?.folderManual?.enabled !== false;
   const manualReport = enforceSourceManuals
-    ? await validateSourceManuals(projectRoot, errors, checks)
+    ? await validateSourceManuals(projectRoot, errors, checks, { ignorePatterns })
     : {
+      ignorePatterns,
       sourceFiles: [],
       sourceDirs: [],
       filesMissingManual: [],
