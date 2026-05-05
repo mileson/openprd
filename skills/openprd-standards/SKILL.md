@@ -41,9 +41,23 @@ OpenPrd standards require:
 
 - Run `openprd standards <path> --verify` before claiming a change is ready.
 - Generated OpenPrd change tasks should include standards maintenance tasks.
+- For every added or modified source file, perform a documentation impact check.
+- If `docs/basic/`, a file manual, or a folder README is missing or still template-like, supplement it before claiming readiness.
+- If the documentation already exists, review whether this change makes it stale and update it when responsibilities, flows, structure, dependencies, or product behavior changed.
 - When a feature changes files, folders, flows, architecture, dependencies, or product logic, update the relevant `docs/basic/` document.
 - When a feature changes code file responsibilities, update the file manual.
 - When a feature changes folder responsibilities or file layout, update the folder README.
+- If no documentation update is needed, report that the impact check was performed and why the existing docs remain accurate.
+
+## Documentation Impact Check
+
+Use this checklist during implementation:
+
+- Added source file: add a file manual if it is missing and ensure the containing folder README exists.
+- Modified source file: read the existing file manual when present; update it if the file responsibilities, inputs, outputs, dependencies, or maintenance rules changed.
+- Added, moved, removed, or repurposed folder content: add or update the folder README so it reflects the current folder responsibility and file layout.
+- Feature, flow, architecture, dependency, or product behavior changed: update the relevant `docs/basic/` document even when the file already exists.
+- Missing standards contract: run `openprd standards <path> --init` only for workspace setup or explicit standards repair, then replace template content with project facts.
 
 ## Do Not
 

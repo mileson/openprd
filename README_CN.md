@@ -126,6 +126,10 @@ openprd handoff /path/to/project --target openprd
 继续深挖这个需求，直到 OpenPrd 覆盖完整。
 ```
 
+Discovery 和 loop 执行需要明确的深度或执行意图。用户只是说“看看、规划、
+梳理、分析、预计动哪些文件、怎么改”时，Agent 应只读检查状态和代码后回答，
+不得推进 coverage，也不得启动 loop 任务。
+
 Agent 会在内部完成路由。底层命令是：
 
 ```bash
@@ -194,6 +198,12 @@ openprd standards /path/to/project --verify
 OpenPrd 生成的 change 会包含标准化维护任务，change 校验也会检查这套契约。
 项目基础文档的唯一标准路径是 `docs/basic/`。
 
+实现阶段的标准化维护是明确的影响判定，不是最后顺手清理。每次新增或修改源码
+文件时，Agent 都要检查 `docs/basic/`、文件说明书、所在文件夹 README 是否缺失
+或已因本次变更过期。缺失的必须补齐；已有文档如果受到职责、流程、结构、依赖
+或产品行为变化影响，也必须同步更新。如果无需更新，应说明已经完成影响判定以及
+为什么现有文档仍然准确。
+
 ## Agent 自动接入
 
 OpenPrd 会把协同规则装进项目，让用户不需要记住具体 skill、命令或 hook：
@@ -235,6 +245,12 @@ Codex 或 Claude 会话只处理这一个任务。每个任务完成后必须先
 重新自测；前端界面任务在 Codex 客户端优先用 Computer Use，在 Codex CLI 和
 Claude Code 中优先用 Playwright、MCP 浏览器自动化或项目已有 e2e 工具。验证
 通过后，`loop --finish` 会写入阶段性测试报告，并可为该任务生成独立 commit。
+
+`openprd run --context` 可能展示 loop 相关执行命令，但它不是自动执行指令。
+只有当用户当前明确要求开发、实现、继续任务、深度调研、深度对标、复刻落地或
+提交时，Agent 才能运行 `openprd loop --run`、`openprd tasks --advance`、
+`openprd discovery --advance` 或 commit 命令。规划和审查类对话应止步于模块 /
+文件清单和证据说明。
 
 ```bash
 openprd loop . --init

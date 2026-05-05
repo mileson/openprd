@@ -129,7 +129,7 @@ function featureTaskFromOpenSpecTask(task, changeId) {
       '完成代码后必须先自测，失败就修复并重新自测。',
       '涉及前端界面时，在 Codex 客户端优先使用 Computer Use；在 Codex CLI 或 Claude Code 中优先使用 Playwright、MCP 或等价浏览器自动化。',
       '纯后端、脚本或库任务使用最贴近项目的脚本、单测、集成测试或命令行验证。',
-      '保持 docs/basic、文件说明书和文件夹 README 与本任务改动同步。',
+      '新增或修改文件时先做文档影响判定：缺少 docs/basic、文件说明书或文件夹 README 就补齐；已有文档若因本任务职责、流程、结构、依赖或产品行为变化而过期，就同步更新。',
     ],
     updatedAt: timestamp(),
   };

@@ -386,7 +386,19 @@ function printRunResult(result, json) {
   console.log(`下一步类型: ${result.recommendation.type}`);
   console.log(`下一步: ${result.recommendation.title}`);
   console.log(`原因: ${result.recommendation.reason}`);
-  console.log(`建议命令: ${result.recommendation.command}`);
+  console.log(`建议只读命令: ${result.recommendation.command}`);
+  if (result.recommendation.preparationCommand || result.recommendation.executionCommand || result.recommendation.commitCommand) {
+    console.log('执行门槛: 仅当用户当前明确要求开发、实现、继续任务、深度调研、深度对标、复刻落地或提交时使用；规划、梳理、分析、审查类请求保持只读。');
+  }
+  if (result.recommendation.preparationCommand) {
+    console.log(`准备命令: ${result.recommendation.preparationCommand}`);
+  }
+  if (result.recommendation.executionCommand) {
+    console.log(`执行命令: ${result.recommendation.executionCommand}`);
+  }
+  if (result.recommendation.commitCommand) {
+    console.log(`提交命令: ${result.recommendation.commitCommand}`);
+  }
   console.log(`验证命令: ${result.recommendation.verifyCommand}`);
   console.log(`状态文件: ${result.files.runState}`);
 }

@@ -16,6 +16,7 @@ Use this skill as the shared rulebook for all OpenPrd work. It plays the same ro
 2. Distinguish read-only commands from mutating commands.
    - Read-only: `status`, `validate`, `next`, `history`, `diff`, `interview`, `doctor`
    - Mutating: `init`, `setup`, `update`, `classify`, `synthesize`, `diagram`, `freeze`, `handoff`
+   - Execution commands: `loop --run`, `tasks --advance`, `discovery --advance`, `loop --finish --commit`, git commit, and git push require explicit current-user execution intent.
 3. Never invent OpenPrd commands or artifact types.
    - Confirm against `openprd --help` if unsure.
 4. Keep shared rules here and domain-specific rules in the relevant skill.
@@ -34,15 +35,22 @@ Use this skill as the shared rulebook for all OpenPrd work. It plays the same ro
    - Use `nextReadyNode`, blockers, active artifacts, and validation status to justify the next step.
 9. Prefer hook-stable run state for execution loops.
    - Use `openprd run <path> --context` to select the next task, discovery item, or workflow action.
+   - Treat `run --context` as advisory context, not as a direct instruction to execute its command.
    - Use `openprd run <path> --verify` before claiming readiness.
    - Use `.openprd/harness/run-state.json`, `iterations.jsonl`, and `learnings.md` to survive fresh contexts.
    - Use `.openprd/harness/install-manifest.json`, `hook-state.json`, `events.jsonl`, and `drift-report.json` to reason about generated guidance health.
+10. Treat documentation as part of implementation, not as an optional cleanup.
+   - For added or modified files, check whether `docs/basic/`, file manuals, and folder README docs are missing or stale.
+   - Create missing docs/manuals and update existing ones when responsibilities, flows, structure, dependencies, or product behavior changed.
 9. When critical product facts are missing, ask the user before pushing the workspace forward.
    - If the current mode cannot use a structured ask-user tool, ask directly in plain language.
    - Do not treat “tool unavailable” as permission to silently guess.
 
 ## Shared Confirmation Rules
 
+- Stay read-only when the user asks to 看看, 规划, 梳理, 分析, 评估, explain, review, or list impacted files. In those turns, answer from evidence and do not run `openprd loop --run`, `openprd tasks --advance`, `openprd discovery --advance`, commits, pushes, or other mutating commands.
+- Execute OpenPrd loop/task/discovery advancement only when the current user message explicitly asks to develop, implement, fix, continue a task, deeply research/benchmark, replicate, or commit.
+- Before claiming implementation readiness, report whether the documentation impact check created, updated, or intentionally left unchanged `docs/basic/`, file manuals, and folder README docs.
 - Ask for user confirmation before freeze when the system shape, product flow, or external dependencies are still materially uncertain.
 - Ask for user confirmation before handoff when the user has not yet seen the latest synthesized or visualized artifact.
 - If the user asks for a visual explanation, route to `$openprd-diagram-review`.

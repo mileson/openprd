@@ -15,11 +15,14 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
 2. Rebuild current workspace state from `.openprd/`.
 3. If the user expects automatic agent guidance, use `openprd doctor <path>` and repair with `openprd setup <path>` or `openprd update <path>`.
 4. Prefer `openprd run <path> --context` before choosing an execution unit.
-5. For implementation tasks that must run for a long time, use `openprd loop <path> --plan --change <id>` and launch one fresh agent session per loop task.
-6. Use `openprd status` and `openprd next` when you need full workflow detail.
-7. If the user asks for baseline docs, file manuals, folder README standards, or implementation readiness, route to `$openprd-standards`.
-8. If the user asks for a visual explanation or the system/product shape is unclear, route to `$openprd-diagram-review` before freeze.
-9. Read `.openprd/harness/drift-report.json` when `doctor` reports generated guidance drift.
+5. Treat `openprd run <path> --context` as advisory. Do not follow its mutating command automatically.
+6. For planning, analysis, architecture review, "how would we change this?", or "which files are involved?" requests, stay read-only and answer from evidence.
+7. For implementation tasks that add or modify files, perform a documentation impact check: create missing `docs/basic/`, file manuals, or folder README docs, and update existing docs when the change affects responsibilities, flows, structure, dependencies, or product behavior.
+8. For implementation tasks that must run for a long time, use `openprd loop <path> --plan --change <id>` and launch one fresh agent session per loop task only when the current user message explicitly asks to develop, continue a task, deeply research/benchmark, replicate, or commit.
+9. Use `openprd status` and `openprd next` when you need full workflow detail.
+10. If the user asks for baseline docs, file manuals, folder README standards, or implementation readiness, route to `$openprd-standards`.
+11. If the user asks for a visual explanation or the system/product shape is unclear, route to `$openprd-diagram-review` before freeze.
+12. Read `.openprd/harness/drift-report.json` when `doctor` reports generated guidance drift.
 
 ## Main Workflow
 
@@ -40,6 +43,7 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
   - `openprd run <path> --context`
   - `openprd run <path> --verify`
   - Keep `.openprd/harness/run-state.json`, `iterations.jsonl`, and `learnings.md` as durable loop state.
+  - Do not treat `run --context` recommendations as direct user commands.
 - For long-running implementation loops, use:
   - `openprd loop <path> --init`
   - `openprd loop <path> --plan --change <id>`
@@ -49,6 +53,8 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
   - `openprd loop <path> --run --agent claude --dry-run`
   - `openprd loop <path> --finish --item <task-id> --commit`
   - Keep `.openprd/harness/feature-list.json`, `progress.md`, `agent-sessions.jsonl`, `loop-state.json`, and `loop-prompts/` as durable implementation state.
+  - Run `openprd loop <path> --run` only after explicit user intent for development, task continuation, deep research/benchmarking, replication, or commit.
+  - Before `openprd loop <path> --finish`, run the documentation impact check for added or modified files and update missing or stale `docs/basic/`, file manuals, and folder README docs.
   - Each loop task is the full boundary for one fresh Codex or Claude session. Do not continue into the next task inside the same session.
 - For historical project fleets, audit before mutating:
   - `openprd fleet <root> --dry-run`
@@ -97,6 +103,7 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
 - Freeze is a gate, not just another render step.
 - Before reporting implementation readiness, verify standards:
   - `openprd standards <path> --verify`
+  - This is not only a missing-file check. For changed files, also decide whether existing docs are now stale and update them when needed.
 - Before high-risk actions, verify the full harness:
   - `openprd run <path> --verify`
   - `openprd doctor <path>`
@@ -111,6 +118,8 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
 - Prefer `openprd next` when there is ambiguity about the next action.
 - Prefer `openprd run --context` when the task is part of a general execution loop.
 - Prefer `openprd loop --plan` and `openprd loop --run --dry-run` when the task is implementation work that should be split into one task per fresh agent session.
+- Prefer read-only inspection when the user asks to 看看, 规划, 梳理, 分析, 评估, explain, review, or list impacted files.
+- Never run `openprd loop --run`, `openprd tasks --advance`, `openprd discovery --advance`, `openprd loop --finish --commit`, git commit, or git push unless the current user message explicitly asks for execution.
 - Prefer `openprd doctor` when the agent environment may not be following OpenPrd automatically.
 - Prefer repairing drift with `openprd update` instead of manually editing generated adapter files.
 - Prefer review before freeze when the shape of the solution is still unclear.

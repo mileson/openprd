@@ -14,6 +14,9 @@
 - CLI 表层: `src/cli/args.js` 解析参数，`src/cli/print.js` 统一渲染终端输出。
 - 文件基础设施: `src/fs-utils.js` 统一封装文本、JSON、YAML、JSONL 读写。
 - 运行编排: `src/run-harness.js` 负责 `openprd run` 上下文、hook 记录和 verify 门禁。
+- Agent 集成: `src/agent-integration.js` 负责生成 AGENTS、skills、commands、Codex hooks 和执行/文档门禁提示。
+- 标准化: `src/standards.js` 负责 `docs/basic/`、文件说明书模板、文件夹说明书模板和 standards 校验。
+- Loop 编排: `src/loop.js` 负责长任务拆分、单任务 prompt、session 记录、任务 verify 和 finish。
 - 规模化操作: `src/fleet.js` 负责扫描历史项目并按依赖注入调用 setup/update/doctor。
 - 持续调研: `src/discovery.js` 负责 discovery run、source inventory、coverage matrix、claims 和 discovery 验证。
 - OpenSpec 文件域: `src/openspec/` 负责 change/spec/task 的读写、验证、应用和归档。
@@ -25,6 +28,8 @@
 - 工作区状态主要读写 `.openprd/` 下的 config、templates、state、engagements、exports 和 harness 文件。
 - 模块返回结构化 result，`src/cli/print.js` 再根据 `--json` 决定输出 JSON 或用户可读文本。
 - `run-harness`、`fleet`、`discovery` 通过工厂依赖注入调用核心工作区能力，避免从子模块反向导入 `src/openprd.js`。
+- `agent-integration` 将 canonical skills 和 AGENTS 合同渲染到各端 adapter；这些生成物必须包含意图门禁和文档影响判定规则。
+- `openspec/generate` 在生成 change tasks 时加入 `docs/basic` 与说明书维护任务，`standards` 在 verify 阶段检查基础契约是否存在并满足结构要求。
 
 ## 维护规则
 

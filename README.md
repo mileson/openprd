@@ -138,6 +138,11 @@ Use OpenPrd to comprehensively mine this reference project into the new project.
 Keep digging into this requirement until OpenPrd coverage is complete.
 ```
 
+Discovery and loop execution require explicit depth or execution intent. For
+planning, architecture review, impact analysis, or "which files would change?"
+questions, agents should inspect state and answer read-only instead of advancing
+coverage or launching loop tasks.
+
 Agents route those requests internally. The underlying command is:
 
 ```bash
@@ -204,6 +209,14 @@ OpenPrd generated changes include standards maintenance tasks, and change valida
 checks the standards contract. The canonical project docs path is only
 `docs/basic/`.
 
+During implementation, standards maintenance is an explicit impact check, not a
+best-effort cleanup. For every added or modified source file, agents should check
+whether `docs/basic/`, the file manual, or the containing folder README is missing
+or stale. Missing docs must be created; existing docs should be updated whenever
+the change affects responsibilities, flows, structure, dependencies, or product
+behavior. If no documentation update is needed, agents should say the check was
+performed and why the existing docs still match the code.
+
 ## Agent Setup
 
 OpenPrd can install the project harness into the agent environment so users do not
@@ -255,6 +268,13 @@ Anthropic's long-running agent guidance, use `openprd loop`. The loop is stricte
 than `run --context`: it creates a durable feature list, writes a single-task
 prompt, starts a fresh Codex or Claude session for exactly one task, verifies the
 task, and can commit that task before moving on.
+
+`openprd run --context` may surface loop commands as execution commands, but they
+are not automatic instructions. Agents should run `openprd loop --run`,
+`openprd tasks --advance`, `openprd discovery --advance`, or commit commands only
+when the current user message explicitly asks for development, implementation,
+task continuation, deep research/benchmarking, replication, or commit. Read-only
+planning and review turns should stop at the module/file plan.
 
 ```bash
 openprd loop . --init

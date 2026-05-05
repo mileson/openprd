@@ -129,12 +129,13 @@ This project is managed by OpenPrd. Agents should be led by the harness rather t
 ### Default Behavior
 
 1. Rebuild state from `.openprd/` before planning or changing files.
-2. Run `openprd run . --context` before choosing the next execution unit.
-3. If the user asks for implementation, generate or inspect an OpenPrd change before coding when the work has product or architecture impact.
-4. Keep `docs/basic/`, file manuals, and folder README docs synchronized during implementation.
-5. Before claiming readiness, run `openprd run . --verify`.
-6. Treat `.openprd/harness/` as the installed agent-control state: run state, iterations, events, hook state, install manifest, and drift report.
-7. For any OpenPrd diagram contract with `locale: zh-CN`, write visible labels, node text, flow labels, cards, panels, and review instructions in Simplified Chinese. Preserve only necessary proper nouns and technical field names.
+2. Run `openprd run . --context` before choosing the next execution unit, but treat it as advisory context rather than an automatic command.
+3. Classify the current user intent before following any recommendation. For planning, analysis, architecture review, "how would we change this?", or "which files are involved?" requests, stay read-only and answer from evidence.
+4. If the user asks for implementation, generate or inspect an OpenPrd change before coding when the work has product or architecture impact.
+5. During implementation, perform a documentation impact check for every added or modified file: create missing `docs/basic/`, file manuals, or folder README docs, and update existing ones when the change affects responsibilities, flows, structure, dependencies, or product behavior.
+6. Before claiming readiness, run `openprd standards . --verify` and `openprd run . --verify`.
+7. Treat `.openprd/harness/` as the installed agent-control state: run state, iterations, events, hook state, install manifest, and drift report.
+8. For any OpenPrd diagram contract with `locale: zh-CN`, write visible labels, node text, flow labels, cards, panels, and review instructions in Simplified Chinese. Preserve only necessary proper nouns and technical field names.
 
 ### Canonical Commands
 
@@ -143,7 +144,8 @@ This project is managed by OpenPrd. Agents should be led by the harness rather t
 - `openprd run . --verify` - verify the current run gates.
 - `openprd loop . --plan --change <id>` - build the one-task-per-session feature list.
 - `openprd loop . --run --agent codex|claude --dry-run` - prepare a fresh single-task agent session.
-- `openprd loop . --finish --item <task-id> --commit` - verify, write staged test report, mark done, and create the task commit.
+- `openprd loop . --run --agent codex|claude` - execute only when the user explicitly asks for development, continuation, deep research/benchmarking, or replication.
+- `openprd loop . --finish --item <task-id> --commit` - verify, write staged test report, mark done, and create the task commit only when commit is explicitly part of the requested execution.
 - `openprd standards . --verify` - verify project documentation standards.
 - `openprd change . --validate --change <id>` - verify change structure.
 - `openprd discovery . --verify` - verify long-running discovery state.
@@ -155,7 +157,7 @@ This project is managed by OpenPrd. Agents should be led by the harness rather t
 
 ### High-Risk Gate
 
-Before freeze, handoff, accepted spec apply/archive, commit, push, release, or publish, ensure `openprd run . --verify` and `openprd doctor .` are healthy.
+Before freeze, handoff, accepted spec apply/archive, commit, push, release, or publish, ensure `openprd standards . --verify`, `openprd run . --verify`, and `openprd doctor .` are healthy.
 
 The only baseline documentation path is `docs/basic/`.
 <!-- OPENPRD:AGENTS:END -->

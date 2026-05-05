@@ -173,8 +173,8 @@ function buildTaskItems({ changeId, snapshot, capability }) {
     ...arrayValue(sections.requirements?.functional).map((item) => [`实现需求: ${item}`, `需求已实现: ${item}`]),
     ...arrayValue(sections.goals?.acceptanceGoals).map((item) => [`验证验收目标: ${item}`, `验收目标已满足: ${item}`]),
     ...arrayValue(sections.requirements?.nonFunctional).map((item) => [`验证非功能需求: ${item}`, `非功能需求已满足: ${item}`]),
-    ['维护 docs/basic 项目基础文档', 'docs/basic 中的基础文档已反映本次需求和实现边界'],
-    ['更新文件说明书和文件夹 README', '本次变更涉及的文件说明书和文件夹 README 已检查并更新'],
+    ['维护 docs/basic 项目基础文档', '已检查 docs/basic 是否缺失或因本次需求、流程、结构、依赖、产品行为变化而过期；需要更新的基础文档已同步'],
+    ['更新文件说明书和文件夹 README', '本次变更涉及的文件说明书和文件夹 README 已检查；缺失的已补齐，过期的已更新'],
     ['运行 OpenPrd spec 校验', '生成的 change 通过 OpenPrd 校验'],
   ];
 

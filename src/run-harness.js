@@ -86,6 +86,15 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
+function executionGate() {
+  return {
+    requiresExplicitIntent: true,
+    allowedIntents: ['开发', '实现', '修复', '继续任务', '落地执行', '深度调研', '深度对标', '复刻落地', '提交'],
+    readOnlyIntents: ['看看', '规划', '梳理', '分析', '评估', '预计动哪些文件', '怎么改', '代码审查'],
+    rule: 'Only run executionCommand when the current user message explicitly asks to implement, continue, deeply research/benchmark, or commit. For planning, analysis, file-impact questions, and reviews, stay read-only and answer from evidence.',
+  };
+}
+
 function buildRunRecommendation({ changes, taskState, discovery, next, loopFeatureList }) {
   const activeChange = changes?.activeChange ?? null;
   if (taskState?.nextTask) {
@@ -97,14 +106,20 @@ function buildRunRecommendation({ changes, taskState, discovery, next, loopFeatu
       return {
         type: 'loop-task',
         title: `用 Loop 执行 ${task.id}: ${task.title}`,
-        command: loopReady
-          ? `openprd loop . --run --agent codex --item ${shellQuote(task.id)} --commit`
-          : `openprd loop . --plan --change ${shellQuote(taskState.changeId)} && openprd loop . --run --agent codex --item ${shellQuote(task.id)} --commit`,
+        command: `openprd tasks . --change ${shellQuote(taskState.changeId)}`,
+        preparationCommand: loopReady
+          ? `openprd loop . --next --item ${shellQuote(task.id)}`
+          : `openprd loop . --plan --change ${shellQuote(taskState.changeId)}`,
+        executionCommand: loopReady
+          ? `openprd loop . --run --agent codex --item ${shellQuote(task.id)}`
+          : `openprd loop . --plan --change ${shellQuote(taskState.changeId)} && openprd loop . --run --agent codex --item ${shellQuote(task.id)}`,
+        commitCommand: `openprd loop . --finish --item ${shellQuote(task.id)} --commit`,
         verifyCommand: `openprd loop . --verify --item ${shellQuote(task.id)}`,
-        reason: `当前变更包含 ${totalTasks} 个任务，超过 ${OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD} 个任务的轻量执行上限；必须按 OpenPrd Loop 拆成独立单任务会话、自测、测试报告和 commit。`,
+        reason: `当前变更包含 ${totalTasks} 个任务，超过 ${OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD} 个任务的轻量执行上限；如用户明确要求开发、继续任务或深度对标落地，才进入 OpenPrd Loop 单任务会话。`,
         changeId: taskState.changeId,
         task,
         coverageItem: null,
+        intentGate: executionGate(),
         loop: {
           required: true,
           threshold: OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD,
@@ -117,12 +132,14 @@ function buildRunRecommendation({ changes, taskState, discovery, next, loopFeatu
     return {
       type: 'task',
       title: `推进 ${task.id}: ${task.title}`,
-      command: `openprd tasks . --change ${shellQuote(taskState.changeId)} --advance --verify --item ${shellQuote(task.id)}`,
+      command: `openprd tasks . --change ${shellQuote(taskState.changeId)}`,
+      executionCommand: `openprd tasks . --change ${shellQuote(taskState.changeId)} --advance --verify --item ${shellQuote(task.id)}`,
       verifyCommand: task.verify ?? `openprd tasks . --change ${shellQuote(taskState.changeId)} --verify --item ${shellQuote(task.id)}`,
-      reason: '存在一个依赖已就绪的 OpenPrd 任务。',
+      reason: '存在一个依赖已就绪的 OpenPrd 任务；只有用户明确要求开发、实现或继续任务时才推进。',
       changeId: taskState.changeId,
       task,
       coverageItem: null,
+      intentGate: executionGate(),
       loop: {
         required: false,
         threshold: OPENPRD_LOOP_REQUIRED_TASK_THRESHOLD,
@@ -149,12 +166,14 @@ function buildRunRecommendation({ changes, taskState, discovery, next, loopFeatu
     return {
       type: 'discovery',
       title: `调研 ${item.title}`,
-      command: `openprd discovery . --advance --item ${shellQuote(item.id)} --claim <evidence-backed-claim> --evidence <path>`,
+      command: 'openprd discovery . --verify',
+      executionCommand: `openprd discovery . --advance --item ${shellQuote(item.id)} --claim <evidence-backed-claim> --evidence <path>`,
       verifyCommand: 'openprd discovery . --verify',
-      reason: '存在一个待处理的 OpenPrd discovery 覆盖项。',
+      reason: '存在一个待处理的 OpenPrd discovery 覆盖项；只有用户明确要求深度调研、对标、复刻或持续补全时才推进覆盖项。',
       changeId: activeChange,
       task: null,
       coverageItem: item,
+      intentGate: executionGate(),
     };
   }
   if (discovery?.coverageMatrix?.summary?.pending === 0 && discovery?.runId) {

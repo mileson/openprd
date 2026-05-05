@@ -269,6 +269,12 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.ok((await fs.readFile(path.join(codexHome, 'config.toml'), 'utf8')).includes('codex_hooks = true'));
     const manifest = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'install-manifest.json'), 'utf8'));
     assert.ok(manifest.managedFiles.some((file) => file.path === '.codex/hooks/openprd-hook.mjs'));
+    const generatedAgents = await fs.readFile(path.join(project, 'AGENTS.md'), 'utf8');
+    assert.ok(generatedAgents.includes('documentation impact check'));
+    assert.ok(generatedAgents.includes('create missing `docs/basic/`, file manuals, or folder README docs'));
+    const generatedStandardsSkill = await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-standards', 'SKILL.md'), 'utf8');
+    assert.ok(generatedStandardsSkill.includes('Documentation Impact Check'));
+    assert.ok(generatedStandardsSkill.includes('existing file manual'));
 
     const logs = [];
     const originalLog = console.log;
@@ -360,6 +366,8 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
       assert.equal(eventPayload.additional_contexts, undefined);
       assert.equal(eventPayload.hookSpecificOutput.hookEventName, eventName);
       assert.ok(eventPayload.hookSpecificOutput.additionalContext.includes('OpenPrd run context'));
+      assert.ok(eventPayload.hookSpecificOutput.additionalContext.includes('OpenPrd context is advisory'));
+      assert.equal(eventPayload.hookSpecificOutput.additionalContext.includes('Follow the recommended OpenPrd run command'), false);
     }
     const events = await fs.readFile(path.join(project, '.openprd', 'harness', 'events.jsonl'), 'utf8');
     assert.ok(events.includes('allowed-high-risk'));
@@ -428,8 +436,12 @@ test('run exposes hook-stable context and records hook iterations', async () => 
   assert.equal(context.activeChange, 'run-loop');
   assert.equal(context.recommendation.type, 'loop-task');
   assert.equal(context.recommendation.loop.required, true);
-  assert.ok(context.recommendation.command.includes('openprd loop . --plan --change'));
-  assert.ok(context.recommendation.command.includes('openprd loop . --run --agent codex'));
+  assert.ok(context.recommendation.command.includes('openprd tasks . --change'));
+  assert.ok(context.recommendation.preparationCommand.includes('openprd loop . --plan --change'));
+  assert.ok(context.recommendation.executionCommand.includes('openprd loop . --run --agent codex'));
+  assert.equal(context.recommendation.executionCommand.includes('--commit'), false);
+  assert.ok(context.recommendation.commitCommand.includes('openprd loop . --finish'));
+  assert.equal(context.recommendation.intentGate.requiresExplicitIntent, true);
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'run-state.json')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'iterations.jsonl')).then(() => true));
 
@@ -458,6 +470,8 @@ test('run exposes hook-stable context and records hook iterations', async () => 
     console.log = originalLog;
   }
   assert.ok(logs.some((line) => line.includes('OpenPrd run context')));
+  assert.ok(logs.some((line) => line.includes('建议只读命令')));
+  assert.ok(logs.some((line) => line.includes('执行门槛')));
 });
 
 test('run context keeps lightweight task advance for five or fewer tasks', async () => {
@@ -950,6 +964,7 @@ test('openprd exposes natural change task and specs cli commands', async () => {
   assert.ok(generatedProposal.includes('## 影响范围'));
   const generatedTasks = await fs.readFile(path.join(project, 'openprd', 'changes', 'profile-settings', 'tasks.md'), 'utf8');
   assert.ok(generatedTasks.includes('docs/basic'));
+  assert.ok(generatedTasks.includes('缺失的已补齐，过期的已更新'));
   assert.ok(generatedTasks.includes('openprd standards . --verify'));
 });
 
