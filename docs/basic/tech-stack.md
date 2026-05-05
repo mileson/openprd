@@ -16,6 +16,7 @@
 - `node --check <file>`: 对单个 ESM 文件做语法检查。
 - `node ./bin/openprd.js standards . --verify`: 校验 `docs/basic/` 和 standards 基础契约。
 - `node ./bin/openprd.js run . --context`: 生成 hook-stable 执行上下文。
+- `node ./bin/openprd.js update . --hook-profile lite|guarded|full`: 刷新 agent guidance 并选择 Codex hook 重量。
 
 ## 维护规则
 

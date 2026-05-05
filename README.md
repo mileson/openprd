@@ -78,6 +78,12 @@ openprd init /path/to/project --template-pack agent
 
 `init` creates `.openprd/`, `docs/basic/`, `AGENTS.md`, and generated Codex / Claude / Cursor guidance. Codex projects also get `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/openprd-hook.mjs`, and user-level Codex `codex_hooks = true`.
 
+Codex hooks default to `lite`: only `UserPromptSubmit` is installed, and context
+is injected only for prompts that explicitly mention OpenPrd, PRD, deep
+research/benchmarking, replication, standards, fleet, or documentation standards.
+Use `--hook-profile guarded` for high-risk `PreToolUse` gates, and `full` only for
+temporary deep diagnostics.
+
 ### 2. Check the current collaboration state
 
 ```bash
@@ -226,6 +232,7 @@ need to remember which skill, command, or hook to invoke:
 openprd setup /path/to/project
 openprd doctor /path/to/project
 openprd update /path/to/project
+openprd update /path/to/project --hook-profile lite
 openprd fleet /path/to/projects --dry-run
 openprd run /path/to/project --context
 openprd run /path/to/project --verify
@@ -251,8 +258,10 @@ and workspace validation are healthy. `update` refreshes the generated adapter
 files from the canonical OpenPrd source while preserving unrelated user hook
 groups.
 
-The harness is stateful. Hooks append structured events, record risk decisions,
-and check drift against the install manifest. High-risk actions such as freeze,
+The harness is stateful, but hooks are proportional to the chosen profile.
+Default `lite` avoids per-tool hooks for small tasks. `guarded` adds high-risk
+`PreToolUse` checks, and `full` restores SessionStart/PreToolUse/PostToolUse/Stop
+telemetry for temporary diagnostics. High-risk actions such as freeze,
 handoff, accepted spec apply/archive, commit, push, release, or publish are gated
 by `openprd run . --verify`, which covers standards, workspace validation, active
 change validation, and active discovery verification.

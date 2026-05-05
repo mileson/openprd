@@ -1,6 +1,6 @@
 function parseCommandArgs(argv) {
   const args = [...argv];
-  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, dryRun: false, updateOpenprd: false, setupMissing: false, doctor: false, context: false, recordHook: false, plan: false, prompt: false, loopRun: false, finish: false, commit: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, source: null, reference: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', templatePack: null, target: 'openprd', path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, event: null, risk: null, outcome: null, preview: null, learn: null, agent: 'codex', agentCommand: null, message: null };
+  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, dryRun: false, updateOpenprd: false, setupMissing: false, doctor: false, context: false, recordHook: false, plan: false, prompt: false, loopRun: false, finish: false, commit: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, source: null, reference: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', hookProfile: null, templatePack: null, target: 'openprd', path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, event: null, risk: null, outcome: null, preview: null, learn: null, agent: 'codex', agentCommand: null, message: null };
   const positionals = [];
 
   while (args.length > 0) {
@@ -127,6 +127,10 @@ function parseCommandArgs(argv) {
     }
     if (arg === '--tools') {
       flags.tools = args.shift() ?? 'all';
+      continue;
+    }
+    if (arg === '--hook-profile') {
+      flags.hookProfile = args.shift() ?? null;
       continue;
     }
     if (arg === '--agent') {
@@ -296,11 +300,11 @@ function usage() {
     'OpenPrd CLI',
     '',
     'Usage:',
-    '  openprd init [path] [--template-pack <base|consumer|b2b|agent>] [--tools <all|codex,claude,cursor>] [--force]',
-    '  openprd setup [path] [--tools <all|codex,claude,cursor>] [--force] [--json]',
-    '  openprd update [path] [--tools <all|codex,claude,cursor>] [--force] [--json]',
-    '  openprd doctor [path] [--tools <all|codex,claude,cursor>] [--json]',
-    '  openprd fleet <root> [--dry-run|--doctor|--update-openprd|--setup-missing] [--max-depth <n>] [--include <csv>] [--exclude <csv>] [--report <file>] [--json]',
+    '  openprd init [path] [--template-pack <base|consumer|b2b|agent>] [--tools <all|codex,claude,cursor>] [--hook-profile <lite|guarded|full>] [--force]',
+    '  openprd setup [path] [--tools <all|codex,claude,cursor>] [--hook-profile <lite|guarded|full>] [--force] [--json]',
+    '  openprd update [path] [--tools <all|codex,claude,cursor>] [--hook-profile <lite|guarded|full>] [--force] [--json]',
+    '  openprd doctor [path] [--tools <all|codex,claude,cursor>] [--hook-profile <lite|guarded|full>] [--json]',
+    '  openprd fleet <root> [--dry-run|--doctor|--update-openprd|--setup-missing] [--hook-profile <lite|guarded|full>] [--max-depth <n>] [--include <csv>] [--exclude <csv>] [--report <file>] [--json]',
     '  openprd run [path] [--context|--verify|--record-hook --event <name> --risk <level> --outcome <text> --preview <text>] [--json]',
     '  openprd loop [path] [--init|--plan|--next|--prompt|--run|--verify|--finish] [--change <id>] [--item <task-id>] [--agent <codex|claude>] [--agent-command <cmd>] [--commit] [--dry-run] [--message <text>] [--json]',
     '  openprd classify [path] <consumer|b2b|agent>',

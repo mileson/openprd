@@ -46,7 +46,10 @@ test('init creates a workspace and validate passes', async () => {
   assert.ok(await fs.stat(path.join(project, 'docs', 'basic', 'file-structure.md')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'standards', 'file-manual-template.md')).then(() => true));
   assert.equal((await fs.readFile(path.join(project, '.codex', 'config.toml'), 'utf8')).includes('codex_hooks = true'), true);
-  assert.equal((await fs.readFile(path.join(project, '.codex', 'hooks.json'), 'utf8')).includes('openprd-hook.mjs'), true);
+  const hooksJson = JSON.parse(await fs.readFile(path.join(project, '.codex', 'hooks.json'), 'utf8'));
+  assert.equal(hooksJson.UserPromptSubmit.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs'))), true);
+  assert.equal(Boolean(hooksJson.PreToolUse?.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs')))), false);
+  assert.equal(Boolean(hooksJson.PostToolUse?.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs')))), false);
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'install-manifest.json')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'hook-state.json')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'events.jsonl')).then(() => true));
@@ -259,15 +262,20 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
 
     const hooks = JSON.parse(await fs.readFile(path.join(project, '.codex', 'hooks.json'), 'utf8'));
     assert.ok(hooks.PostToolUse.some((group) => group.hooks?.some((hook) => hook.command === 'echo user-hook')));
-    assert.ok(hooks.PostToolUse.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs'))));
-    assert.ok(hooks.SessionStart.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs'))));
+    assert.equal(hooks.PostToolUse.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs'))), false);
+    assert.equal(Boolean(hooks.SessionStart?.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs')))), false);
+    assert.ok(hooks.UserPromptSubmit.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs'))));
 
     const config = await fs.readFile(path.join(project, '.codex', 'config.toml'), 'utf8');
     assert.ok(config.includes('[features]'));
     assert.ok(config.includes('codex_hooks = true'));
     assert.ok(config.includes('[[hooks.UserPromptSubmit]]'));
+    assert.equal(config.includes('[[hooks.PreToolUse]]'), false);
+    assert.equal(config.includes('[[hooks.PostToolUse]]'), false);
     assert.ok((await fs.readFile(path.join(codexHome, 'config.toml'), 'utf8')).includes('codex_hooks = true'));
     const manifest = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'install-manifest.json'), 'utf8'));
+    assert.equal(manifest.hooks.profile, 'lite');
+    assert.deepEqual(manifest.hooks.events, ['UserPromptSubmit']);
     assert.ok(manifest.managedFiles.some((file) => file.path === '.codex/hooks/openprd-hook.mjs'));
     const generatedAgents = await fs.readFile(path.join(project, 'AGENTS.md'), 'utf8');
     assert.ok(generatedAgents.includes('documentation impact check'));
@@ -345,7 +353,37 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.equal(successPostResult.status, 0);
     assert.deepEqual(JSON.parse(successPostResult.stdout), { continue: true });
 
-    for (const eventName of ['SessionStart', 'UserPromptSubmit']) {
+    const plainPromptResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'UserPromptSubmit'], {
+      cwd: project,
+      input: JSON.stringify({
+        cwd: project,
+        prompt: '把这个按钮文案改短一点',
+      }),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        OPENPRD_CLI: path.resolve('bin/openprd.js'),
+      },
+    });
+    assert.equal(plainPromptResult.status, 0);
+    assert.deepEqual(JSON.parse(plainPromptResult.stdout), { continue: true });
+
+    const sessionStartResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'SessionStart'], {
+      cwd: project,
+      input: JSON.stringify({
+        cwd: project,
+        hook_event_name: 'SessionStart',
+      }),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        OPENPRD_CLI: path.resolve('bin/openprd.js'),
+      },
+    });
+    assert.equal(sessionStartResult.status, 0);
+    assert.deepEqual(JSON.parse(sessionStartResult.stdout), { continue: true });
+
+    for (const eventName of ['UserPromptSubmit']) {
       const eventResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), eventName], {
         cwd: project,
         input: JSON.stringify({
@@ -409,6 +447,37 @@ test('doctor fails when Codex hook emits legacy output schema', async () => {
       && check.ok === false
       && check.message.includes('legacy fields')
   )));
+});
+
+test('setup can opt into guarded Codex hook profile', async () => {
+  const project = await makeTempProject();
+  const codexHome = path.join(project, 'codex-home');
+  const result = await setupAgentIntegrationWorkspace(project, {
+    tools: 'codex',
+    hookProfile: 'guarded',
+    enableUserCodexConfig: true,
+    codexHome,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.hookProfile, 'guarded');
+
+  const hooks = JSON.parse(await fs.readFile(path.join(project, '.codex', 'hooks.json'), 'utf8'));
+  assert.ok(hooks.UserPromptSubmit.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs'))));
+  assert.ok(hooks.PreToolUse.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs'))));
+  assert.equal(Boolean(hooks.PostToolUse?.some((group) => group.hooks?.some((hook) => hook.command.includes('openprd-hook.mjs')))), false);
+
+  const config = await fs.readFile(path.join(project, '.codex', 'config.toml'), 'utf8');
+  assert.ok(config.includes('[[hooks.UserPromptSubmit]]'));
+  assert.ok(config.includes('[[hooks.PreToolUse]]'));
+  assert.equal(config.includes('[[hooks.PostToolUse]]'), false);
+
+  const manifest = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'install-manifest.json'), 'utf8'));
+  assert.equal(manifest.hooks.profile, 'guarded');
+  assert.deepEqual(manifest.hooks.events, ['UserPromptSubmit', 'PreToolUse']);
+
+  const doctor = await doctorWorkspace(project, { tools: 'codex', enableUserCodexConfig: true, codexHome });
+  assert.equal(doctor.agentIntegration.hookProfile, 'guarded');
+  assert.equal(doctor.ok, true);
 });
 
 test('run exposes hook-stable context and records hook iterations', async () => {

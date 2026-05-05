@@ -2,23 +2,26 @@
 
 ## 问题与目标
 
-OpenPrd 要解决的是 Agent 在需求、调研、实现和交付之间缺少统一工作区状态与质量门禁的问题。目标用户是使用 Codex、Claude 或 Cursor 进行产品/工程协作的团队。成功标准是 Agent 能基于 `.openprd/` 判断当前任务边界，只在明确执行意图下推进任务，并在实现完成前维护基础文档、文件说明书和文件夹说明书。
+OpenPrd 要解决的是 Agent 在需求、调研、实现和交付之间缺少统一工作区状态与质量门禁的问题，同时避免质量门禁在小需求上变成额外负担。目标用户是使用 Codex、Claude 或 Cursor 进行产品/工程协作的团队。成功标准是 Agent 能基于 `.openprd/` 判断当前任务边界，只在明确执行意图下推进任务，并在实现完成前维护基础文档、文件说明书和文件夹说明书。
 
 ## 用户故事
 
 - 作为项目负责人，我希望 Agent 在我要求“看看、梳理、怎么改”时只做只读分析，从而避免误启动执行任务。
+- 作为开发者，我希望一句话小需求不会触发每个工具调用的 OpenPrd hook，从而让简单改动保持轻量。
 - 作为工程协作者，我希望 Agent 在新增或修改代码时自动判断文档影响，从而让 `docs/basic/`、文件说明书和文件夹说明书保持可信。
 - 作为维护者，我希望旧项目通过 fleet 刷新后也获得同样的 agent guidance，从而减少历史项目沿用旧规则的风险。
 
 ## 功能范围
 
 - 包含：OpenPrd workspace 初始化、agent guidance 生成、意图门禁、run/loop/discovery/task 执行建议、standards 校验、历史项目 fleet 刷新。
+- 包含：Codex hook profile，默认 `lite` 只安装 `UserPromptSubmit`，`guarded/full` 作为显式 opt-in。
 - 包含：实现阶段的文档影响判定规则，覆盖缺失文档补齐和已有文档过期检查。
 - 不包含：自动推断所有文档内容是否语义最新；Agent 仍需基于本次变更证据进行人工级判断并说明理由。
 
 ## 验收标准
 
 - 规划、分析、审查类请求不会因 `run --context` 推荐而自动执行 loop、task advance、discovery advance 或 commit。
+- 默认安装后的 Codex 配置不包含 OpenPrd 的 PreToolUse/PostToolUse per-tool hooks。
 - 明确实现类请求在完成前会检查基础文档、文件说明书、文件夹说明书是否缺失或过期，并补齐或说明无需更新。
 - `npm test`、`openprd standards --verify`、`openprd run --verify` 能验证关键门禁没有回退。
 

@@ -242,6 +242,9 @@ function printInitResult(result, json) {
   }
   if (result.agentIntegration) {
     console.log(`Agent 引导: ${result.agentIntegration.ok ? '已启用' : '需修复'} (${result.agentIntegration.tools.join(', ')})`);
+    if (result.agentIntegration.hookProfile) {
+      console.log(`Hook 模式: ${result.agentIntegration.hookProfile}`);
+    }
   }
 }
 
@@ -254,6 +257,9 @@ function printAgentIntegrationResult(result, json) {
   console.log(`OpenPrd agent ${result.action}: ${result.ok ? '通过' : '需修复'}`);
   console.log(`项目: ${result.projectRoot}`);
   console.log(`工具: ${result.tools.join(', ')}`);
+  if (result.hookProfile) {
+    console.log(`Hook 模式: ${result.hookProfile}`);
+  }
   if (result.initialized) {
     console.log(`已初始化工作区: ${result.init.workspaceRoot}`);
   }
@@ -285,6 +291,9 @@ function printDoctorResult(result, json) {
   console.log(`OpenPrd doctor: ${result.ok ? '通过' : '失败'}`);
   console.log(`项目: ${result.projectRoot}`);
   console.log(`工具: ${result.tools.join(', ')}`);
+  if (result.agentIntegration.hookProfile) {
+    console.log(`Hook 模式: ${result.agentIntegration.hookProfile}`);
+  }
   console.log(`标准化: ${result.standards.ok ? '通过' : '失败'}`);
   console.log(`工作区验证: ${result.validation.valid ? '通过' : '失败'}`);
   if (result.agentIntegration.drift) {

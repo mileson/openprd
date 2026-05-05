@@ -135,7 +135,8 @@ This project is managed by OpenPrd. Agents should be led by the harness rather t
 5. During implementation, perform a documentation impact check for every added or modified file: create missing `docs/basic/`, file manuals, or folder README docs, and update existing ones when the change affects responsibilities, flows, structure, dependencies, or product behavior.
 6. Before claiming readiness, run `openprd standards . --verify` and `openprd run . --verify`.
 7. Treat `.openprd/harness/` as the installed agent-control state: run state, iterations, events, hook state, install manifest, and drift report.
-8. For any OpenPrd diagram contract with `locale: zh-CN`, write visible labels, node text, flow labels, cards, panels, and review instructions in Simplified Chinese. Preserve only necessary proper nouns and technical field names.
+8. Codex hooks default to lite mode: only `UserPromptSubmit`, and only OpenPrd/deep-work prompts receive injected context. Use `--hook-profile guarded|full` only when a project explicitly needs per-tool gates.
+9. For any OpenPrd diagram contract with `locale: zh-CN`, write visible labels, node text, flow labels, cards, panels, and review instructions in Simplified Chinese. Preserve only necessary proper nouns and technical field names.
 
 ### Canonical Commands
 
@@ -151,6 +152,7 @@ This project is managed by OpenPrd. Agents should be led by the harness rather t
 - `openprd discovery . --verify` - verify long-running discovery state.
 - `openprd doctor .` - check agent integration health.
 - `openprd update .` - repair generated agent guidance drift.
+- `openprd update . --hook-profile lite|guarded|full` - choose Codex hook weight; default `lite` avoids per-tool hooks.
 - `openprd fleet <root> --dry-run` - audit historical projects before batch updates.
 
 `openprd setup` and `openprd update` also enable Codex hooks in the user Codex config when run from the CLI.

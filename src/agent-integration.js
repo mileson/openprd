@@ -9,6 +9,12 @@ import { timestamp } from './time.js';
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const OPENPRD_AGENT_TOOLS = ['codex', 'claude', 'cursor'];
 const OPENPRD_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop'];
+const OPENPRD_HOOK_PROFILES = {
+  lite: ['UserPromptSubmit'],
+  guarded: ['UserPromptSubmit', 'PreToolUse'],
+  full: OPENPRD_EVENTS,
+};
+const OPENPRD_DEFAULT_HOOK_PROFILE = 'lite';
 const OPENPRD_HOOK_EVENTS_WITH_MATCHER = new Set(['PreToolUse', 'PostToolUse']);
 const OPENPRD_HARNESS_DIR = cjoin('.openprd', 'harness');
 const OPENPRD_HARNESS_EVENTS = cjoin(OPENPRD_HARNESS_DIR, 'events.jsonl');
@@ -47,6 +53,8 @@ const CANONICAL_SKILLS = [
       '- If generated agent files look stale, run `openprd doctor .` before guessing.',
       '- OpenPrd context is advisory. Planning, analysis, review, explanation, and file-impact questions must stay read-only unless the current user message explicitly asks for development, implementation, task continuation, deep research, benchmarking, replication, or commit/push.',
       '- For every implementation that adds or modifies files, perform a documentation impact check: missing `docs/basic/`, file manuals, or folder README docs must be created; existing ones must be reviewed and updated when the change affects responsibilities, flows, structure, dependencies, or product behavior.',
+      '- Codex hooks default to the lite profile: one `UserPromptSubmit` hook, no per-tool PreToolUse/PostToolUse hooks. Full gate hooks are opt-in for high-risk workflows.',
+      '- Lite hooks should inject OpenPrd context only when the prompt explicitly mentions OpenPrd, PRD, deep research/benchmarking, replication, standards, fleet, or documentation standards.',
       '',
       '## Write Discipline',
       '',
@@ -97,7 +105,9 @@ const CANONICAL_SKILLS = [
       '## Hook-Driven Loop',
       '',
       '- Treat `.openprd/harness/run-state.json` and `iterations.jsonl` as the durable loop state.',
-      '- Hooks record each turn and recommend the next task/discovery/workflow action from OpenPrd state.',
+      '- Default lite hooks do not record every turn. They inject context only for explicit OpenPrd/deep-work prompts so small one-line tasks stay lightweight.',
+      '- Use `--hook-profile guarded` for high-risk PreToolUse gates, or `--hook-profile full` only when the project truly needs full hook telemetry.',
+      '- When context is injected, hooks recommend the next task/discovery/workflow action from OpenPrd state.',
       '- A failed gate leaves the task or coverage item unfinished, so the next run retries the same unit.',
       '- Record reusable learnings in `.openprd/harness/learnings.md`, local `AGENTS.md`, or `docs/basic/` when they apply beyond one story.',
       '',
@@ -396,6 +406,18 @@ function normalizeTools(value) {
   return [...new Set(tools)];
 }
 
+function normalizeHookProfile(value) {
+  const profile = String(value ?? OPENPRD_DEFAULT_HOOK_PROFILE).trim().toLowerCase() || OPENPRD_DEFAULT_HOOK_PROFILE;
+  if (!Object.prototype.hasOwnProperty.call(OPENPRD_HOOK_PROFILES, profile)) {
+    throw new Error(`Unsupported OpenPrd hook profile: ${profile}. Use lite, guarded, or full.`);
+  }
+  return profile;
+}
+
+function hookEventsForProfile(profile) {
+  return OPENPRD_HOOK_PROFILES[normalizeHookProfile(profile)];
+}
+
 function resolveCodexHome(options = {}) {
   return options.codexHome
     ?? process.env.OPENPRD_CODEX_HOME
@@ -520,7 +542,8 @@ function agentContractBody() {
     '5. During implementation, perform a documentation impact check for every added or modified file: create missing `docs/basic/`, file manuals, or folder README docs, and update existing ones when the change affects responsibilities, flows, structure, dependencies, or product behavior.',
     '6. Before claiming readiness, run `openprd standards . --verify` and `openprd run . --verify`.',
     '7. Treat `.openprd/harness/` as the installed agent-control state: run state, iterations, events, hook state, install manifest, and drift report.',
-    '8. For any OpenPrd diagram contract with `locale: zh-CN`, write visible labels, node text, flow labels, cards, panels, and review instructions in Simplified Chinese. Preserve only necessary proper nouns and technical field names.',
+    '8. Codex hooks default to lite mode: only `UserPromptSubmit`, and only OpenPrd/deep-work prompts receive injected context. Use `--hook-profile guarded|full` only when a project explicitly needs per-tool gates.',
+    '9. For any OpenPrd diagram contract with `locale: zh-CN`, write visible labels, node text, flow labels, cards, panels, and review instructions in Simplified Chinese. Preserve only necessary proper nouns and technical field names.',
     '',
     '### Canonical Commands',
     '',
@@ -536,6 +559,7 @@ function agentContractBody() {
     '- `openprd discovery . --verify` - verify long-running discovery state.',
     '- `openprd doctor .` - check agent integration health.',
     '- `openprd update .` - repair generated agent guidance drift.',
+    '- `openprd update . --hook-profile lite|guarded|full` - choose Codex hook weight; default `lite` avoids per-tool hooks.',
     '- `openprd fleet <root> --dry-run` - audit historical projects before batch updates.',
     '',
     '`openprd setup` and `openprd update` also enable Codex hooks in the user Codex config when run from the CLI.',
@@ -806,6 +830,34 @@ function contextMessage(cwd) {
   ].filter(Boolean).join('\\n');
 }
 
+function shouldInjectOpenPrdContext(payload) {
+  const prompt = String(payload.prompt || payload.user_prompt || payload.message || '');
+  if (!prompt.trim()) {
+    return false;
+  }
+  const normalized = prompt.toLowerCase();
+  const triggers = [
+    /openprd/i,
+    /open\s*prd/i,
+    /\\bprd\\b/i,
+    /openprd\\s+(run|loop|fleet|doctor|standards|change|discovery|handoff|freeze)/i,
+    /\\b(fleet|standards)\\b/i,
+    /深度调研/,
+    /深度对标/,
+    /持续调研/,
+    /复刻/,
+    /对标/,
+    /文件说明书/,
+    /文件夹说明书/,
+    /基础文档/,
+    /docs\\/basic/i,
+    /standards/i,
+    /handoff/i,
+    /freeze/i,
+  ];
+  return triggers.some((pattern) => pattern.test(normalized));
+}
+
 function classifyRisk(payload) {
   const text = payloadText(payload);
   const normalized = text.toLowerCase();
@@ -908,8 +960,15 @@ function handle(eventName, cwd, payload) {
     preview: preview(payloadText(payload)),
   };
 
-  if (eventName === 'SessionStart' || eventName === 'UserPromptSubmit') {
+  if (eventName === 'SessionStart') {
+    return allowHook();
+  }
+
+  if (eventName === 'UserPromptSubmit') {
     if (duplicate) {
+      return allowHook();
+    }
+    if (!shouldInjectOpenPrdContext(payload)) {
       return allowHook();
     }
     const result = allowHook(contextMessage(root));
@@ -1019,9 +1078,10 @@ function ensureFeatureCodexHooks(text) {
   return lines.join('\n');
 }
 
-function codexHooksTomlBlock(projectRoot) {
+function codexHooksTomlBlock(projectRoot, options = {}) {
+  const events = hookEventsForProfile(options.hookProfile);
   const groups = [];
-  for (const eventName of OPENPRD_EVENTS) {
+  for (const eventName of events) {
     groups.push(`[[hooks.${eventName}]]`);
     if (OPENPRD_HOOK_EVENTS_WITH_MATCHER.has(eventName)) {
       groups.push('matcher = "*"');
@@ -1048,7 +1108,7 @@ async function writeCodexConfig(projectRoot, options, changes) {
   const rel = normalizedRelativePath(projectRoot, configPath);
   const current = await readText(configPath).catch(() => '');
   let next = ensureFeatureCodexHooks(current || '');
-  next = upsertTomlManagedBlock(next, 'CODEX-HOOKS', codexHooksTomlBlock(projectRoot));
+  next = upsertTomlManagedBlock(next, 'CODEX-HOOKS', codexHooksTomlBlock(projectRoot, options));
   await writeText(configPath, next);
   changes.push({ path: rel, status: current ? 'updated' : 'created' });
   recordManagedFile(options, {
@@ -1104,12 +1164,20 @@ async function writeCodexHooksJson(projectRoot, options, changes) {
   const existed = await exists(hooksPath);
   const current = existed ? await readJson(hooksPath).catch(() => ({})) : {};
   const next = current && typeof current === 'object' && !Array.isArray(current) ? current : {};
+  const activeEvents = new Set(hookEventsForProfile(options.hookProfile));
   for (const eventName of OPENPRD_EVENTS) {
     const existing = Array.isArray(next[eventName]) ? next[eventName] : [];
-    next[eventName] = [
-      ...existing.filter((group) => !isOpenPrdHookGroup(group)),
-      codexHookGroup(projectRoot, eventName),
-    ];
+    const kept = existing.filter((group) => !isOpenPrdHookGroup(group));
+    if (activeEvents.has(eventName)) {
+      next[eventName] = [
+        ...kept,
+        codexHookGroup(projectRoot, eventName),
+      ];
+    } else if (kept.length > 0) {
+      next[eventName] = kept;
+    } else {
+      delete next[eventName];
+    }
   }
   await writeJson(hooksPath, next);
   changes.push({ path: rel, status: existed ? 'updated' : 'created' });
@@ -1217,6 +1285,7 @@ async function ensureHarnessState(projectRoot) {
 async function writeInstallManifest(projectRoot, options, changes, tools) {
   const version = await packageVersion();
   const managedFiles = Array.isArray(options.managedFiles) ? options.managedFiles : [];
+  const hookProfile = normalizeHookProfile(options.hookProfile);
   const manifest = {
     version: 1,
     openprdVersion: version,
@@ -1225,7 +1294,9 @@ async function writeInstallManifest(projectRoot, options, changes, tools) {
     tools,
     managedFiles,
     hooks: {
-      events: OPENPRD_EVENTS,
+      profile: hookProfile,
+      events: hookEventsForProfile(hookProfile),
+      availableProfiles: Object.keys(OPENPRD_HOOK_PROFILES),
       state: OPENPRD_HARNESS_HOOK_STATE,
       eventsLog: OPENPRD_HARNESS_EVENTS,
       driftReport: OPENPRD_HARNESS_DRIFT,
@@ -1240,6 +1311,7 @@ async function writeInstallManifest(projectRoot, options, changes, tools) {
     event: 'agent-integration-installed',
     action: manifest.action,
     tools,
+    hookProfile,
     managedFileCount: managedFiles.length,
   });
   return manifest;
@@ -1303,11 +1375,13 @@ async function computeDriftReport(projectRoot, tools) {
 
 export async function setupOpenPrdAgentIntegration(projectRoot, options = {}) {
   const tools = normalizeTools(options.tools);
+  const hookProfile = normalizeHookProfile(options.hookProfile);
   const changes = [];
   const managedFiles = [];
   const normalizedOptions = {
     ...options,
     projectRoot,
+    hookProfile,
     managedFiles,
   };
 
@@ -1329,12 +1403,14 @@ export async function setupOpenPrdAgentIntegration(projectRoot, options = {}) {
     tools,
     enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
     codexHome: options.codexHome,
+    hookProfile,
   });
   return {
     ok: doctor.ok,
     action: options.action ?? 'setup',
     projectRoot,
     tools,
+    hookProfile,
     changes,
     manifest,
     doctor,
@@ -1430,7 +1506,7 @@ function validateCodexHookSmokeOutput(eventName, run) {
   return null;
 }
 
-async function smokeTestCodexHook(projectRoot) {
+async function smokeTestCodexHook(projectRoot, options = {}) {
   const hookPath = cjoin(projectRoot, '.codex', 'hooks', 'openprd-hook.mjs');
   if (!(await exists(hookPath))) {
     return { ok: false, message: 'Codex hook runner is missing.' };
@@ -1439,7 +1515,7 @@ async function smokeTestCodexHook(projectRoot) {
   const smokeId = `doctor-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
   const smokeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'openprd-hook-smoke-'));
   try {
-    for (const eventName of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse']) {
+    for (const eventName of hookEventsForProfile(options.hookProfile)) {
       const run = spawnSync(process.execPath, [hookPath, eventName], {
         cwd: smokeRoot,
         input: JSON.stringify(codexHookSmokePayload(smokeRoot, eventName, smokeId)),
@@ -1466,6 +1542,8 @@ export async function doctorOpenPrdAgentIntegration(projectRoot, options = {}) {
   const tools = normalizeTools(options.tools);
   const checks = [];
   await ensureHarnessState(projectRoot);
+  const manifest = await readInstallManifest(projectRoot);
+  const hookProfile = normalizeHookProfile(options.hookProfile ?? manifest?.hooks?.profile);
 
   await collectDoctorCheck(projectRoot, checks, 'AGENTS.md', (file) => fileHas(file, 'OPENPRD:AGENTS:START'), 'Missing OpenPrd managed AGENTS block.');
   await collectDoctorCheck(projectRoot, checks, OPENPRD_HARNESS_MANIFEST, (file) => fileHas(file, '"managedFiles"'), 'Missing OpenPrd install manifest.');
@@ -1476,7 +1554,7 @@ export async function doctorOpenPrdAgentIntegration(projectRoot, options = {}) {
     await collectDoctorCheck(projectRoot, checks, '.codex/config.toml', (file) => fileHas(file, 'codex_hooks = true'), 'Codex hooks feature is not enabled.');
     await collectDoctorCheck(projectRoot, checks, '.codex/hooks.json', (file) => fileHas(file, 'openprd-hook.mjs'), 'Codex hooks.json is missing OpenPrd hooks.');
     await collectDoctorCheck(projectRoot, checks, '.codex/hooks/openprd-hook.mjs', (file) => fileHas(file, 'OpenPrd harness context'), 'Codex hook runner is missing.');
-    const smoke = await smokeTestCodexHook(projectRoot);
+    const smoke = await smokeTestCodexHook(projectRoot, { hookProfile });
     checks.push({ path: '.codex/hooks/openprd-hook.mjs:smoke', ok: smoke.ok, message: smoke.message });
     await collectDoctorCheck(projectRoot, checks, '.codex/skills/openprd-harness/SKILL.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Codex OpenPrd harness skill is missing.');
     if (options.enableUserCodexConfig) {
@@ -1503,6 +1581,7 @@ export async function doctorOpenPrdAgentIntegration(projectRoot, options = {}) {
     action: 'doctor',
     projectRoot,
     tools,
+    hookProfile,
     checks,
     drift,
     errors: checks.filter((check) => !check.ok).map((check) => `${check.path}: ${check.message}`),

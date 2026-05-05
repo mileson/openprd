@@ -42,6 +42,9 @@ Use this skill as the shared rulebook for all OpenPrd work. It plays the same ro
 10. Treat documentation as part of implementation, not as an optional cleanup.
    - For added or modified files, check whether `docs/basic/`, file manuals, and folder README docs are missing or stale.
    - Create missing docs/manuals and update existing ones when responsibilities, flows, structure, dependencies, or product behavior changed.
+11. Keep hooks proportional to the task.
+   - Default Codex hook profile is `lite`: only `UserPromptSubmit`, and only explicit OpenPrd/deep-work prompts receive injected context.
+   - Use `guarded` or `full` only when a project explicitly needs high-risk per-tool gates or temporary diagnostics.
 9. When critical product facts are missing, ask the user before pushing the workspace forward.
    - If the current mode cannot use a structured ask-user tool, ask directly in plain language.
    - Do not treat “tool unavailable” as permission to silently guess.

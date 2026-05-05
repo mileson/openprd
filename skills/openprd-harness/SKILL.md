@@ -22,7 +22,8 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
 9. Use `openprd status` and `openprd next` when you need full workflow detail.
 10. If the user asks for baseline docs, file manuals, folder README standards, or implementation readiness, route to `$openprd-standards`.
 11. If the user asks for a visual explanation or the system/product shape is unclear, route to `$openprd-diagram-review` before freeze.
-12. Read `.openprd/harness/drift-report.json` when `doctor` reports generated guidance drift.
+12. Keep Codex hooks lightweight by default. `openprd setup/update` should use `--hook-profile lite` unless the project explicitly needs guarded or full per-tool gates.
+13. Read `.openprd/harness/drift-report.json` when `doctor` reports generated guidance drift.
 
 ## Main Workflow
 
@@ -44,6 +45,8 @@ Use this skill to operate the main OpenPrd workflow. Treat it as the domain skil
   - `openprd run <path> --verify`
   - Keep `.openprd/harness/run-state.json`, `iterations.jsonl`, and `learnings.md` as durable loop state.
   - Do not treat `run --context` recommendations as direct user commands.
+  - Default lite Codex hooks inject context only for explicit OpenPrd, PRD, deep research/benchmarking, replication, standards, fleet, or documentation-standard prompts.
+  - Use `openprd update <path> --hook-profile guarded` only when the project needs high-risk PreToolUse gates; use `full` only for temporary deep diagnostics.
 - For long-running implementation loops, use:
   - `openprd loop <path> --init`
   - `openprd loop <path> --plan --change <id>`

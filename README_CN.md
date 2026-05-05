@@ -66,6 +66,11 @@ openprd init /path/to/project --template-pack agent
 
 `init` 会创建 `.openprd/`、`docs/basic/`、`AGENTS.md`，并生成 Codex / Claude / Cursor 三端引导。Codex 项目会同时写入 `.codex/config.toml`、`.codex/hooks.json`、`.codex/hooks/openprd-hook.mjs`，并开启用户级 Codex `codex_hooks = true`。
 
+Codex hooks 默认使用 `lite` 模式：只安装 `UserPromptSubmit`，并且只有当提示词
+明确提到 OpenPrd、PRD、深度调研、深度对标、复刻、standards、fleet 或文档
+标准化时才注入上下文。需要高风险 `PreToolUse` 门禁时使用 `--hook-profile guarded`；
+只有临时深度诊断才使用 `full`。
+
 ### 2. 查看当前协同节奏
 
 ```bash
@@ -212,6 +217,7 @@ OpenPrd 会把协同规则装进项目，让用户不需要记住具体 skill、
 openprd setup /path/to/project
 openprd doctor /path/to/project
 openprd update /path/to/project
+openprd update /path/to/project --hook-profile lite
 openprd fleet /path/to/projects --dry-run
 openprd run /path/to/project --context
 openprd run /path/to/project --verify
@@ -233,7 +239,9 @@ openprd loop /path/to/project --run --agent codex --dry-run
 
 `doctor` 会检查三端引导、Codex hooks 开关、项目标准化和 OpenPrd 工作区验证是否健康。`update` 会从 OpenPrd 的统一源刷新这些生成文件，并保留用户自己已有的 hook 分组。
 
-这套 harness 是有状态的。Hooks 会记录结构化事件、风险决策和漂移检查结果。`freeze`、`handoff`、accepted spec apply/archive、commit、push、release、publish 等高风险动作会先经过 `openprd run . --verify`，覆盖标准化、工作区校验、激活 change 校验和激活 discovery 校验。
+这套 harness 是有状态的，但 hook 重量由 profile 控制。默认 `lite` 不再为每个
+工具调用安装 PreToolUse/PostToolUse，避免小需求被 hook 噪声拖慢。`guarded`
+增加高风险 PreToolUse 检查，`full` 只建议用于临时深度诊断。`freeze`、`handoff`、accepted spec apply/archive、commit、push、release、publish 等高风险动作会先经过 `openprd run . --verify`，覆盖标准化、工作区校验、激活 change 校验和激活 discovery 校验。
 
 `openprd run . --context` 是类似 Ralph 的循环控制面。它会从激活 change 任务、discovery coverage 或普通 OpenPrd 工作流状态里选择下一项可执行单元，并把 hook turn 记录到 `.openprd/harness/iterations.jsonl`。
 

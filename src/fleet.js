@@ -237,12 +237,14 @@ async function fleetWorkspaceImpl(rootPath, options = {}, dependencies = {}) {
       if (plannedAction === 'update') {
         const update = await updateAgentIntegrationWorkspace(project.path, {
           tools: options.tools ?? 'all',
+          hookProfile: options.hookProfile,
           force: Boolean(options.force),
           enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
           codexHome: options.codexHome,
         });
         const doctor = await doctorWorkspace(project.path, {
           tools: options.tools ?? 'all',
+          hookProfile: options.hookProfile,
           enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
           codexHome: options.codexHome,
         });
@@ -257,6 +259,7 @@ async function fleetWorkspaceImpl(rootPath, options = {}, dependencies = {}) {
       } else if (plannedAction === 'setup') {
         const setup = await setupAgentIntegrationWorkspace(project.path, {
           tools: options.tools ?? 'all',
+          hookProfile: options.hookProfile,
           force: Boolean(options.force),
           enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
           codexHome: options.codexHome,
@@ -271,6 +274,7 @@ async function fleetWorkspaceImpl(rootPath, options = {}, dependencies = {}) {
       } else if (plannedAction === 'doctor') {
         const doctor = await doctorWorkspace(project.path, {
           tools: options.tools ?? 'all',
+          hookProfile: options.hookProfile,
           enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
           codexHome: options.codexHome,
         });
@@ -293,6 +297,7 @@ async function fleetWorkspaceImpl(rootPath, options = {}, dependencies = {}) {
     root,
     dryRun,
     tools: options.tools ?? 'all',
+    hookProfile: options.hookProfile ?? 'lite',
     maxDepth: parsePositiveInteger(options.maxDepth, FLEET_DEFAULT_MAX_DEPTH),
     include: normalizeCsvList(options.include),
     exclude: normalizeCsvList(options.exclude),

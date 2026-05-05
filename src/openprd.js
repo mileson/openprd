@@ -29,6 +29,7 @@ async function initWorkspace(projectRoot, options) {
     action: 'init',
     enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
     codexHome: options.codexHome,
+    hookProfile: options.hookProfile,
   });
   const config = workspace.data.config ?? {};
   if (options.templatePack) {
@@ -88,6 +89,7 @@ async function setupAgentIntegrationWorkspace(projectRoot, options = {}) {
     action: 'setup',
     enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
     codexHome: options.codexHome,
+    hookProfile: options.hookProfile,
   });
   return { ...agentIntegration, initialized: false, migration, standards };
 }
@@ -100,6 +102,7 @@ async function updateAgentIntegrationWorkspace(projectRoot, options = {}) {
     force: Boolean(options.force),
     enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
     codexHome: options.codexHome,
+    hookProfile: options.hookProfile,
   });
   return { ...agentIntegration, migration, standards };
 }
@@ -109,6 +112,7 @@ async function doctorWorkspace(projectRoot, options = {}) {
     tools: options.tools ?? 'all',
     enableUserCodexConfig: Boolean(options.enableUserCodexConfig),
     codexHome: options.codexHome,
+    hookProfile: options.hookProfile,
   });
   const standards = await checkStandardsWorkspace(projectRoot).catch((error) => ({
     ok: false,
@@ -392,6 +396,7 @@ export async function main(argv = process.argv.slice(2)) {
         force: flags.force,
         templatePack: flags.templatePack,
         tools: flags.tools,
+        hookProfile: flags.hookProfile,
         enableUserCodexConfig: true,
       });
       printInitResult(result, flags.json);
@@ -403,6 +408,7 @@ export async function main(argv = process.argv.slice(2)) {
         force: flags.force,
         templatePack: flags.templatePack,
         tools: flags.tools,
+        hookProfile: flags.hookProfile,
         enableUserCodexConfig: true,
       });
       printAgentIntegrationResult(result, flags.json);
@@ -413,6 +419,7 @@ export async function main(argv = process.argv.slice(2)) {
       const result = await updateAgentIntegrationWorkspace(projectPath, {
         force: flags.force,
         tools: flags.tools,
+        hookProfile: flags.hookProfile,
         enableUserCodexConfig: true,
       });
       printAgentIntegrationResult(result, flags.json);
@@ -420,7 +427,7 @@ export async function main(argv = process.argv.slice(2)) {
     }
 
     if (command === 'doctor') {
-      const result = await doctorWorkspace(projectPath, { tools: flags.tools, enableUserCodexConfig: true });
+      const result = await doctorWorkspace(projectPath, { tools: flags.tools, hookProfile: flags.hookProfile, enableUserCodexConfig: true });
       printDoctorResult(result, flags.json);
       return result.ok ? 0 : 1;
     }
@@ -428,6 +435,7 @@ export async function main(argv = process.argv.slice(2)) {
     if (command === 'fleet') {
       const result = await fleetWorkspace(projectPath, {
         tools: flags.tools,
+        hookProfile: flags.hookProfile,
         force: flags.force,
         dryRun: flags.dryRun,
         updateOpenprd: flags.updateOpenprd,
