@@ -4,6 +4,7 @@ import YAML from 'yaml';
 import { listChangeDirs, readDiscoveryConfig, resolveChangeDir } from './paths.js';
 import { analyzeOpenSpecTaskVolumes } from './tasks.js';
 import { checkStandardsWorkspace } from '../standards.js';
+import { findOpenPrdSpecLanguageViolations } from '../language-policy.js';
 
 function cjoin(...parts) {
   return path.join(...parts);
@@ -60,15 +61,22 @@ function extractProposalCapabilities(text) {
   return capabilities;
 }
 
+const SPEC_SECTION_HEADING_RE = /^##\s+(?:(ADDED|MODIFIED|REMOVED)\s+Requirements|(?:新增|修改|移除)需求)\s*$/gim;
+const REQUIREMENT_HEADING_RE = /^###\s+(?:Requirement|需求)[：:]\s*(.+)$/gm;
+const SCENARIO_HEADING_RE = /^####\s+(?:Scenario|场景)[：:]\s*(.+)$/gm;
+const WHEN_STEP_RE = /^-\s+\*\*(?:WHEN|当)\*\*/im;
+const THEN_STEP_RE = /^-\s+\*\*(?:THEN|则|那么)\*\*/im;
+
 function validateOpenSpecSpecText(relativePath, text, errors, checks) {
-  const requirementMatches = [...text.matchAll(/^### Requirement:\s+(.+)$/gm)];
-  const sectionMatches = [...text.matchAll(/^##\s+(ADDED|MODIFIED|REMOVED)\s+Requirements\s*$/gim)];
+  const requirementMatches = [...text.matchAll(REQUIREMENT_HEADING_RE)];
+  const sectionMatches = [...text.matchAll(SPEC_SECTION_HEADING_RE)];
+  const languageViolations = findOpenPrdSpecLanguageViolations(text);
 
   if (sectionMatches.length === 0) {
-    errors.push(`${relativePath} 必须包含 ADDED、MODIFIED 或 REMOVED Requirements 章节。`);
+    errors.push(`${relativePath} 必须包含“新增需求”“修改需求”或“移除需求”章节。`);
   }
   if (requirementMatches.length === 0) {
-    errors.push(`${relativePath} 必须至少包含一个 "### Requirement:" 块。`);
+    errors.push(`${relativePath} 必须至少包含一个 "### 需求：" 块。`);
   }
 
   for (let index = 0; index < requirementMatches.length; index += 1) {
@@ -77,9 +85,9 @@ function validateOpenSpecSpecText(relativePath, text, errors, checks) {
     const start = match.index ?? 0;
     const end = requirementMatches[index + 1]?.index ?? text.length;
     const block = text.slice(start, end);
-    const scenarioMatches = [...block.matchAll(/^#### Scenario:\s+(.+)$/gm)];
+    const scenarioMatches = [...block.matchAll(SCENARIO_HEADING_RE)];
     if (scenarioMatches.length === 0) {
-      errors.push(`${relativePath} 的 requirement "${title}" 必须至少包含一个 scenario。`);
+      errors.push(`${relativePath} 的需求 "${title}" 必须至少包含一个场景。`);
       continue;
     }
 
@@ -87,16 +95,23 @@ function validateOpenSpecSpecText(relativePath, text, errors, checks) {
       const scenarioStart = scenarioMatch.index ?? 0;
       const nextScenario = scenarioMatches.find((candidate) => (candidate.index ?? 0) > scenarioStart);
       const scenarioBlock = block.slice(scenarioStart, nextScenario?.index ?? block.length);
-      if (!/- \*\*WHEN\*\*/.test(scenarioBlock)) {
-        errors.push(`${relativePath} 的 scenario "${scenarioMatch[1].trim()}" 缺少 WHEN。`);
+      if (!WHEN_STEP_RE.test(scenarioBlock)) {
+        errors.push(`${relativePath} 的场景 "${scenarioMatch[1].trim()}" 缺少“当”。`);
       }
-      if (!/- \*\*THEN\*\*/.test(scenarioBlock)) {
-        errors.push(`${relativePath} 的 scenario "${scenarioMatch[1].trim()}" 缺少 THEN。`);
+      if (!THEN_STEP_RE.test(scenarioBlock)) {
+        errors.push(`${relativePath} 的场景 "${scenarioMatch[1].trim()}" 缺少“则”。`);
       }
     }
   }
 
-  checks.push(`${relativePath}: ${requirementMatches.length} 个 requirement。`);
+  for (const violation of languageViolations.slice(0, 5)) {
+    errors.push(`${relativePath}:${violation.line} 不符合简体中文规则: ${violation.reason}。除必要专业字段、命令、文件名或英文产品名外，spec.md 正文必须使用简体中文。`);
+  }
+  if (languageViolations.length > 5) {
+    errors.push(`${relativePath} 还有 ${languageViolations.length - 5} 处简体中文规则问题。`);
+  }
+
+  checks.push(`${relativePath}: ${requirementMatches.length} 个需求。`);
 }
 
 export async function validateOpenSpecChangeWorkspace(projectRoot, options = {}) {

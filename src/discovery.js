@@ -137,7 +137,7 @@ function buildCoverageItems({ mode, inventory, analysis }) {
   if (items.length === 0) {
     items.push({
       id: 'review:openprd-completeness',
-      title: 'OpenPrd completeness review',
+      title: 'OpenPrd 完整性评审',
       kind: 'review',
       status: 'pending',
       priority: 'medium',
@@ -188,7 +188,7 @@ function refreshCoverageMatrix(coverageMatrix) {
 function renderDiscoveryContext({ mode, projectRoot, sourceRoot, snapshot, analysis, coverageMatrix }) {
   const next = coverageMatrix.nextPendingItem;
   return [
-    '# OpenPrd Discovery Context',
+    '# OpenPrd 持续发现上下文',
     '',
     `- 模式: ${mode}`,
     `- 项目根目录: ${projectRoot}`,
@@ -296,8 +296,8 @@ async function openspecDiscoveryWorkspaceImpl(projectRoot, options = {}, depende
     referencePath: mode === 'reference' ? (options.reference ?? null) : null,
     latestPrdVersion: snapshot.versionId,
     nextAction: coverageMatrix.nextPendingItem
-      ? `Investigate ${coverageMatrix.nextPendingItem.title}`
-      : 'Review OpenPrd completeness',
+      ? `调研 ${coverageMatrix.nextPendingItem.title}`
+      : '评审 OpenPrd 完整性',
   };
   const firstIteration = {
     iteration: 1,
@@ -318,34 +318,34 @@ async function openspecDiscoveryWorkspaceImpl(projectRoot, options = {}, depende
     updatedAt: now,
   });
   await writeText(cjoin(discoveryRoot, 'README.md'), [
-    '# OpenPrd Discovery',
+    '# OpenPrd 持续发现',
     '',
-    'This directory stores continuous discovery state for OpenPrd work.',
+    '本目录保存 OpenPrd 持续发现状态。',
     '',
-    '## Files',
+    '## 文件',
     '',
-    '- `control.json` tracks the active loop state and iteration budget.',
-    '- `coverage-matrix.json` tracks what still needs to be mined into OpenPrd specs and tasks.',
-    '- `claims.jsonl` records evidence-backed requirement claims.',
-    '- `open-questions.md` keeps unresolved user or product questions visible.',
-    '- `iterations.jsonl` records each loop pass.',
+    '- `control.json` 记录当前循环状态和迭代预算。',
+    '- `coverage-matrix.json` 记录仍需沉淀到 OpenPrd specs 和 tasks 的覆盖项。',
+    '- `claims.jsonl` 记录有证据支撑的需求声明。',
+    '- `open-questions.md` 保持用户或产品开放问题可见。',
+    '- `iterations.jsonl` 记录每一轮循环。',
     '',
-    '## Task Sharding',
+    '## 任务拆分',
     '',
-    '- Keep `tasks.md` as the first task entry.',
-    '- Continue long changes with `tasks-002.md`, `tasks-003.md`, and so on.',
-    '- The last checkbox in every non-final task file must hand off to the next file.',
-    '- Projects may override the max task count in `.openprd/discovery/config.json` at `taskSharding.maxItemsPerFile`.',
-    '- For structured tasks, use only `deps`, `done`, and `verify` metadata under a stable task id.',
+    '- `tasks.md` 保持为第一个任务入口。',
+    '- 长变更继续使用 `tasks-002.md`、`tasks-003.md` 等文件。',
+    '- 每个非最终任务文件的最后一个 checkbox 必须交接到下一个文件。',
+    '- 项目可以通过 `.openprd/discovery/config.json` 的 `taskSharding.maxItemsPerFile` 覆盖单文件任务上限。',
+    '- 结构化任务只使用稳定任务 id 下的 `deps`、`done` 和 `verify` 元数据。',
     '',
     '```md',
-    '- [ ] T009.07 Port legacy database import preview',
+    '- [ ] T009.07 迁移历史数据库导入预览',
     '  - deps: T001.14, T007.06',
-    '  - done: preview shows counts, conflicts, skipped items, warnings',
+    '  - done: 预览展示数量、冲突、跳过项和警告',
     '  - verify: npm run test -- migration',
     '```',
     '',
-    '- Omit `deps` when there are no dependencies.',
+    '- 没有依赖时省略 `deps`。',
     '',
   ].join('\n'));
   await writeJson(cjoin(runDir, 'control.json'), control);
@@ -369,9 +369,9 @@ async function openspecDiscoveryWorkspaceImpl(projectRoot, options = {}, depende
     pendingCoverageItems: coverageMatrix.summary.pending,
   });
   await appendProgress(ws, [
-    `Initialized OpenPrd discovery run ${runId}.`,
-    `Mode: ${mode}.`,
-    `Pending coverage items: ${coverageMatrix.summary.pending}.`,
+    `已初始化 OpenPrd 持续发现运行 ${runId}。`,
+    `模式: ${mode}。`,
+    `待处理覆盖项: ${coverageMatrix.summary.pending}。`,
   ]);
 
   return {
@@ -507,8 +507,8 @@ async function advanceOpenSpecDiscoveryWorkspace(projectRoot, options = {}) {
     updatedAt: now,
     status: updatedCoverageMatrix.summary.pending > 0 ? 'active' : 'ready_for_review',
     nextAction: updatedCoverageMatrix.nextPendingItem
-      ? `Investigate ${updatedCoverageMatrix.nextPendingItem.title}`
-      : 'Review OpenPrd completeness',
+      ? `调研 ${updatedCoverageMatrix.nextPendingItem.title}`
+      : '评审 OpenPrd 完整性',
   };
   const iterationEntry = {
     iteration: nextIteration,

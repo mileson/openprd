@@ -38,6 +38,8 @@ It is especially useful when you want:
 - **Review status tracking**: use `pending-confirmation`, `confirmed`, and `needs-revision`
 - **OpenPrd discovery mode**: initialize durable coverage runs for existing projects, reference projects, or unclear requirements
 - **Project standards**: initialize and verify `docs/basic/`, file manual templates, and folder README templates as part of execution quality gates
+- **Quality Eval Reports**: review observability, business cost and abuse guardrails, smoke coverage, task completeness, performance baselines, extreme data, and project knowledge through HTML reports
+- **Project knowledge skills**: turn verified fixes and recurring diagnosis patterns into reusable `.openprd/knowledge/skills/` experience skills
 - **OpenPrd change and task execution**: materialize PRD snapshots into change files, validate them, apply accepted specs, archive changes, and advance structured tasks by dependency order
 - **Long-running agent loop**: turn accepted change tasks into one-task-per-session Codex or Claude execution prompts with verification, progress logs, and optional task commits
 - **Default agent integration**: generate Codex, Claude, and Cursor guidance from one OpenPrd source, including Codex hooks with `codex_hooks = true`
@@ -78,11 +80,13 @@ openprd init /path/to/project --template-pack agent
 
 `init` creates `.openprd/`, `docs/basic/`, `AGENTS.md`, and generated Codex / Claude / Cursor guidance. Codex projects also get `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/openprd-hook.mjs`, and user-level Codex `codex_hooks = true`.
 
-Codex hooks default to `lite`: only `UserPromptSubmit` is installed, and context
-is injected only for prompts that explicitly mention OpenPrd, PRD, deep
-research/benchmarking, replication, standards, fleet, or documentation standards.
-Use `--hook-profile guarded` for high-risk `PreToolUse` gates, and `full` only for
-temporary deep diagnostics.
+Codex hooks default to `lite`: `UserPromptSubmit` plus a lightweight `PreToolUse`
+write gate. Context is injected for prompts that explicitly mention OpenPrd,
+PRD, deep research/benchmarking, replication, standards, fleet, documentation
+standards, or look like new product/module/workflow requirements. The lite write
+gate only matches direct editing tools so read-only shell exploration stays
+quiet; use `guarded` when shell commands should also pass through the write gate,
+and `full` only for temporary deep diagnostics.
 
 ### 2. Check the current collaboration state
 
@@ -223,6 +227,42 @@ the change affects responsibilities, flows, structure, dependencies, or product
 behavior. If no documentation update is needed, agents should say the check was
 performed and why the existing docs still match the code.
 
+## Quality Eval Reports
+
+`openprd init` also creates a quality contract:
+
+- `.openprd/quality/config.json`
+- `.openprd/quality/reports/`
+- `.openprd/knowledge/`
+
+Use:
+
+```bash
+openprd quality /path/to/project --verify
+```
+
+The command writes both JSON and HTML reports under `.openprd/quality/reports/`.
+The HTML Eval Report is the human review surface for centralized logging and
+traceability, business cost and abuse guardrails, smoke/e2e coverage,
+task-to-feature completeness, normal and extreme performance baselines,
+pressure fixtures, and project knowledge gaps.
+
+When a requirement involves free users, quotas, AI calls, third-party APIs,
+generation, storage, downloads, or other metered costs, `quality --verify`
+also checks for cost drivers, user-level limits, negative abuse-path
+verification, usage/cost monitoring, alert thresholds, and stop-loss actions.
+
+After a fix has been verified and reviewed, promote the abstract pattern into
+project knowledge:
+
+```bash
+openprd quality /path/to/project --learn --from <report-id-or-json>
+```
+
+This writes incident, pattern, and experience skill artifacts under
+`.openprd/knowledge/` so future tasks can retrieve the lesson instead of
+rediscovering it.
+
 ## Agent Setup
 
 OpenPrd can install the project harness into the agent environment so users do not
@@ -259,11 +299,13 @@ files from the canonical OpenPrd source while preserving unrelated user hook
 groups.
 
 The harness is stateful, but hooks are proportional to the chosen profile.
-Default `lite` avoids per-tool hooks for small tasks. `guarded` adds high-risk
-`PreToolUse` checks, and `full` restores SessionStart/PreToolUse/PostToolUse/Stop
-telemetry for temporary diagnostics. High-risk actions such as freeze,
-handoff, accepted spec apply/archive, commit, push, release, or publish are gated
-by `openprd run . --verify`, which covers standards, workspace validation, active
+Default `lite` keeps a lightweight `PreToolUse` write gate for requirement
+intake and limits it to direct editing tools, avoiding read-only shell hook
+noise and PostToolUse/Stop telemetry. `guarded` also gates shell tools, while
+`full` restores SessionStart/PreToolUse/PostToolUse/Stop telemetry for temporary
+diagnostics. High-risk actions such as freeze, handoff, accepted spec
+apply/archive, commit, push, release, or publish are gated by
+`openprd run . --verify`, which covers standards, workspace validation, active
 change validation, and active discovery verification.
 
 `openprd run . --context` is the Ralph-style loop surface for agents. It selects

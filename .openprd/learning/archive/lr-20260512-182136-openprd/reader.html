@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>《OpenPrd 复盘学习模式》修行札记</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #efede6;
+        --paper: #fbfaf6;
+        --panel: #fffefa;
+        --ink: #151513;
+        --text: #26241f;
+        --muted: #6f6a60;
+        --line: #ded8cc;
+        --line-strong: #c9c0b2;
+        --accent: #13736b;
+        --accent-deep: #0c514c;
+        --accent-soft: #e5f1ee;
+        --amber: #7a5428;
+        --amber-soft: #f1e7d7;
+        --jade: #13736b;
+        --wash: #f7f5ef;
+        --reader-scale: 1;
+        --mono: "JetBrains Mono","SFMono-Regular",Menlo,monospace;
+        --serif: "Songti SC","Noto Serif CJK SC","Iowan Old Style","Palatino Linotype",serif;
+        --ui: "Avenir Next","Gill Sans","Trebuchet MS",sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background:
+          linear-gradient(90deg, rgba(21,21,19,0.04) 0 1px, transparent 1px 100%),
+          linear-gradient(180deg, #f7f5ef 0%, var(--bg) 100%);
+        background-size: 64px 64px, auto;
+        color: var(--text);
+        font-family: var(--ui);
+        overflow: hidden;
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: minmax(280px, 330px) minmax(0, 980px);
+        gap: 18px;
+        max-width: 1340px;
+        height: 100vh;
+        margin: 0 auto;
+        padding: 18px;
+      }
+      .side-panel,
+      .reader {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+        box-shadow: 0 18px 44px rgba(27, 24, 20, 0.08);
+      }
+      .side-panel {
+        position: sticky;
+        top: 18px;
+        align-self: start;
+        max-height: calc(100vh - 36px);
+        overflow: auto;
+        padding: 18px;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.9), rgba(251,250,246,0.96)),
+          var(--panel);
+      }
+      .reader {
+        min-width: 0;
+        background: var(--paper);
+        overflow: hidden;
+        position: relative;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        height: calc(100vh - 36px);
+      }
+      .reader-header {
+        border-bottom: 1px solid var(--line);
+        background:
+          linear-gradient(135deg, rgba(255,254,250,0.98), rgba(247,245,239,0.96)),
+          var(--paper);
+        padding: 16px 30px 10px;
+      }
+      .reader-scroll {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        scroll-padding-top: 24px;
+      }
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0;
+      }
+      h1 {
+        margin: 0;
+        font-family: var(--serif);
+        font-size: clamp(28px, 3.4vw, 38px);
+        line-height: 1.12;
+        font-weight: 800;
+        color: var(--ink);
+      }
+      .subtitle {
+        margin: 10px 0 0;
+        color: var(--muted);
+        line-height: 1.55;
+        font-size: 15px;
+      }
+      .meta-row,
+      .controls,
+      .chapter-evidence {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .meta-row { margin-top: 8px; }
+      .meta-details {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .meta-details summary {
+        width: fit-content;
+        cursor: pointer;
+        color: var(--accent-deep);
+        font-weight: 750;
+        line-height: 1.4;
+      }
+      .meta-pill,
+      .evidence-chip {
+        display: inline-flex;
+        width: fit-content;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 5px 9px;
+        background: #ffffff;
+        color: var(--muted);
+        font-size: 11px;
+        text-decoration: none;
+      }
+      .evidence-chip {
+        color: var(--accent);
+        background: var(--accent-soft);
+        border-color: rgba(15,118,110,0.22);
+      }
+      .evidence-chip.muted {
+        color: var(--muted);
+        background: #f8fafc;
+      }
+      .controls {
+        justify-content: space-between;
+        margin-top: 9px;
+        border-top: 1px solid var(--line);
+        padding-top: 9px;
+        background: transparent;
+        gap: 14px;
+      }
+      .button-row { display: flex; gap: 8px; flex-wrap: wrap; }
+      button {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 7px 10px;
+        background: #fffefa;
+        color: var(--text);
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      button:hover { border-color: var(--accent); }
+      button:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.58; }
+      .progress-wrap {
+        min-width: 180px;
+        flex: 1;
+      }
+      .progress-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 6px;
+      }
+      .progress-track {
+        height: 7px;
+        border-radius: 999px;
+        background: #e5dfd4;
+        overflow: hidden;
+      }
+      .progress-bar {
+        height: 100%;
+        width: 0%;
+        border-radius: inherit;
+        background: var(--accent);
+        transition: width 180ms ease;
+      }
+      .toc-title,
+      .panel-title {
+        margin: 0 0 12px;
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--accent-deep);
+      }
+      .toc-subtitle {
+        margin: -4px 0 16px;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 13px;
+      }
+      .outline-list,
+      .outline-list ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .outline-list ol {
+        margin-left: 12px;
+        padding-left: 12px;
+        border-left: 1px solid var(--line);
+      }
+      .outline-branch summary {
+        list-style: none;
+      }
+      .outline-branch summary::-webkit-details-marker { display: none; }
+      .outline-jump {
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        gap: 10px;
+        width: 100%;
+        text-align: left;
+        border-color: transparent;
+        background: transparent;
+        color: var(--text);
+        line-height: 1.45;
+        padding: 9px 8px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        cursor: pointer;
+      }
+      .outline-jump.active,
+      .outline-jump:hover {
+        border-color: rgba(15,118,110,0.24);
+        background: var(--accent-soft);
+        color: #134e4a;
+      }
+      .outline-number {
+        color: var(--amber);
+        font-family: var(--serif);
+        font-weight: 800;
+      }
+      .outline-copy strong,
+      .outline-copy small {
+        display: block;
+      }
+      .outline-copy small {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .stat-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 10px;
+        background: var(--wash);
+      }
+      .stat-value {
+        font-family: var(--serif);
+        font-size: 26px;
+        font-weight: 700;
+      }
+      .stat-label {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .chapter {
+        padding: 38px 52px 54px;
+        min-height: 100%;
+      }
+      .chapter[hidden] { display: none; }
+      .chapter.active {
+        box-shadow: inset 5px 0 0 var(--accent);
+      }
+      .chapter-kicker {
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 800;
+        margin-bottom: 8px;
+      }
+      .chapter h2 {
+        margin: 0 0 12px;
+        font-family: var(--serif);
+        font-size: 42px;
+        line-height: 1.22;
+      }
+      .chapter-summary {
+        margin: 0 0 20px;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.8;
+      }
+      .chapter p,
+      .learning-block p,
+      .source-card p {
+        font-size: calc(17px * var(--reader-scale));
+        line-height: 1.85;
+      }
+      .learning-block {
+        margin: 22px 0;
+        border: 1px solid var(--line);
+        border-left-width: 4px;
+        border-radius: 16px;
+        padding: 18px 20px;
+        background: #fffefa;
+      }
+      .learning-block h4 {
+        margin: 0 0 12px;
+        font-size: 16px;
+      }
+      .learning-block.retrieval { border-left-color: var(--accent); }
+      .learning-block.worked { border-left-color: var(--amber); background: #fbf6ec; }
+      .retrieval-item {
+        border-top: 1px solid var(--line);
+        padding: 10px 0;
+      }
+      .retrieval-item:first-of-type { border-top: 0; }
+      .retrieval-item summary {
+        cursor: pointer;
+        font-weight: 750;
+        line-height: 1.6;
+      }
+      .retrieval-item summary span {
+        display: inline-flex;
+        margin-right: 8px;
+        color: var(--accent);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .retrieval-hint,
+      .retrieval-answer,
+      .worked-principle {
+        color: var(--muted);
+        line-height: 1.7;
+        margin-top: 8px;
+      }
+      .worked-item + .worked-item { margin-top: 14px; }
+      .worked-title {
+        font-weight: 800;
+      }
+      ol,
+      ul {
+        margin: 10px 0 0;
+        padding-left: 20px;
+        line-height: 1.75;
+      }
+      .chapter-evidence {
+        display: block;
+        margin-top: 20px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+      .chapter-evidence summary {
+        cursor: pointer;
+      }
+      .chapter-evidence summary > span {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        margin-right: 8px;
+      }
+      .evidence-mini-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .evidence-mini-card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255,255,255,0.72);
+        padding: 10px;
+      }
+      .evidence-mini-card strong,
+      .evidence-mini-card span {
+        display: block;
+      }
+      .evidence-mini-card span {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 3px;
+      }
+      .evidence-mini-card p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .source-card,
+      .claim-item,
+      .gap-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px;
+        background: #fffefa;
+        margin-bottom: 10px;
+      }
+      .source-title,
+      .claim-statement {
+        font-weight: 800;
+        line-height: 1.5;
+      }
+      .source-meta,
+      .claim-meta,
+      .source-digest {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+        margin-top: 4px;
+      }
+      .source-card pre {
+        margin: 10px 0 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        border-radius: 8px;
+        background: #111827;
+        color: #e5e7eb;
+        padding: 10px;
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .gap-item {
+        border-color: rgba(220,38,38,0.16);
+        background: var(--danger-soft);
+      }
+      @media (max-width: 1120px) {
+        body { overflow: auto; }
+        .shell { grid-template-columns: 1fr; height: auto; min-height: 100vh; padding: 12px; }
+        .side-panel {
+          position: static;
+          max-height: none;
+        }
+        .reader { height: auto; }
+        .reader-scroll { height: auto; overflow: visible; }
+        .chapter { min-height: auto; padding: 24px 20px 30px; }
+      }
+      @media (max-width: 700px) {
+        .reader-header { padding: 18px 20px 12px; }
+        h1 { font-size: 30px; }
+        .chapter h2 { font-size: 28px; }
+        .stat-grid { grid-template-columns: 1fr; }
+        .controls { display: grid; gap: 12px; }
+        .chapter { padding: 30px 22px 38px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="side-panel">
+        <p class="toc-title">书籍大纲</p>
+        <p class="toc-subtitle">最多三层展开。先读章名，再进入心法、练习与示例。</p>
+        <ol class="outline-list">
+          
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-1" data-target-id="chapter-1">
+      <span class="outline-number">1</span>
+      <span class="outline-copy">
+        <strong>第 1 章 · 筑基</strong>
+        <small>以验为基，收束归藏</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-2" data-target-id="chapter-1-reading">
+      <span class="outline-number">1.1</span>
+      <span class="outline-copy">
+        <strong>本章心法</strong>
+        <small>先定任务完成之基，把可验证的路径收束成学习书的地脉。</small>
+      </span>
+    </span>
+  </li>
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-1-retrieval">
+      <span class="outline-number">1.2</span>
+      <span class="outline-copy">
+        <strong>检索练习</strong>
+        <small>2 题</small>
+      </span>
+    </span>
+  </li>
+
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-2" data-target-id="chapter-1-worked">
+      <span class="outline-number">1.3</span>
+      <span class="outline-copy">
+        <strong>工作示例</strong>
+        <small>1 个</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-3" data-target-id="chapter-1-worked-1">
+      <span class="outline-number">1.3.1</span>
+      <span class="outline-copy">
+        <strong>W1</strong>
+        <small>Worked Example: 从 loop finish 进入学习归档</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-1-evidence">
+      <span class="outline-number">1.4</span>
+      <span class="outline-copy">
+        <strong>证据锚点</strong>
+        <small>3 处</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-1" data-target-id="chapter-2">
+      <span class="outline-number">2</span>
+      <span class="outline-copy">
+        <strong>第 2 章 · 观想</strong>
+        <small>观卷识脉，寻见工作区灵台</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-2" data-target-id="chapter-2-reading">
+      <span class="outline-number">2.1</span>
+      <span class="outline-copy">
+        <strong>本章心法</strong>
+        <small>顺着 `.openprd/`、docs/basic 与 loop 记录观其经脉，知道系统如何运转。</small>
+      </span>
+    </span>
+  </li>
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-2-retrieval">
+      <span class="outline-number">2.2</span>
+      <span class="outline-copy">
+        <strong>检索练习</strong>
+        <small>1 题</small>
+      </span>
+    </span>
+  </li>
+
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-2" data-target-id="chapter-2-worked">
+      <span class="outline-number">2.3</span>
+      <span class="outline-copy">
+        <strong>工作示例</strong>
+        <small>1 个</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-3" data-target-id="chapter-2-worked-1">
+      <span class="outline-number">2.3.1</span>
+      <span class="outline-copy">
+        <strong>W1</strong>
+        <small>Worked Example: 把一个新 learning 包定位到目录里</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-2-evidence">
+      <span class="outline-number">2.4</span>
+      <span class="outline-copy">
+        <strong>证据锚点</strong>
+        <small>5 处</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-1" data-target-id="chapter-3">
+      <span class="outline-number">3</span>
+      <span class="outline-copy">
+        <strong>第 3 章 · 破境</strong>
+        <small>破雾辨源，事实与推断各归其位</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-2" data-target-id="chapter-3-reading">
+      <span class="outline-number">3.1</span>
+      <span class="outline-copy">
+        <strong>本章心法</strong>
+        <small>把来源、置信度和推断拆开，避免风格化叙述遮住事实。</small>
+      </span>
+    </span>
+  </li>
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-3-retrieval">
+      <span class="outline-number">3.2</span>
+      <span class="outline-copy">
+        <strong>检索练习</strong>
+        <small>1 题</small>
+      </span>
+    </span>
+  </li>
+
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-2" data-target-id="chapter-3-worked">
+      <span class="outline-number">3.3</span>
+      <span class="outline-copy">
+        <strong>工作示例</strong>
+        <small>1 个</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-3" data-target-id="chapter-3-worked-1">
+      <span class="outline-number">3.3.1</span>
+      <span class="outline-copy">
+        <strong>W1</strong>
+        <small>Worked Example: 把一条推断句写对</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-3-evidence">
+      <span class="outline-number">3.4</span>
+      <span class="outline-copy">
+        <strong>证据锚点</strong>
+        <small>4 处</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-1" data-target-id="chapter-4">
+      <span class="outline-number">4</span>
+      <span class="outline-copy">
+        <strong>第 4 章 · 传功</strong>
+        <small>传功成谱，把 Prompt 法门写成契约</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-2" data-target-id="chapter-4-reading">
+      <span class="outline-number">4.1</span>
+      <span class="outline-copy">
+        <strong>本章心法</strong>
+        <small>把风格 Prompt 工程、内容合同和阅读器分层保存，让后来者可复用。</small>
+      </span>
+    </span>
+  </li>
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-4-retrieval">
+      <span class="outline-number">4.2</span>
+      <span class="outline-copy">
+        <strong>检索练习</strong>
+        <small>1 题</small>
+      </span>
+    </span>
+  </li>
+
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-2" data-target-id="chapter-4-worked">
+      <span class="outline-number">4.3</span>
+      <span class="outline-copy">
+        <strong>工作示例</strong>
+        <small>1 个</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-3" data-target-id="chapter-4-worked-1">
+      <span class="outline-number">4.3.1</span>
+      <span class="outline-copy">
+        <strong>W1</strong>
+        <small>Worked Example: 新增一个题材风格</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-4-evidence">
+      <span class="outline-number">4.4</span>
+      <span class="outline-copy">
+        <strong>证据锚点</strong>
+        <small>2 处</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-1" data-target-id="chapter-5">
+      <span class="outline-number">5</span>
+      <span class="outline-copy">
+        <strong>第 5 章 · 归元</strong>
+        <small>归元复盘，以检索练习再启下一境</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-2" data-target-id="chapter-5-reading">
+      <span class="outline-number">5.1</span>
+      <span class="outline-copy">
+        <strong>本章心法</strong>
+        <small>以检索练习和工作示例收功，把这一轮学习转成下一轮行动。</small>
+      </span>
+    </span>
+  </li>
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-5-retrieval">
+      <span class="outline-number">5.2</span>
+      <span class="outline-copy">
+        <strong>检索练习</strong>
+        <small>2 题</small>
+      </span>
+    </span>
+  </li>
+
+    <li>
+      <details class="outline-branch" open>
+        <summary>
+    <span class="outline-jump depth-2" data-target-id="chapter-5-worked">
+      <span class="outline-number">5.3</span>
+      <span class="outline-copy">
+        <strong>工作示例</strong>
+        <small>1 个</small>
+      </span>
+    </span>
+  </summary>
+        <ol>
+          <li>
+    <span class="outline-jump depth-3" data-target-id="chapter-5-worked-1">
+      <span class="outline-number">5.3.1</span>
+      <span class="outline-copy">
+        <strong>W1</strong>
+        <small>Worked Example: 复盘后再发起下一轮任务</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+<li>
+    <span class="outline-jump depth-2" data-target-id="chapter-5-evidence">
+      <span class="outline-number">5.4</span>
+      <span class="outline-copy">
+        <strong>证据锚点</strong>
+        <small>3 处</small>
+      </span>
+    </span>
+  </li>
+        </ol>
+      </details>
+    </li>
+  
+        </ol>
+        <div class="stat-grid">
+          <div class="stat"><div class="stat-value">5</div><div class="stat-label">章 · 7 道检索 · 5 个示例</div></div>
+        </div>
+      </aside>
+
+      <article class="reader">
+        <header class="reader-header">
+          <p class="eyebrow">OpenPrd Learning Review · 仙侠修真</p>
+          <h1>《OpenPrd 复盘学习模式》修行札记</h1>
+          <p class="subtitle">仙侠修真 · 修行札记 · 用户主动提出 · sourceScope=all</p>
+          <details class="meta-details">
+            <summary>生成信息</summary>
+            <div class="meta-row">
+              <span class="meta-pill">topic: OpenPrd 复盘学习模式</span>
+              <span class="meta-pill">genre: xianxia</span>
+              <span class="meta-pill">style: cultivation</span>
+              <span class="meta-pill">trigger: manual</span>
+            </div>
+          </details>
+          <div class="controls">
+            <div class="button-row">
+              <button type="button" id="prevChapter">上一章</button>
+              <button type="button" id="nextChapter">下一章</button>
+              <button type="button" id="smallerText">A-</button>
+              <button type="button" id="largerText">A+</button>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-meta">
+                <span id="progressTitle">阅读进度</span>
+                <span id="progressText">1/5</span>
+              </div>
+              <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+            </div>
+          </div>
+        </header>
+        <div class="reader-scroll" tabindex="0" aria-label="OpenPrd 复盘学习阅读器 · 当前章节正文">
+          
+    <section class="chapter" id="chapter-1" data-chapter-index="0">
+      <div class="chapter-kicker" id="chapter-1-reading">第 1 章 · 筑基</div>
+      <h2>以验为基，收束归藏</h2>
+      <p class="chapter-summary">先定任务完成之基，把可验证的路径收束成学习书的地脉。</p>
+      <p>此处先立灵根，再回看证据脉络。 这一章先把《OpenPrd 复盘学习模式》的任务完成事实固定下来。长程任务结束时，真正值得保留的不是“我感觉做完了”，而是“哪个任务、哪个验证、哪份报告、哪个路径都能再找到”。</p>
+<p>如果这次是自动生成，触发源来自 loop finish；如果这是用户主动提出，触发源来自明确的复盘请求。两种情形最终都会落回同一条原则：先固证据灵根，再运笔成书。</p>
+      
+    <section class="learning-block retrieval" id="chapter-1-retrieval">
+      <h4>检索练习</h4>
+      
+        <details class="retrieval-item" id="chapter-1-retrieval-1">
+          <summary><span>R1</span>如果只看一个位置，你会先从哪里确认当前工作区真的结束了？</summary>
+          <div class="retrieval-hint">提示: 想想 current state、task graph、验证记录之间的关系。</div>
+          <div class="retrieval-answer">参考答案: 优先看 `.openprd/state/current.json` 和 `.openprd/state/task-graph.json`，再去对照最近一次验证记录或 loop 报告。</div>
+        </details>
+      
+
+        <details class="retrieval-item" id="chapter-1-retrieval-2">
+          <summary><span>R2</span>这份学习书为什么不直接把所有内容写成普通 Markdown？</summary>
+          <div class="retrieval-hint">提示: 考虑可复用、可归档、可再渲染。</div>
+          <div class="retrieval-answer">参考答案: 因为内容合同与 evidence manifest 需要独立维护，HTML reader 只是一个可视化输出层，后续可以换皮但不破坏语义。</div>
+        </details>
+      
+    </section>
+  
+      
+    <section class="learning-block worked" id="chapter-1-worked">
+      <h4>工作示例（Worked Example）</h4>
+      
+        <div class="worked-item" id="chapter-1-worked-1">
+          <div class="worked-title">Worked Example: 从 loop finish 进入学习归档</div>
+          <p>一个长程任务刚刚完成，验证也通过了。</p>
+          <ol><li>先收集 task、change、verify 和 test report 的证据。</li><li>把这些证据写成 manifest，而不是直接塞进叙述正文。</li><li>生成 learning-content.json 和 learning-content.md。</li><li>把 reader.html 归档到 `.openprd/learning/archive/&lt;packageId&gt;/`。</li></ol>
+          <div class="worked-principle">原则: 先结构化，再叙述；先证据，后表达。</div>
+        </div>
+      
+    </section>
+  
+      
+    <details class="chapter-evidence" id="chapter-1-evidence">
+      <summary><span>本章出处</span>
+    <span class="evidence-chip">current-state</span>
+  
+
+    <span class="evidence-chip">task-graph</span>
+  
+
+    <span class="evidence-chip">verification</span>
+  </summary>
+      <div class="evidence-mini-list">
+        
+            <div class="evidence-mini-card">
+              <strong>当前状态</strong>
+              <span>state/current.json</span>
+              <p>状态: seed · PRD 版本: 0</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>任务图</strong>
+              <span>state/task-graph.json</span>
+              <p>下一个就绪节点: clarify · 节点数: 21</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>验证记录</strong>
+              <span>engagements/active/verification.md</span>
+              <p>验证命令、验证结果和回归结论。</p>
+            </div>
+          
+      </div>
+    </details>
+  
+    </section>
+  
+
+    <section class="chapter" id="chapter-2" data-chapter-index="1" hidden>
+      <div class="chapter-kicker" id="chapter-2-reading">第 2 章 · 观想</div>
+      <h2>观卷识脉，寻见工作区灵台</h2>
+      <p class="chapter-summary">顺着 `.openprd/`、docs/basic 与 loop 记录观其经脉，知道系统如何运转。</p>
+      <p>读到这里，可以把它看作一枚玉简：外有文气，内有路径。 OpenPrd 的学习材料不是单独发明一套结构，而是把原有的 `.openprd/`、`docs/basic/`、`skills/` 和长程任务产物串成一条可以阅读的路径。</p>
+<p>因此这个章节最重要的，不是“是否有书卷气”，而是让用户在读完后能重新指出：哪些文件属于核心事实、哪些属于过程记录、哪些属于视觉化输出、哪些属于可延展的技能层。</p>
+      
+    <section class="learning-block retrieval" id="chapter-2-retrieval">
+      <h4>检索练习</h4>
+      
+        <details class="retrieval-item" id="chapter-2-retrieval-1">
+          <summary><span>R1</span>哪些文件更像事实源，哪些文件更像过程源？</summary>
+          <div class="retrieval-hint">提示: 区分 state / docs / report / skill 四类东西。</div>
+          <div class="retrieval-answer">参考答案: 事实源通常是 current state、version snapshot、docs/basic 基线文档；过程源通常是 decision log、progress、verification、loop report。</div>
+        </details>
+      
+    </section>
+  
+      
+    <section class="learning-block worked" id="chapter-2-worked">
+      <h4>工作示例（Worked Example）</h4>
+      
+        <div class="worked-item" id="chapter-2-worked-1">
+          <div class="worked-title">Worked Example: 把一个新 learning 包定位到目录里</div>
+          <p>未来维护者第一次打开 `.openprd/learning/archive/`。</p>
+          <ol><li>先看 current.json，确认最近一次学习包是什么。</li><li>再看 archive 目录中的 packageId，定位 reader.html。</li><li>最后对照 learning-content.json 和 evidence-manifest.json 回看来源。</li></ol>
+          <div class="worked-principle">原则: 目录结构要先能被人找到，再谈内容深度。</div>
+        </div>
+      
+    </section>
+  
+      
+    <details class="chapter-evidence" id="chapter-2-evidence">
+      <summary><span>本章出处</span>
+    <span class="evidence-chip">current-state</span>
+  
+
+    <span class="evidence-chip">version-index</span>
+  
+
+    <span class="evidence-chip">docs-basic-file-structure</span>
+  
+
+    <span class="evidence-chip">docs-basic-app-flow</span>
+  
+
+    <span class="evidence-chip">docs-basic-backend-structure</span>
+  </summary>
+      <div class="evidence-mini-list">
+        
+            <div class="evidence-mini-card">
+              <strong>当前状态</strong>
+              <span>state/current.json</span>
+              <p>状态: seed · PRD 版本: 0</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>版本索引</strong>
+              <span>state/version-index.json</span>
+              <p>版本数: 0</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>docs/basic/file-structure.md</strong>
+              <span>../docs/basic/file-structure.md</span>
+              <p>文件结构和目录边界的基础文档。</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>docs/basic/app-flow.md</strong>
+              <span>../docs/basic/app-flow.md</span>
+              <p>产品流程和状态流的基础文档。</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>docs/basic/backend-structure.md</strong>
+              <span>../docs/basic/backend-structure.md</span>
+              <p>后端模块和数据流的基础文档。</p>
+            </div>
+          
+      </div>
+    </details>
+  
+    </section>
+  
+
+    <section class="chapter" id="chapter-3" data-chapter-index="2" hidden>
+      <div class="chapter-kicker" id="chapter-3-reading">第 3 章 · 破境</div>
+      <h2>破雾辨源，事实与推断各归其位</h2>
+      <p class="chapter-summary">把来源、置信度和推断拆开，避免风格化叙述遮住事实。</p>
+      <p>破境的关键不是声势，而是把事实和推断分开。 真正长期可维护的学习内容，不是“描述得很美”，而是“每一句都知道从哪来”。这就是 evidence manifest 的意义：把来源、摘要、置信度、推断关系拆开。</p>
+<p>在这个模型里，正文可以有风格，但不能有失真。凡是从多个来源综合出来的结论，都应该像科研笔记一样带着 sourceIds，让后面的读者可以一键回溯。</p>
+      
+    <section class="learning-block retrieval" id="chapter-3-retrieval">
+      <h4>检索练习</h4>
+      
+        <details class="retrieval-item" id="chapter-3-retrieval-1">
+          <summary><span>R1</span>manifest 里最应该避免的是什么？</summary>
+          <div class="retrieval-hint">提示: 想一想“看起来像事实，但其实没来源”的句子。</div>
+          <div class="retrieval-answer">参考答案: 最应该避免的是没有 sourceIds、没有路径、没有置信度，却被写成确定事实的句子。</div>
+        </details>
+      
+    </section>
+  
+      
+    <section class="learning-block worked" id="chapter-3-worked">
+      <h4>工作示例（Worked Example）</h4>
+      
+        <div class="worked-item" id="chapter-3-worked-1">
+          <div class="worked-title">Worked Example: 把一条推断句写对</div>
+          <p>你想表达“这个项目现在适合进入学习归档”。</p>
+          <ol><li>先写来源：current state、task graph、verification、loop report。</li><li>再写推断：这些来源组合起来说明任务已经到了可沉淀阶段。</li><li>最后把推断标成 inference，并保留 sourceIds。</li></ol>
+          <div class="worked-principle">原则: 推断不是不能写，而是不能装成未验证的事实。</div>
+        </div>
+      
+    </section>
+  
+      
+    <details class="chapter-evidence" id="chapter-3-evidence">
+      <summary><span>本章出处</span>
+    <span class="evidence-chip">current-state</span>
+  
+
+    <span class="evidence-chip">task-graph</span>
+  
+
+    <span class="evidence-chip">verification</span>
+  
+
+    <span class="evidence-chip">docs-basic-prd</span>
+  </summary>
+      <div class="evidence-mini-list">
+        
+            <div class="evidence-mini-card">
+              <strong>当前状态</strong>
+              <span>state/current.json</span>
+              <p>状态: seed · PRD 版本: 0</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>任务图</strong>
+              <span>state/task-graph.json</span>
+              <p>下一个就绪节点: clarify · 节点数: 21</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>验证记录</strong>
+              <span>engagements/active/verification.md</span>
+              <p>验证命令、验证结果和回归结论。</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>docs/basic/prd.md</strong>
+              <span>../docs/basic/prd.md</span>
+              <p>产品需求和验收标准的基础文档。</p>
+            </div>
+          
+      </div>
+    </details>
+  
+    </section>
+  
+
+    <section class="chapter" id="chapter-4" data-chapter-index="3" hidden>
+      <div class="chapter-kicker" id="chapter-4-reading">第 4 章 · 传功</div>
+      <h2>传功成谱，把 Prompt 法门写成契约</h2>
+      <p class="chapter-summary">把风格 Prompt 工程、内容合同和阅读器分层保存，让后来者可复用。</p>
+      <p>这一步像传功，重点是让后来者照着法门复用。 genre reference library 负责决定这本书用什么语气说话：是严肃科研、仙侠修真、童话故事，还是网文小说。content contract 负责约束这本书必须有哪些字段：标题、主题、章节、检索练习、worked example、证据源。</p>
+<p>这两个层次不能混在一起。题材风格可以扩展，合同结构必须稳定。这样后续如果要新增 genre，只需要加参考库和少量映射，不需要重写整套渲染逻辑。</p>
+      
+    <section class="learning-block retrieval" id="chapter-4-retrieval">
+      <h4>检索练习</h4>
+      
+        <details class="retrieval-item" id="chapter-4-retrieval-1">
+          <summary><span>R1</span>新增一个 genre 时，最少要补哪三样东西？</summary>
+          <div class="retrieval-hint">提示: 想想 reference、contract、renderer 的分工。</div>
+          <div class="retrieval-answer">参考答案: 至少要补 genre reference、对应的内容合同参数，必要时再补渲染器中对标题和章节结构的映射。</div>
+        </details>
+      
+    </section>
+  
+      
+    <section class="learning-block worked" id="chapter-4-worked">
+      <h4>工作示例（Worked Example）</h4>
+      
+        <div class="worked-item" id="chapter-4-worked-1">
+          <div class="worked-title">Worked Example: 新增一个题材风格</div>
+          <p>你想增加“行业访谈”风格。</p>
+          <ol><li>先在 genre reference library 里新增条目，定义 voice、chapterLabels 和 opening / closing。</li><li>再保证 content contract 仍然输出同样的 schema 字段。</li><li>最后只改 renderer 的标签映射，而不是改内容数据结构。</li></ol>
+          <div class="worked-principle">原则: 题材可以长，合同不能散。</div>
+        </div>
+      
+    </section>
+  
+      
+    <details class="chapter-evidence" id="chapter-4-evidence">
+      <summary><span>本章出处</span>
+    <span class="evidence-chip">docs-basic-frontend-guidelines</span>
+  
+
+    <span class="evidence-chip">docs-basic-tech-stack</span>
+  </summary>
+      <div class="evidence-mini-list">
+        
+            <div class="evidence-mini-card">
+              <strong>docs/basic/frontend-guidelines.md</strong>
+              <span>../docs/basic/frontend-guidelines.md</span>
+              <p>前端阅读器和交互规范的基础文档。</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>docs/basic/tech-stack.md</strong>
+              <span>../docs/basic/tech-stack.md</span>
+              <p>运行环境和依赖工具链的基础文档。</p>
+            </div>
+          
+      </div>
+    </details>
+  
+    </section>
+  
+
+    <section class="chapter" id="chapter-5" data-chapter-index="4" hidden>
+      <div class="chapter-kicker" id="chapter-5-reading">第 5 章 · 归元</div>
+      <h2>归元复盘，以检索练习再启下一境</h2>
+      <p class="chapter-summary">以检索练习和工作示例收功，把这一轮学习转成下一轮行动。</p>
+      <p>最后归元，把可回忆、可重做、可迁移的部分留下。 真正让学习内容变成“书”的，不是长，而是可反复检索。retrieval block 负责让读者先回忆再对照，worked example 则负责把抽象原则压成可抄的步骤。</p>
+<p>这也是为什么这套格式会适合 agentic 编程：Agent 可以生成内容，用户可以复习内容，后续任务也可以直接复用相同的输出合同。</p>
+      
+    <section class="learning-block retrieval" id="chapter-5-retrieval">
+      <h4>检索练习</h4>
+      
+        <details class="retrieval-item" id="chapter-5-retrieval-1">
+          <summary><span>R1</span>如果用户只允许你记住一个目录，你会优先记哪一个？</summary>
+          <div class="retrieval-hint">提示: 想想哪个目录保存的是“可再阅读的结果”。</div>
+          <div class="retrieval-answer">参考答案: 优先记 `.openprd/learning/archive/`，因为那里保存的是可读、可回溯、可复用的学习包。</div>
+        </details>
+      
+
+        <details class="retrieval-item" id="chapter-5-retrieval-2">
+          <summary><span>R2</span>如果要把这套模式移植到另一个项目，应该先迁移什么？</summary>
+          <div class="retrieval-hint">提示: 先迁移结构，再迁移语气。</div>
+          <div class="retrieval-answer">参考答案: 先迁移 content contract 和 evidence manifest 的结构，再迁移 genre reference library，最后补渲染器和自动触发规则。</div>
+        </details>
+      
+    </section>
+  
+      
+    <section class="learning-block worked" id="chapter-5-worked">
+      <h4>工作示例（Worked Example）</h4>
+      
+        <div class="worked-item" id="chapter-5-worked-1">
+          <div class="worked-title">Worked Example: 复盘后再发起下一轮任务</div>
+          <p>一个项目的学习包已经生成，用户准备开始下一轮改动。</p>
+          <ol><li>先从 reader.html 里回顾上一轮的证据和结论。</li><li>在 retrieval block 中确认自己是否真的理解了关键路径。</li><li>再把下一轮任务写进新的 change 或 loop 任务。</li></ol>
+          <div class="worked-principle">原则: 学习不是终点，而是下一轮执行的入口。</div>
+        </div>
+      
+    </section>
+  
+      
+    <details class="chapter-evidence" id="chapter-5-evidence">
+      <summary><span>本章出处</span>
+    <span class="evidence-chip">decision-log</span>
+  
+
+    <span class="evidence-chip">progress</span>
+  
+
+    <span class="evidence-chip">docs-basic-app-flow</span>
+  </summary>
+      <div class="evidence-mini-list">
+        
+            <div class="evidence-mini-card">
+              <strong>决策记录</strong>
+              <span>engagements/active/decision-log.md</span>
+              <p>围绕协同过程积累的决策记录。</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>进度记录</strong>
+              <span>engagements/active/progress.md</span>
+              <p>工作区的过程进展与阶段性总结。</p>
+            </div>
+          
+
+            <div class="evidence-mini-card">
+              <strong>docs/basic/app-flow.md</strong>
+              <span>../docs/basic/app-flow.md</span>
+              <p>产品流程和状态流的基础文档。</p>
+            </div>
+          
+      </div>
+    </details>
+  
+    </section>
+  
+        </div>
+      </article>
+    </main>
+    <script>
+      const scrollRoot = document.querySelector('.reader-scroll');
+      const chapters = Array.from(document.querySelectorAll('.chapter'));
+      const outlineItems = Array.from(document.querySelectorAll('[data-target-id]'));
+      const prevButton = document.getElementById('prevChapter');
+      const nextButton = document.getElementById('nextChapter');
+      const progressBar = document.getElementById('progressBar');
+      const progressText = document.getElementById('progressText');
+      let activeIndex = 0;
+      let fontScale = Number(localStorage.getItem('openprd-learning-font-scale') || '1');
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function applyFontScale() {
+        fontScale = clamp(fontScale, 0.9, 1.25);
+        document.documentElement.style.setProperty('--reader-scale', String(fontScale));
+        localStorage.setItem('openprd-learning-font-scale', String(fontScale));
+      }
+
+      function setActive(index, shouldScroll = false) {
+        if (chapters.length === 0) return;
+        activeIndex = clamp(index, 0, chapters.length - 1);
+        chapters.forEach((chapter, chapterIndex) => {
+          const isActive = chapterIndex === activeIndex;
+          chapter.hidden = !isActive;
+          chapter.classList.toggle('active', isActive);
+        });
+        const activeChapterId = chapters[activeIndex].id;
+        outlineItems.forEach((item) => item.classList.toggle('active', item.dataset.targetId === activeChapterId));
+        prevButton.disabled = activeIndex === 0;
+        nextButton.disabled = activeIndex === chapters.length - 1;
+        progressText.textContent = String(activeIndex + 1) + '/' + String(chapters.length);
+        progressBar.style.width = String(((activeIndex + 1) / chapters.length) * 100) + '%';
+        if (shouldScroll) {
+          scrollRoot?.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }
+
+      function scrollToReaderTarget(target) {
+        if (!target || !scrollRoot) return;
+        const rootTop = scrollRoot.getBoundingClientRect().top;
+        const targetTop = target.getBoundingClientRect().top;
+        scrollRoot.scrollTo({
+          top: scrollRoot.scrollTop + targetTop - rootTop - 18,
+          behavior: 'smooth',
+        });
+      }
+
+      outlineItems.forEach((item) => {
+        item.addEventListener('click', () => {
+          const target = document.getElementById(item.dataset.targetId);
+          if (!target) return;
+          const chapterIndex = chapters.findIndex((chapter) => chapter.id === target.id || chapter.contains(target));
+          if (chapterIndex >= 0) setActive(chapterIndex, false);
+          scrollToReaderTarget(target);
+        });
+      });
+      prevButton.addEventListener('click', () => setActive(activeIndex - 1, true));
+      nextButton.addEventListener('click', () => setActive(activeIndex + 1, true));
+      document.getElementById('smallerText').addEventListener('click', () => {
+        fontScale -= 0.05;
+        applyFontScale();
+      });
+      document.getElementById('largerText').addEventListener('click', () => {
+        fontScale += 0.05;
+        applyFontScale();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowRight' || event.key === 'PageDown') setActive(activeIndex + 1, true);
+        if (event.key === 'ArrowLeft' || event.key === 'PageUp') setActive(activeIndex - 1, true);
+      });
+
+      applyFontScale();
+      setActive(0, false);
+    </script>
+  </body>
+</html>

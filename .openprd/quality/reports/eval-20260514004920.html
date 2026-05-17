@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>质量评估报告 eval-20260514004920</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f4ed;
+        --panel: rgba(255,255,255,0.88);
+        --text: #1f2937;
+        --muted: #6b7280;
+        --line: rgba(31,41,55,0.12);
+        --accent: #d97706;
+        --accent-soft: rgba(217,119,6,0.12);
+        --danger: #dc2626;
+        --danger-soft: rgba(220,38,38,0.08);
+        --ok: #15803d;
+        --ok-soft: rgba(21,128,61,0.08);
+        --mono: "JetBrains Mono","SFMono-Regular",Menlo,monospace;
+        --serif: "Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(217,119,6,0.08), transparent 25%),
+          linear-gradient(180deg, #faf8f2 0%, var(--bg) 100%);
+        color: var(--text);
+        font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      }
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 32px 24px 56px;
+      }
+      .hero {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 28px;
+      }
+      .eyebrow {
+        display: inline-flex;
+        width: fit-content;
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.72);
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .hero-topline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        width: fit-content;
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        border: 2px solid transparent;
+        box-shadow: 0 10px 24px rgba(15,23,42,0.08);
+      }
+      .status-badge::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: currentColor;
+        box-shadow: 0 0 0 4px rgba(255,255,255,0.35);
+      }
+      .status-pass {
+        color: #166534;
+        background: #dcfce7;
+        border-color: #22c55e;
+      }
+      .status-fail {
+        color: #991b1b;
+        background: #fee2e2;
+        border-color: #ef4444;
+      }
+      .status-warn {
+        color: #92400e;
+        background: #fef3c7;
+        border-color: #f59e0b;
+      }
+      .mini-status {
+        padding: 4px 10px;
+        font-size: 11px;
+        border-width: 1.5px;
+        box-shadow: none;
+      }
+      .mini-status::before {
+        width: 7px;
+        height: 7px;
+        box-shadow: none;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(34px, 5vw, 56px);
+        line-height: 1;
+        font-family: var(--serif);
+        font-weight: 600;
+      }
+      .subtitle {
+        max-width: 880px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.7;
+      }
+      .summary-grid,
+      .section-grid {
+        display: grid;
+        gap: 16px;
+      }
+      .summary-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        margin-bottom: 28px;
+      }
+      .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+      .section-grid {
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: var(--panel);
+        backdrop-filter: blur(8px);
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+        overflow: hidden;
+      }
+      .card-header {
+        padding: 14px 18px 0;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+      .card-body {
+        padding: 12px 18px 18px;
+      }
+      .metric {
+        font-size: 30px;
+        line-height: 1.1;
+        font-family: var(--serif);
+        font-weight: 600;
+      }
+      .metric-sub {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .mini-metric {
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.72);
+      }
+      .mini-metric-value {
+        font-size: 18px;
+        line-height: 1.25;
+        font-weight: 750;
+        word-break: break-word;
+      }
+      .mini-metric-label {
+        margin-bottom: 5px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .mini-metric-sub {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        word-break: break-word;
+      }
+      ul {
+        margin: 0;
+        padding-left: 18px;
+        line-height: 1.7;
+      }
+      li + li { margin-top: 8px; }
+      .empty { color: var(--muted); }
+      .qa-item,
+      .option-item,
+      .export-item,
+      .evidence-item {
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.7);
+      }
+      .qa-label,
+      .option-title,
+      .export-title,
+      .evidence-title {
+        font-weight: 600;
+      }
+      .qa-status-row {
+        display: flex;
+        justify-content: flex-start;
+        margin-top: 8px;
+      }
+      .qa-meta,
+      .option-meta,
+      .export-meta,
+      .evidence-meta {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .warning {
+        border-color: rgba(220,38,38,0.18);
+        background: var(--danger-soft);
+      }
+      .success {
+        border-color: rgba(21,128,61,0.18);
+        background: var(--ok-soft);
+      }
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: white;
+        color: var(--muted);
+        font-size: 12px;
+        font-family: var(--mono);
+      }
+      .code-block {
+        overflow-x: auto;
+        padding: 14px;
+        border-radius: 14px;
+        background: #161b22;
+        color: #e5e7eb;
+        font-family: var(--mono);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .footer {
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      @media (max-width: 700px) {
+        .page { padding: 20px 14px 40px; }
+        .subtitle { font-size: 16px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div class="hero-topline">
+          <div class="eyebrow">OpenPrd / 质量评估报告</div>
+          <div class="status-badge status-warn">需补证据</div>
+        </div>
+        <h1>质量评估报告 eval-20260514004920</h1>
+        <div class="top-meta"><div class="meta-chip">生成时间: 2026-05-14 00:49:20</div><div class="meta-chip">执行模式: advisory</div></div>
+        <p class="subtitle">用于审查日志追踪、业务护栏、冒烟测试、功能覆盖、性能基线、极端场景和项目级经验沉淀。</p>
+      </header>
+      <section class="summary-grid">
+    <section class="card">
+      <div class="card-header">质量状态</div>
+      <div class="card-body">
+    <div class="metric">needs-attention</div>
+    <div class="metric-sub">关注门禁: 5</div>
+  </div>
+    </section>
+  
+
+    <section class="card">
+      <div class="card-header">扫描文件</div>
+      <div class="card-body">
+    <div class="metric">78</div>
+    <div class="metric-sub">用于识别日志、测试、性能与知识库信号</div>
+  </div>
+    </section>
+  
+
+    <section class="card">
+      <div class="card-header">激活变更</div>
+      <div class="card-body">
+    <div class="metric">无</div>
+    <div class="metric-sub">用于评估任务覆盖完整性</div>
+  </div>
+    </section>
+  
+
+    <section class="card">
+      <div class="card-header">报告格式</div>
+      <div class="card-body">
+    <div class="metric">HTML + JSON</div>
+    <div class="metric-sub">eval-20260514004920</div>
+  </div>
+    </section>
+  </section>
+      <section class="section-grid">
+    <section class="card">
+      <div class="card-header">质量门禁总览</div>
+      <div class="card-body">
+    <div class="qa-item success">
+      <div class="qa-label">日志链路可追踪</div>
+      <div class="qa-status-row">
+        <div class="status-badge mini-status status-pass">通过</div>
+      </div>
+      <ul><li class="empty">暂无额外风险</li></ul>
+    </div>
+  
+
+    <div class="qa-item warning">
+      <div class="qa-label">日志脱敏策略</div>
+      <div class="qa-status-row">
+        <div class="status-badge mini-status status-warn">需补证据</div>
+      </div>
+      <ul><li>需要在项目文档或平台配置中确认敏感字段脱敏策略。</li></ul>
+    </div>
+  
+
+    <div class="qa-item success">
+      <div class="qa-label">业务成本与滥用护栏</div>
+      <div class="qa-status-row">
+        <div class="status-badge mini-status status-pass">通过</div>
+      </div>
+      <ul><li class="empty">暂无额外风险</li></ul>
+    </div>
+  
+
+    <div class="qa-item warning">
+      <div class="qa-label">冒烟测试体系</div>
+      <div class="qa-status-row">
+        <div class="status-badge mini-status status-warn">需关注</div>
+      </div>
+      <ul><li>缺少冒烟/e2e 证据。</li></ul>
+    </div>
+  
+
+    <div class="qa-item success">
+      <div class="qa-label">任务与功能覆盖</div>
+      <div class="qa-status-row">
+        <div class="status-badge mini-status status-pass">通过</div>
+      </div>
+      <ul><li class="empty">暂无额外风险</li></ul>
+    </div>
+  
+
+    <div class="qa-item warning">
+      <div class="qa-label">正常性能基线</div>
+      <div class="qa-status-row">
+        <div class="status-badge mini-status status-warn">需关注</div>
+      </div>
+      <ul><li>缺少性能测试命令。</li></ul>
+    </div>
+  
+
+    <div class="qa-item warning">
+      <div class="qa-label">极端场景压力</div>
+      <div class="qa-status-row">
+        <div class="status-badge mini-status status-warn">需关注</div>
+      </div>
+      <ul><li>缺少极端数据或压力场景。</li></ul>
+    </div>
+  
+
+    <div class="qa-item warning">
+      <div class="qa-label">经验 Skill 沉淀</div>
+      <div class="qa-status-row">
+        <div class="status-badge mini-status status-warn">需关注</div>
+      </div>
+      <ul><li>项目级经验 skill 库尚为空；首次问题修复后应沉淀抽象经验。</li></ul>
+    </div>
+  </div>
+    </section>
+  
+
+    <section class="card">
+      <div class="card-header">日志与链路追踪</div>
+      <div class="card-body">
+      <div class="evidence-grid">
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">中心化系统</div>
+      <div class="mini-metric-value">@opentelemetry/, opentelemetry, sentry, datadog, newrelic, rollbar, logtail, grafana, loki, elastic-apm, cloudwatch, azure monitor</div>
+      <div class="mini-metric-sub">OpenTelemetry/Sentry/Datadog/New Relic 等信号</div>
+    </div>
+  
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">本地日志</div>
+      <div class="mini-metric-value">pino, winston, bunyan, log4js, console.</div>
+      <div class="mini-metric-sub">console/pino/winston 等项目内日志调用</div>
+    </div>
+  
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">关联字段</div>
+      <div class="mini-metric-value">6/6</div>
+      <div class="mini-metric-sub">trace_id, span_id, request_id, task_id, user_session_id, error_id</div>
+    </div>
+  
+      </div>
+      <ul><li>为前端交互、后端入口、异步任务、Agent 工具调用统一注入 trace/request/task/error 关联字段。</li><li>错误日志必须能回查用户会话、任务、请求、下游调用和异常栈，敏感字段默认脱敏。</li><li>每个新增功能在实现阶段都要自评是否需要新增结构化日志或查询样例。</li></ul>
+    </div>
+    </section>
+  
+
+    <section class="card">
+      <div class="card-header">业务成本与滥用护栏</div>
+      <div class="card-body">
+      <div class="evidence-grid">
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">风险信号</div>
+      <div class="mini-metric-value">已检测</div>
+      <div class="mini-metric-sub">free user, free tier, trial, quota</div>
+    </div>
+  
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">缺口数量</div>
+      <div class="mini-metric-value">0</div>
+      <div class="mini-metric-sub">暂无缺口</div>
+    </div>
+  
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">护栏状态</div>
+      <div class="mini-metric-value">pass</div>
+      <div class="mini-metric-sub">已启用</div>
+    </div>
+  
+      </div>
+      <ul><li>涉及免费用户、额度、AI 调用、第三方 API、生成、存储或下载时，先写明成本来源和用户级限制。</li><li>为免费、试用或低权限用户覆盖额度绕过、并发请求、重复请求、越权身份和异常恢复等负向场景。</li><li>上线前明确成本/用量指标、报警阈值、负责人和可执行止损动作。</li></ul>
+    </div>
+    </section>
+  
+
+    <section class="card">
+      <div class="card-header">评估执行环境</div>
+      <div class="card-body">
+      <div class="evidence-grid">
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">冒烟测试</div>
+      <div class="mini-metric-value">缺失</div>
+      <div class="mini-metric-sub">暂无命令</div>
+    </div>
+  
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">性能测试</div>
+      <div class="mini-metric-value">缺失</div>
+      <div class="mini-metric-sub">暂无命令</div>
+    </div>
+  
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">极端数据</div>
+      <div class="mini-metric-value">缺失</div>
+      <div class="mini-metric-sub">暂无 evidence</div>
+    </div>
+  
+      </div>
+      <div class="qa-meta">正常性能基线: {&quot;cpuPercentP95Max&quot;:70,&quot;memoryMBP95Max&quot;:512,&quot;pageLoadMsP95Max&quot;:2500,&quot;apiLatencyMsP95Max&quot;:500,&quot;errorRatePercentMax&quot;:0.1}</div>
+      <div class="qa-meta">极端性能基线: {&quot;cpuPercentP95Max&quot;:85,&quot;memoryMBP95Max&quot;:1024,&quot;pageLoadMsP95Max&quot;:5000,&quot;apiLatencyMsP95Max&quot;:1200,&quot;errorRatePercentMax&quot;:1}</div>
+      <ul><li>如果项目没有冒烟测试，优先补一组最短主流程用例，并让后续功能持续补充。</li><li>每次阶段性开发结束都要把任务清单映射到主流程、异常流程、逆向流程和边界条件。</li><li>性能标准从项目级 baseline 开始，功能级可以加严；Agent 自动更新阈值时只能更严格。</li></ul>
+    </div>
+    </section>
+  
+
+    <section class="card">
+      <div class="card-header">功能覆盖矩阵</div>
+      <div class="card-body">
+      <div class="evidence-grid">
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">任务总数</div>
+      <div class="mini-metric-value">0</div>
+      <div class="mini-metric-sub">来自当前激活 change 的 tasks.md</div>
+    </div>
+  
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">已完成</div>
+      <div class="mini-metric-value">0</div>
+      <div class="mini-metric-sub">已勾选任务</div>
+    </div>
+  
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">待处理</div>
+      <div class="mini-metric-value">0</div>
+      <div class="mini-metric-sub">需要继续补齐或验证</div>
+    </div>
+  
+      </div>
+      <ul><li>主流程</li><li>异常流程</li><li>逆向流程</li><li>边界条件</li></ul>
+    </div>
+    </section>
+  
+
+    <section class="card">
+      <div class="card-header">项目级知识库经验层</div>
+      <div class="card-body">
+      <div class="evidence-grid">
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">经验 Skill</div>
+      <div class="mini-metric-value">0</div>
+      <div class="mini-metric-sub">.openprd/knowledge/skills</div>
+    </div>
+  
+        
+    <div class="mini-metric">
+      <div class="mini-metric-label">事故记录</div>
+      <div class="mini-metric-value">0</div>
+      <div class="mini-metric-sub">用于沉淀验证已修复的问题</div>
+    </div>
+  
+      </div>
+      <ul><li>每次问题修复后记录症状、排查路径、根因模式、修复方式、验证证据和下次触发条件。</li><li>只有重复、高影响、隐性知识或 Agent 误判类问题才升级为项目级 skill。</li><li>生成 skill 时按抽象模式写触发条件和验证步骤，避免只记录一次性事故流水账。</li></ul>
+    </div>
+    </section>
+  
+
+    <div class="export-item success">
+      <div class="export-title">结构化质量报告</div>
+      <div class="export-meta">供 CI、交接、复盘学习、经验 skill 生成和后续质量提升使用。</div>
+      <div class="code-block" data-copy-block>{
+  &quot;version&quot;: 1,
+  &quot;schema&quot;: &quot;openprd.eval-report.v1&quot;,
+  &quot;id&quot;: &quot;eval-20260514004920&quot;,
+  &quot;generatedAt&quot;: &quot;2026-05-14 00:49:20&quot;,
+  &quot;projectRoot&quot;: &quot;/Users/chaojifeng/Projects/harness-engineer/openprd&quot;,
+  &quot;summary&quot;: {
+    &quot;status&quot;: &quot;needs-attention&quot;,
+    &quot;filesScanned&quot;: 78,
+    &quot;activeChange&quot;: null,
+    &quot;gateCount&quot;: 8,
+    &quot;attentionCount&quot;: 5
+  },
+  &quot;readiness&quot;: {
+    &quot;ok&quot;: true,
+    &quot;productionReady&quot;: false,
+    &quot;enforcement&quot;: &quot;advisory&quot;,
+    &quot;failingGates&quot;: [],
+    &quot;attentionGates&quot;: [
+      &quot;redaction&quot;,
+      &quot;smoke&quot;,
+      &quot;normal-performance&quot;,
+      &quot;extreme-performance&quot;,
+      &quot;knowledge&quot;
+    ]
+  },
+  &quot;gates&quot;: [
+    {
+      &quot;id&quot;: &quot;traceability&quot;,
+      &quot;label&quot;: &quot;日志链路可追踪&quot;,
+      &quot;status&quot;: &quot;pass&quot;,
+      &quot;warnings&quot;: []
+    },
+    {
+      &quot;id&quot;: &quot;redaction&quot;,
+      &quot;label&quot;: &quot;日志脱敏策略&quot;,
+      &quot;status&quot;: &quot;needs-evidence&quot;,
+      &quot;warnings&quot;: [
+        &quot;需要在项目文档或平台配置中确认敏感字段脱敏策略。&quot;
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;business-guardrails&quot;,
+      &quot;label&quot;: &quot;业务成本与滥用护栏&quot;,
+      &quot;status&quot;: &quot;pass&quot;,
+      &quot;warnings&quot;: []
+    },
+    {
+      &quot;id&quot;: &quot;smoke&quot;,
+      &quot;label&quot;: &quot;冒烟测试体系&quot;,
+      &quot;status&quot;: &quot;needs-attention&quot;,
+      &quot;warnings&quot;: [
+        &quot;缺少冒烟/e2e 证据。&quot;
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;feature-coverage&quot;,
+      &quot;label&quot;: &quot;任务与功能覆盖&quot;,
+      &quot;status&quot;: &quot;pass&quot;,
+      &quot;warnings&quot;: []
+    },
+    {
+      &quot;id&quot;: &quot;normal-performance&quot;,
+      &quot;label&quot;: &quot;正常性能基线&quot;,
+      &quot;status&quot;: &quot;needs-attention&quot;,
+      &quot;warnings&quot;: [
+        &quot;缺少性能测试命令。&quot;
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;extreme-performance&quot;,
+      &quot;label&quot;: &quot;极端场景压力&quot;,
+      &quot;status&quot;: &quot;needs-attention&quot;,
+      &quot;warnings&quot;: [
+        &quot;缺少极端数据或压力场景。&quot;
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;knowledge&quot;,
+      &quot;label&quot;: &quot;经验 Skill 沉淀&quot;,
+      &quot;status&quot;: &quot;needs-attention&quot;,
+      &quot;warnings&quot;: [
+        &quot;项目级经验 skill 库尚为空；首次问题修复后应沉淀抽象经验。&quot;
+      ]
+    }
+  ],
+  &quot;observability&quot;: {
+    &quot;status&quot;: &quot;pass&quot;,
+    &quot;centralizedTools&quot;: [
+      &quot;@opentelemetry/&quot;,
+      &quot;opentelemetry&quot;,
+      &quot;sentry&quot;,
+      &quot;datadog&quot;,
+      &quot;newrelic&quot;,
+      &quot;rollbar&quot;,
+      &quot;logtail&quot;,
+      &quot;grafana&quot;,
+      &quot;loki&quot;,
+      &quot;elastic-apm&quot;,
+      &quot;cloudwatch&quot;,
+      &quot;azure monitor&quot;
+    ],
+    &quot;localLoggers&quot;: [
+      &quot;pino&quot;,
+      &quot;winston&quot;,
+      &quot;bunyan&quot;,
+      &quot;log4js&quot;,
+      &quot;console.&quot;
+    ],
+    &quot;correlationFields&quot;: [
+      &quot;trace_id&quot;,
+      &quot;span_id&quot;,
+      &quot;request_id&quot;,
+      &quot;task_id&quot;,
+      &quot;user_session_id&quot;,
+      &quot;error_id&quot;
+    ],
+    &quot;missingCorrelation&quot;: [],
+    &quot;surfaces&quot;: {
+      &quot;frontend&quot;: false,
+      &quot;backend&quot;: false,
+      &quot;agent&quot;: true
+    },
+    &quot;requiredSurfaces&quot;: [
+      &quot;frontend&quot;,
+      &quot;backend&quot;,
+      &quot;agent&quot;
+    ],
+    &quot;redactionRequired&quot;: true,
+    &quot;recommendations&quot;: [
+      &quot;为前端交互、后端入口、异步任务、Agent 工具调用统一注入 trace/request/task/error 关联字段。&quot;,
+      &quot;错误日志必须能回查用户会话、任务、请求、下游调用和异常栈，敏感字段默认脱敏。&quot;,
+      &quot;每个新增功能在实现阶段都要自评是否需要新增结构化日志或查询样例。&quot;
+    ],
+    &quot;warnings&quot;: []
+  },
+  &quot;evalHarness&quot;: {
+    &quot;status&quot;: &quot;needs-attention&quot;,
+    &quot;hasUnitOrCommandTests&quot;: true,
+    &quot;smoke&quot;: {
+      &quot;present&quot;: false,
+      &quot;commands&quot;: []
+    },
+    &quot;performance&quot;: {
+      &quot;present&quot;: false,
+      &quot;commands&quot;: [],
+      &quot;normalBaseline&quot;: {
+        &quot;cpuPercentP95Max&quot;: 70,
+        &quot;memoryMBP95Max&quot;: 512,
+        &quot;pageLoadMsP95Max&quot;: 2500,
+        &quot;apiLatencyMsP95Max&quot;: 500,
+        &quot;errorRatePercentMax&quot;: 0.1
+      },
+      &quot;extremeBaseline&quot;: {
+        &quot;cpuPercentP95Max&quot;: 85,
+        &quot;memoryMBP95Max&quot;: 1024,
+        &quot;pageLoadMsP95Max&quot;: 5000,
+        &quot;apiLatencyMsP95Max&quot;: 1200,
+        &quot;errorRatePercentMax&quot;: 1
+      },
+      &quot;ratchetPolicy&quot;: &quot;agent-initialized average baseline; user may override; agent ratchet may only tighten thresholds&quot;
+    },
+    &quot;extremeData&quot;: {
+      &quot;present&quot;: false,
+      &quot;evidence&quot;: []
+    },
+    &quot;featureCoverage&quot;: {
+      &quot;activeTasks&quot;: {
+        &quot;activeChange&quot;: null,
+        &quot;total&quot;: 0,
+        &quot;done&quot;: 0,
+        &quot;pending&quot;: 0,
+        &quot;blocked&quot;: 0,
+        &quot;tasks&quot;: []
+      },
+      &quot;requiredFlows&quot;: [
+        &quot;主流程&quot;,
+        &quot;异常流程&quot;,
+        &quot;逆向流程&quot;,
+        &quot;边界条件&quot;
+      ]
+    },
+    &quot;warnings&quot;: [
+      &quot;未检测到明确的冒烟/e2e 测试体系。&quot;,
+      &quot;未检测到性能/压力测试命令或脚本。&quot;,
+      &quot;未检测到极端数据 fixtures 或压力场景数据。&quot;
+    ],
+    &quot;recommendations&quot;: [
+      &quot;如果项目没有冒烟测试，优先补一组最短主流程用例，并让后续功能持续补充。&quot;,
+      &quot;每次阶段性开发结束都要把任务清单映射到主流程、异常流程、逆向流程和边界条件。&quot;,
+      &quot;性能标准从项目级 baseline 开始，功能级可以加严；Agent 自动更新阈值时只能更严格。&quot;
+    ]
+  },
+  &quot;businessGuardrails&quot;: {
+    &quot;status&quot;: &quot;pass&quot;,
+    &quot;enabled&quot;: true,
+    &quot;riskDetected&quot;: true,
+    &quot;matchedRiskIndicators&quot;: [
+      &quot;free user&quot;,
+      &quot;free tier&quot;,
+      &quot;trial&quot;,
+      &quot;quota&quot;,
+      &quot;usage limit&quot;,
+      &quot;rate limit&quot;,
+      &quot;credit&quot;,
+      &quot;token&quot;,
+      &quot;metered&quot;,
+      &quot;cost&quot;,
+      &quot;spend&quot;,
+      &quot;third-party cost&quot;,
+      &quot;third-party api&quot;,
+      &quot;ai generation&quot;,
+      &quot;model call&quot;,
+      &quot;openai&quot;,
+      &quot;anthropic&quot;,
+      &quot;免费用户&quot;,
+      &quot;免费额度&quot;,
+      &quot;试用&quot;,
+      &quot;额度&quot;,
+      &quot;用量&quot;,
+      &quot;限流&quot;,
+      &quot;积分&quot;,
+      &quot;点数&quot;,
+      &quot;令牌&quot;,
+      &quot;成本&quot;,
+      &quot;消耗&quot;,
+      &quot;第三方成本&quot;,
+      &quot;第三方调用&quot;,
+      &quot;第三方 API&quot;,
+      &quot;大模型&quot;,
+      &quot;模型调用&quot;,
+      &quot;AI 生成&quot;,
+      &quot;图像生成&quot;,
+      &quot;内容生成&quot;,
+      &quot;薅&quot;,
+      &quot;滥用&quot;
+    ],
+    &quot;evidence&quot;: {
+      &quot;usageLimits&quot;: {
+        &quot;present&quot;: true,
+        &quot;matched&quot;: [
+          &quot;quota&quot;,
+          &quot;usage limit&quot;,
+          &quot;rate limit&quot;,
+          &quot;daily limit&quot;,
+          &quot;monthly limit&quot;,
+          &quot;allowance&quot;,
+          &quot;free tier&quot;,
+          &quot;额度&quot;,
+          &quot;用量限制&quot;,
+          &quot;限流&quot;,
+          &quot;每日上限&quot;,
+          &quot;月度上限&quot;,
+          &quot;免费额度&quot;
+        ]
+      },
+      &quot;abusePrevention&quot;: {
+        &quot;present&quot;: true,
+        &quot;matched&quot;: [
+          &quot;abuse&quot;,
+          &quot;bypass&quot;,
+          &quot;fraud&quot;,
+          &quot;replay&quot;,
+          &quot;concurrent&quot;,
+          &quot;unauthorized&quot;,
+          &quot;negative test&quot;,
+          &quot;越权&quot;,
+          &quot;滥用&quot;,
+          &quot;绕过&quot;,
+          &quot;并发&quot;,
+          &quot;重复请求&quot;,
+          &quot;负向测试&quot;
+        ]
+      },
+      &quot;monitoringSignals&quot;: {
+        &quot;present&quot;: true,
+        &quot;matched&quot;: [
+          &quot;usage metric&quot;,
+          &quot;cost metric&quot;,
+          &quot;billing metric&quot;,
+          &quot;tokens_used&quot;,
+          &quot;cost_usd&quot;,
+          &quot;spend&quot;,
+          &quot;dashboard&quot;,
+          &quot;monitor&quot;,
+          &quot;监控&quot;,
+          &quot;指标&quot;,
+          &quot;用量&quot;,
+          &quot;成本&quot;,
+          &quot;看板&quot;
+        ]
+      },
+      &quot;alertThresholds&quot;: {
+        &quot;present&quot;: true,
+        &quot;matched&quot;: [
+          &quot;alert&quot;,
+          &quot;alarm&quot;,
+          &quot;threshold&quot;,
+          &quot;budget&quot;,
+          &quot;anomaly&quot;,
+          &quot;报警&quot;,
+          &quot;告警&quot;,
+          &quot;阈值&quot;,
+          &quot;预算&quot;,
+          &quot;异常增长&quot;
+        ]
+      },
+      &quot;stopLossActions&quot;: {
+        &quot;present&quot;: true,
+        &quot;matched&quot;: [
+          &quot;kill switch&quot;,
+          &quot;feature flag&quot;,
+          &quot;circuit breaker&quot;,
+          &quot;disable&quot;,
+          &quot;degrade&quot;,
+          &quot;pause&quot;,
+          &quot;shutdown&quot;,
+          &quot;止损&quot;,
+          &quot;关闭&quot;,
+          &quot;降级&quot;,
+          &quot;暂停&quot;,
+          &quot;熔断&quot;
+        ]
+      }
+    },
+    &quot;missingEvidence&quot;: [],
+    &quot;recommendations&quot;: [
+      &quot;涉及免费用户、额度、AI 调用、第三方 API、生成、存储或下载时，先写明成本来源和用户级限制。&quot;,
+      &quot;为免费、试用或低权限用户覆盖额度绕过、并发请求、重复请求、越权身份和异常恢复等负向场景。&quot;,
+      &quot;上线前明确成本/用量指标、报警阈值、负责人和可执行止损动作。&quot;
+    ],
+    &quot;warnings&quot;: []
+  },
+  &quot;knowledge&quot;: {
+    &quot;status&quot;: &quot;needs-attention&quot;,
+    &quot;enabled&quot;: true,
+    &quot;skillDir&quot;: &quot;.openprd/knowledge/skills&quot;,
+    &quot;skills&quot;: [],
+    &quot;incidents&quot;: [],
+    &quot;recommendations&quot;: [
+      &quot;每次问题修复后记录症状、排查路径、根因模式、修复方式、验证证据和下次触发条件。&quot;,
+      &quot;只有重复、高影响、隐性知识或 Agent 误判类问题才升级为项目级 skill。&quot;,
+      &quot;生成 skill 时按抽象模式写触发条件和验证步骤，避免只记录一次性事故流水账。&quot;
+    ],
+    &quot;warnings&quot;: [
+      &quot;项目级经验 skill 库尚为空；首次问题修复后应沉淀抽象经验。&quot;
+    ]
+  },
+  &quot;configSnapshot&quot;: {
+    &quot;version&quot;: 1,
+    &quot;schema&quot;: &quot;openprd.quality.v1&quot;,
+    &quot;updatedAt&quot;: &quot;2026-05-13 14:08:50&quot;,
+    &quot;enforcement&quot;: &quot;advisory&quot;,
+    &quot;observability&quot;: {
+      &quot;centralizedLoggingRequired&quot;: true,
+      &quot;requiredSignals&quot;: [
+        &quot;logs&quot;,
+        &quot;traces&quot;,
+        &quot;metrics&quot;,
+        &quot;errors&quot;
+      ],
+      &quot;requiredCorrelationFields&quot;: [
+        &quot;trace_id&quot;,
+        &quot;span_id&quot;,
+        &quot;request_id&quot;,
+        &quot;task_id&quot;,
+        &quot;user_session_id&quot;,
+        &quot;error_id&quot;
+      ],
+      &quot;requiredSurfaces&quot;: [
+        &quot;frontend&quot;,
+        &quot;backend&quot;,
+        &quot;agent&quot;
+      ],
+      &quot;redactionRequired&quot;: true,
+      &quot;retentionDays&quot;: 30,
+      &quot;samplingPolicy&quot;: &quot;errors and high-risk flows are never sampled out; routine success logs may be sampled&quot;,
+      &quot;queryExamplesRequired&quot;: true
+    },
+    &quot;evalHarness&quot;: {
+      &quot;smokeRequired&quot;: true,
+      &quot;featureCoverageRequired&quot;: true,
+      &quot;normalPerformanceRequired&quot;: true,
+      &quot;extremePerformanceRequired&quot;: true,
+      &quot;reportFormat&quot;: &quot;html&quot;,
+      &quot;baselinePolicy&quot;: &quot;agent-initialized average baseline; user may override; agent ratchet may only tighten thresholds&quot;,
+      &quot;projectBaseline&quot;: {
+        &quot;normal&quot;: {
+          &quot;cpuPercentP95Max&quot;: 70,
+          &quot;memoryMBP95Max&quot;: 512,
+          &quot;pageLoadMsP95Max&quot;: 2500,
+          &quot;apiLatencyMsP95Max&quot;: 500,
+          &quot;errorRatePercentMax&quot;: 0.1
+        },
+        &quot;extreme&quot;: {
+          &quot;cpuPercentP95Max&quot;: 85,
+          &quot;memoryMBP95Max&quot;: 1024,
+          &quot;pageLoadMsP95Max&quot;: 5000,
+          &quot;apiLatencyMsP95Max&quot;: 1200,
+          &quot;errorRatePercentMax&quot;: 1
+        }
+      }
+    },
+    &quot;businessGuardrails&quot;: {
+      &quot;enabled&quot;: true,
+      &quot;riskIndicators&quot;: [
+        &quot;free user&quot;,
+        &quot;free tier&quot;,
+        &quot;trial&quot;,
+        &quot;quota&quot;,
+        &quot;usage limit&quot;,
+        &quot;rate limit&quot;,
+        &quot;credit&quot;,
+        &quot;token&quot;,
+        &quot;metered&quot;,
+        &quot;cost&quot;,
+        &quot;spend&quot;,
+        &quot;third-party cost&quot;,
+        &quot;third-party api&quot;,
+        &quot;ai generation&quot;,
+        &quot;model call&quot;,
+        &quot;openai&quot;,
+        &quot;anthropic&quot;,
+        &quot;免费用户&quot;,
+        &quot;免费额度&quot;,
+        &quot;试用&quot;,
+        &quot;额度&quot;,
+        &quot;用量&quot;,
+        &quot;限流&quot;,
+        &quot;积分&quot;,
+        &quot;点数&quot;,
+        &quot;令牌&quot;,
+        &quot;成本&quot;,
+        &quot;消耗&quot;,
+        &quot;第三方成本&quot;,
+        &quot;第三方调用&quot;,
+        &quot;第三方 API&quot;,
+        &quot;大模型&quot;,
+        &quot;模型调用&quot;,
+        &quot;AI 生成&quot;,
+        &quot;图像生成&quot;,
+        &quot;内容生成&quot;,
+        &quot;薅&quot;,
+        &quot;滥用&quot;
+      ],
+      &quot;requiredEvidence&quot;: {
+        &quot;usageLimits&quot;: [
+          &quot;quota&quot;,
+          &quot;usage limit&quot;,
+          &quot;rate limit&quot;,
+          &quot;daily limit&quot;,
+          &quot;monthly limit&quot;,
+          &quot;allowance&quot;,
+          &quot;free tier&quot;,
+          &quot;额度&quot;,
+          &quot;用量限制&quot;,
+          &quot;限流&quot;,
+          &quot;每日上限&quot;,
+          &quot;月度上限&quot;,
+          &quot;免费额度&quot;
+        ],
+        &quot;abusePrevention&quot;: [
+          &quot;abuse&quot;,
+          &quot;bypass&quot;,
+          &quot;fraud&quot;,
+          &quot;replay&quot;,
+          &quot;concurrent&quot;,
+          &quot;unauthorized&quot;,
+          &quot;negative test&quot;,
+          &quot;越权&quot;,
+          &quot;滥用&quot;,
+          &quot;绕过&quot;,
+          &quot;并发&quot;,
+          &quot;重复请求&quot;,
+          &quot;负向测试&quot;
+        ],
+        &quot;monitoringSignals&quot;: [
+          &quot;usage metric&quot;,
+          &quot;cost metric&quot;,
+          &quot;billing metric&quot;,
+          &quot;tokens_used&quot;,
+          &quot;cost_usd&quot;,
+          &quot;spend&quot;,
+          &quot;dashboard&quot;,
+          &quot;monitor&quot;,
+          &quot;监控&quot;,
+          &quot;指标&quot;,
+          &quot;用量&quot;,
+          &quot;成本&quot;,
+          &quot;看板&quot;
+        ],
+        &quot;alertThresholds&quot;: [
+          &quot;alert&quot;,
+          &quot;alarm&quot;,
+          &quot;threshold&quot;,
+          &quot;budget&quot;,
+          &quot;anomaly&quot;,
+          &quot;报警&quot;,
+          &quot;告警&quot;,
+          &quot;阈值&quot;,
+          &quot;预算&quot;,
+          &quot;异常增长&quot;
+        ],
+        &quot;stopLossActions&quot;: [
+          &quot;kill switch&quot;,
+          &quot;feature flag&quot;,
+          &quot;circuit breaker&quot;,
+          &quot;disable&quot;,
+          &quot;degrade&quot;,
+          &quot;pause&quot;,
+          &quot;shutdown&quot;,
+          &quot;止损&quot;,
+          &quot;关闭&quot;,
+          &quot;降级&quot;,
+          &quot;暂停&quot;,
+          &quot;熔断&quot;
+        ]
+      }
+    },
+    &quot;knowledge&quot;: {
+      &quot;enabled&quot;: true,
+      &quot;skillGenerationRequiredFor&quot;: [
+        &quot;repeated-issue&quot;,
+        &quot;high-impact-fix&quot;,
+        &quot;hidden-debug-knowledge&quot;,
+        &quot;agent-misjudgment&quot;
+      ],
+      &quot;skillDir&quot;: &quot;.openprd/knowledge/skills&quot;,
+      &quot;abstractionRequired&quot;: true
+    }
+  }
+}</div>
+      <div class="actions">
+        <button type="button" class="copy-button" data-copy-target>⧉ 复制</button>
+      </div>
+    </div>
+  </section>
+      <div class="footer">OpenPrd 质量报告</div>
+      <script>
+        document.querySelectorAll('[data-copy-target]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            const block = button.closest('.export-item')?.querySelector('[data-copy-block]');
+            if (!block) return;
+            await navigator.clipboard.writeText(block.textContent || '');
+            const old = button.textContent;
+            button.textContent = '✓ 已复制';
+            setTimeout(() => { button.textContent = old; }, 1200);
+          });
+        });
+      </script>
+    </main>
+  </body>
+</html>

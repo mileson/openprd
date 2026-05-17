@@ -73,13 +73,25 @@ const WORKSPACE_SEED_REFRESH_FILES = [
   'standards/folder-readme-template.md',
 ];
 const WORKSPACE_SEED_COPY_IGNORE = new Set([
+  'artifacts',
   'harness',
+  'knowledge',
+  'learning',
+  'quality',
   'state',
   'sessions',
   'exports',
+  'engagements/active/architecture-diagram.html',
+  'engagements/active/architecture-diagram.json',
+  'engagements/active/architecture-diagram.mmd',
+  'engagements/active/clarify.html',
   'engagements/active/decision-log.md',
+  'engagements/active/product-flow-diagram.html',
+  'engagements/active/product-flow-diagram.json',
+  'engagements/active/product-flow-diagram.mmd',
   'engagements/active/open-questions.md',
   'engagements/active/progress.md',
+  'engagements/active/review.html',
   'engagements/active/verification.md',
 ]);
 
@@ -265,6 +277,20 @@ function buildWorkflowTaskGraph(snapshot = null, analysis = null, options = {}) 
       dependsOn: ['synthesize'],
     },
     {
+      id: 'clarify-artifact',
+      label: 'clarify.html',
+      kind: 'artifact',
+      status: clarifyGateActive ? 'ready' : 'done',
+      dependsOn: ['clarify'],
+    },
+    {
+      id: 'review-artifact',
+      label: 'review.html',
+      kind: 'artifact',
+      status: isSynthesized || isFrozen || isHandedOff ? 'done' : 'blocked',
+      dependsOn: ['synthesize'],
+    },
+    {
       id: 'flows',
       label: 'flows.md',
       kind: 'artifact',
@@ -340,6 +366,8 @@ function buildWorkflowTaskGraph(snapshot = null, analysis = null, options = {}) 
       { from: 'handoff', to: 'archive', relation: 'enables' },
       { from: 'interview', to: 'open-questions', relation: 'updates' },
       { from: 'synthesize', to: 'prd', relation: 'produces' },
+      { from: 'clarify', to: 'clarify-artifact', relation: 'produces' },
+      { from: 'synthesize', to: 'review-artifact', relation: 'produces' },
       { from: 'synthesize', to: 'flows', relation: 'produces' },
       { from: 'synthesize', to: 'roles', relation: 'produces' },
       { from: 'diagram', to: 'architecture-diagram', relation: 'produces' },
@@ -427,6 +455,15 @@ async function ensureWorkspaceSkeleton(projectRoot, options = {}) {
   await fs.mkdir(cjoin(workspaceRoot, 'state', 'versions'), { recursive: true });
   await fs.mkdir(cjoin(workspaceRoot, 'sessions'), { recursive: true });
   await fs.mkdir(cjoin(workspaceRoot, 'exports'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'artifacts', 'active'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'artifacts', 'archive'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'learning', 'archive'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'quality', 'reports'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'knowledge', 'incidents'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'knowledge', 'patterns'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'knowledge', 'skills'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'benchmarks', 'inbox'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'benchmarks', 'evidence'), { recursive: true });
   await fs.mkdir(cjoin(workspaceRoot, 'engagements', 'active'), { recursive: true });
 
   const defaults = [
@@ -436,6 +473,8 @@ async function ensureWorkspaceSkeleton(projectRoot, options = {}) {
     [cjoin(workspaceRoot, 'engagements', 'active', 'verification.md'), '# 验证\n\n- 已初始化 OpenPrd 验证跟踪。\n'],
     [cjoin(workspaceRoot, 'state', 'task-graph.json'), JSON.stringify(buildWorkflowTaskGraph(), null, 2) + '\n'],
     [cjoin(workspaceRoot, 'state', 'events.jsonl'), ''],
+    [cjoin(workspaceRoot, 'benchmarks', 'sources.yaml'), 'version: 1\nschema: openprd.benchmarks.v1\nsources: []\n'],
+    [cjoin(workspaceRoot, 'benchmarks', 'index.md'), '# OpenPrd Benchmark Registry\n\n## 规则\n\n- 项目级 approved benchmark 优先于 OpenPrd 内置 Source Map。\n- `inbox/` 里的 candidate 只表示待确认线索，不表示长期最佳实践。\n- 每次只挑 1-3 个高相关来源；来源目录不是事实来源。\n\n## Approved Sources\n\n- 暂无已批准来源。\n\n## Candidate Sources\n\n- 暂无待确认来源。\n'],
   ];
 
   for (const [filePath, content] of defaults) {
@@ -471,6 +510,18 @@ async function migrateWorkspaceConfig(projectRoot, changes) {
   const next = {
     ...seed,
     ...current,
+    learningReview: {
+      ...(seed.learningReview ?? {}),
+      ...(current.learningReview ?? {}),
+      enabled: current.learningReview?.enabled ?? seed.learningReview?.enabled ?? true,
+      autoOpen: current.learningReview?.autoOpen ?? seed.learningReview?.autoOpen ?? true,
+      defaultGenre: current.learningReview?.defaultGenre ?? seed.learningReview?.defaultGenre ?? 'internet-product',
+      sourceScope: current.learningReview?.sourceScope ?? seed.learningReview?.sourceScope ?? 'workspace',
+    },
+    quality: {
+      ...(seed.quality ?? {}),
+      ...(current.quality ?? {}),
+    },
     supportedProductTypes: seed.supportedProductTypes,
     templateInheritance: seed.templateInheritance,
     workflow: seed.workflow,
@@ -540,6 +591,15 @@ async function migrateWorkspaceSkeleton(projectRoot, options = {}) {
   await fs.mkdir(cjoin(workspaceRoot, 'state', 'versions'), { recursive: true });
   await fs.mkdir(cjoin(workspaceRoot, 'sessions'), { recursive: true });
   await fs.mkdir(cjoin(workspaceRoot, 'exports'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'artifacts', 'active'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'artifacts', 'archive'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'learning', 'archive'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'quality', 'reports'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'knowledge', 'incidents'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'knowledge', 'patterns'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'knowledge', 'skills'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'benchmarks', 'inbox'), { recursive: true });
+  await fs.mkdir(cjoin(workspaceRoot, 'benchmarks', 'evidence'), { recursive: true });
   await fs.mkdir(cjoin(workspaceRoot, 'engagements', 'active'), { recursive: true });
 
   await migrateWorkspaceConfig(projectRoot, changes);
@@ -579,6 +639,14 @@ async function migrateWorkspaceSkeleton(projectRoot, options = {}) {
   if (!(await exists(cjoin(projectRoot, '.openprd', 'state', 'events.jsonl')))) {
     await writeText(cjoin(projectRoot, '.openprd', 'state', 'events.jsonl'), '');
     changes.push({ path: cjoin('.openprd', 'state', 'events.jsonl'), status: 'created' });
+  }
+  if (!(await exists(cjoin(projectRoot, '.openprd', 'benchmarks', 'sources.yaml')))) {
+    await writeText(cjoin(projectRoot, '.openprd', 'benchmarks', 'sources.yaml'), 'version: 1\nschema: openprd.benchmarks.v1\nsources: []\n');
+    changes.push({ path: cjoin('.openprd', 'benchmarks', 'sources.yaml'), status: 'created' });
+  }
+  if (!(await exists(cjoin(projectRoot, '.openprd', 'benchmarks', 'index.md')))) {
+    await writeText(cjoin(projectRoot, '.openprd', 'benchmarks', 'index.md'), '# OpenPrd Benchmark Registry\n\n## 规则\n\n- 项目级 approved benchmark 优先于 OpenPrd 内置 Source Map。\n- `inbox/` 里的 candidate 只表示待确认线索，不表示长期最佳实践。\n- 每次只挑 1-3 个高相关来源；来源目录不是事实来源。\n\n## Approved Sources\n\n- 暂无已批准来源。\n\n## Candidate Sources\n\n- 暂无待确认来源。\n');
+    changes.push({ path: cjoin('.openprd', 'benchmarks', 'index.md'), status: 'created' });
   }
 
   const changedCount = changes.filter((change) => change.status !== 'unchanged').length;
@@ -622,6 +690,26 @@ async function loadWorkspace(projectRoot) {
     activeFlows: cjoin(workspaceRoot, 'engagements', 'active', 'flows.md'),
     activeRoles: cjoin(workspaceRoot, 'engagements', 'active', 'roles.md'),
     activeHandoff: cjoin(workspaceRoot, 'engagements', 'active', 'handoff.md'),
+    activeClarifyHtml: cjoin(workspaceRoot, 'engagements', 'active', 'clarify.html'),
+    activeReviewHtml: cjoin(workspaceRoot, 'engagements', 'active', 'review.html'),
+    artifactsActiveDir: cjoin(workspaceRoot, 'artifacts', 'active'),
+    artifactsArchiveDir: cjoin(workspaceRoot, 'artifacts', 'archive'),
+    learningDir: cjoin(workspaceRoot, 'learning'),
+    learningArchiveDir: cjoin(workspaceRoot, 'learning', 'archive'),
+    learningIndex: cjoin(workspaceRoot, 'learning', 'index.json'),
+    learningCurrent: cjoin(workspaceRoot, 'learning', 'current.json'),
+    qualityDir: cjoin(workspaceRoot, 'quality'),
+    qualityConfig: cjoin(workspaceRoot, 'quality', 'config.json'),
+    qualityReportsDir: cjoin(workspaceRoot, 'quality', 'reports'),
+    qualityReportIndex: cjoin(workspaceRoot, 'quality', 'reports', 'index.json'),
+    qualityReportLatest: cjoin(workspaceRoot, 'quality', 'reports', 'latest.json'),
+    knowledgeDir: cjoin(workspaceRoot, 'knowledge'),
+    knowledgeIndex: cjoin(workspaceRoot, 'knowledge', 'index.json'),
+    benchmarkDir: cjoin(workspaceRoot, 'benchmarks'),
+    benchmarkInboxDir: cjoin(workspaceRoot, 'benchmarks', 'inbox'),
+    benchmarkEvidenceDir: cjoin(workspaceRoot, 'benchmarks', 'evidence'),
+    benchmarkSources: cjoin(workspaceRoot, 'benchmarks', 'sources.yaml'),
+    benchmarkIndex: cjoin(workspaceRoot, 'benchmarks', 'index.md'),
     activeArchitectureDiagramHtml: cjoin(workspaceRoot, 'engagements', 'active', 'architecture-diagram.html'),
     activeArchitectureDiagramJson: cjoin(workspaceRoot, 'engagements', 'active', 'architecture-diagram.json'),
     activeArchitectureDiagramMermaid: cjoin(workspaceRoot, 'engagements', 'active', 'architecture-diagram.mmd'),
@@ -657,6 +745,8 @@ async function loadWorkspace(projectRoot) {
     currentState: await readJson(paths.currentState).catch(() => null),
     freezeState: await readJson(paths.freezeState).catch(() => null),
     versionIndex: await readJson(paths.versionIndex).catch(() => []),
+    learningIndex: await readJson(paths.learningIndex).catch(() => null),
+    learningCurrent: await readJson(paths.learningCurrent).catch(() => null),
   };
 
   return { projectRoot, workspaceRoot, paths, data };
@@ -685,6 +775,12 @@ const USER_CLARIFICATION_PATHS = new Set([
   'scope.outOfScope',
   'scenarios.primaryFlows',
   'requirements.functional',
+  'businessGuardrails.costDrivers',
+  'businessGuardrails.usageLimits',
+  'businessGuardrails.abusePrevention',
+  'businessGuardrails.monitoringSignals',
+  'businessGuardrails.alertThresholds',
+  'businessGuardrails.stopLossActions',
   'risks.openQuestions',
   'handoff.owner',
   'handoff.nextStep',
@@ -723,6 +819,12 @@ const FIELD_PATH_TO_STATE_KEY = {
   'requirements.functional': 'functional',
   'requirements.nonFunctional': 'nonFunctional',
   'requirements.businessRules': 'businessRules',
+  'businessGuardrails.costDrivers': 'costDrivers',
+  'businessGuardrails.usageLimits': 'usageLimits',
+  'businessGuardrails.abusePrevention': 'abusePrevention',
+  'businessGuardrails.monitoringSignals': 'monitoringSignals',
+  'businessGuardrails.alertThresholds': 'alertThresholds',
+  'businessGuardrails.stopLossActions': 'stopLossActions',
   'constraints.technical': 'technical',
   'constraints.compliance': 'compliance',
   'constraints.dependencies': 'dependencies',
@@ -1124,6 +1226,12 @@ function coerceCapturedValue(pathString, rawValue, append = false) {
     'requirements.functional',
     'requirements.nonFunctional',
     'requirements.businessRules',
+    'businessGuardrails.costDrivers',
+    'businessGuardrails.usageLimits',
+    'businessGuardrails.abusePrevention',
+    'businessGuardrails.monitoringSignals',
+    'businessGuardrails.alertThresholds',
+    'businessGuardrails.stopLossActions',
     'constraints.technical',
     'constraints.compliance',
     'constraints.dependencies',

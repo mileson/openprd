@@ -2,9 +2,107 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { analyzePrdSnapshot, buildPrdSnapshot, diffSnapshots, formatVersionId, renderPrdMarkdown, summarizeSnapshot } from './prd-core.js';
 import { getDiagramReviewState } from './diagram-workspace.js';
-import { exists, readJson, readText, writeJson, writeText } from './fs-utils.js';
+import { exists, parseYamlText, readJson, readText, writeJson, writeText } from './fs-utils.js';
+import { artifactBundlePaths, defaultClarifyArtifactPath, defaultReviewArtifactPath, openArtifactInBrowser, renderClarifyArtifact, renderMarkdownDataDocument, renderPlaygroundArtifact, renderPlaygroundMarkdown, renderPlaygroundPatch, renderReviewArtifact, writeHtmlArtifact } from './html-artifacts.js';
 import { timestamp } from './time.js';
 import { appendDecision, appendOpenQuestions, appendProgress, appendWorkflowEvent, buildClarificationPlan, buildClarificationState, buildWorkflowTaskGraph, CAPTURE_SOURCES, coerceCapturedValue, deriveGateLabels, detectWorkspaceScenario, extractMarkdownSection, FIELD_PATH_TO_STATE_KEY, isSupportedProductType, loadLatestVersionSnapshot, loadWorkspace, normalizeVersionId, readVersionIndex, readVersionSnapshot, renderFlowDoc, renderHandoffDoc, renderRolesDoc, resolveActiveTemplatePack, resolveCurrentProductType, validateWorkspace, writeVersionIndex, writeVersionSnapshot } from './workspace-core.js';
+
+function requirementGatePath(projectRoot) {
+  return path.join(projectRoot, '.openprd', 'harness', 'requirement-gate.json');
+}
+
+async function readActiveRequirementGate(projectRoot) {
+  const gate = await readJson(requirementGatePath(projectRoot)).catch(() => null);
+  return gate?.active ? gate : null;
+}
+
+function requirementLooksLikeInterfaceWork(gate) {
+  const text = `${gate?.promptPreview ?? ''} ${JSON.stringify(gate?.intent ?? {})}`;
+  return /界面|页面|菜单|入口|按钮|表单|弹窗|导航|布局|看板|列表|配置页|模块|组件|UI|tab/i.test(text);
+}
+
+function buildRequirementIntakeDepth(gate) {
+  const needsInterfaceSketch = requirementLooksLikeInterfaceWork(gate);
+  const layers = [
+    {
+      id: 'product-context',
+      title: '用户 / 场景 / 问题',
+      question: '先确认：什么用户，在什么场景下，遇到什么问题？为什么现在值得解决？',
+    },
+    {
+      id: 'product-outcome',
+      title: '目标 / 影响 / 成功标准',
+      question: '解决后用户能完成什么？减少什么成本或风险？用什么成功指标或验收标准判断有效？',
+    },
+    {
+      id: 'product-flow',
+      title: '现状流程 / 目标流程 / 异常路径',
+      question: '请拆出当前流程、目标流程、关键决策点、失败路径，以及哪些动作必须由用户确认。',
+    },
+    {
+      id: 'product-detail',
+      title: needsInterfaceSketch ? '界面草图 / 字段 / 状态' : '细节 / 状态 / 边界',
+      question: needsInterfaceSketch
+        ? '这个需求涉及界面，请先给用户一版 ASCII 线框草图，标出主要区域、操作入口、预览/确认点和风险提示，让用户确认后再 synthesize。'
+        : '请补齐关键字段、状态变化、数据来源、权限边界和可验收细节；如果后续发现涉及界面，也要先补 ASCII 线框草图。',
+    },
+  ];
+  return {
+    active: true,
+    minimumDepth: 3,
+    needsInterfaceSketch,
+    promptPreview: gate?.promptPreview ?? '',
+    layers,
+  };
+}
+
+function applyRequirementIntakeDepth(clarification, gate) {
+  if (!gate?.active) {
+    return clarification;
+  }
+
+  const requirementIntake = buildRequirementIntakeDepth(gate);
+  const existingIds = new Set(clarification.mustAskUser.map((item) => item.id));
+  const depthQuestions = requirementIntake.layers
+    .map((layer) => ({
+      id: `requirement-intake.${layer.id}`,
+      label: layer.title,
+      prompt: layer.question,
+      reason: 'requirement-intake-depth',
+    }))
+    .filter((item) => !existingIds.has(item.id));
+
+  return {
+    ...clarification,
+    requirementIntake,
+    mustAskUser: [...depthQuestions, ...clarification.mustAskUser],
+    shouldAskUser: true,
+  };
+}
+
+function parseArtifactFrontmatter(text) {
+  if (!text.startsWith('---\n')) {
+    throw new Error('Artifact markdown is missing frontmatter.');
+  }
+  const end = text.indexOf('\n---', 4);
+  if (end < 0) {
+    throw new Error('Artifact markdown frontmatter is not closed.');
+  }
+  return parseYamlText(text.slice(4, end));
+}
+
+function buildPlaygroundState(snapshot) {
+  const sections = snapshot.sections ?? {};
+  return {
+    problemStatement: sections.problem?.problemStatement ?? '',
+    goals: [...(sections.goals?.goals ?? [])],
+    successMetrics: [...(sections.goals?.successMetrics ?? [])],
+    inScope: [...(sections.scope?.inScope ?? [])],
+    outOfScope: [...(sections.scope?.outOfScope ?? [])],
+    primaryFlows: [...(sections.scenarios?.primaryFlows ?? [])],
+    openQuestions: [...(sections.risks?.openQuestions ?? [])],
+  };
+}
 
 async function synthesizeWorkspace(projectRoot, overrides = {}) {
   const ws = await loadWorkspace(projectRoot);
@@ -39,11 +137,45 @@ async function synthesizeWorkspace(projectRoot, overrides = {}) {
   await writeText(ws.paths.activeFlows, renderFlowDoc(snapshot));
   await writeText(ws.paths.activeRoles, renderRolesDoc(snapshot));
   await writeText(ws.paths.activeHandoff, renderHandoffDoc(snapshot));
+  const reviewHtmlPath = defaultReviewArtifactPath(ws);
+  await writeHtmlArtifact(reviewHtmlPath, renderReviewArtifact({ snapshot }));
+  const reviewBundle = artifactBundlePaths(ws, `${snapshot.versionId}-review`);
+  await writeHtmlArtifact(reviewBundle.html, renderReviewArtifact({ snapshot }));
+  await writeText(reviewBundle.markdown, renderMarkdownDataDocument({
+    title: `${snapshot.title} review data`,
+    sections: [
+      {
+        title: 'review-status',
+        lines: [
+          'reviewStatus: pending-confirmation',
+          `versionId: ${snapshot.versionId}`,
+        ],
+      },
+      {
+        title: 'recommended-actions',
+        lines: [
+          '- 确认问题与目标',
+          '- 确认范围内 / 范围外',
+          '- 确认主流程与失败路径',
+          '- 确认关键风险与开放问题',
+        ],
+      },
+    ],
+  }));
+  await writeJson(reviewBundle.patch, {
+    type: 'review-artifact',
+    versionId: snapshot.versionId,
+    recommendedActions: ['确认问题与目标', '确认范围内 / 范围外', '确认主流程与失败路径', '确认关键风险与开放问题'],
+  });
+  if (overrides.open) {
+    await openArtifactInBrowser(reviewHtmlPath);
+  }
   await writeJson(ws.paths.taskGraph, buildWorkflowTaskGraph(snapshot));
   await appendWorkflowEvent(ws, 'synthesized', {
     versionId: snapshot.versionId,
     versionNumber: snapshot.versionNumber,
     productType: snapshot.productType,
+    reviewArtifact: reviewHtmlPath,
   });
   await appendDecision(ws, [
     `已生成版本 ${snapshot.versionId}。`,
@@ -79,7 +211,16 @@ async function synthesizeWorkspace(projectRoot, overrides = {}) {
   };
   await writeJson(ws.paths.currentState, currentState);
 
-  return { ws, snapshot, currentState, indexEntry, versionIndex: [...versionIndex, indexEntry] };
+  return {
+    ws,
+    snapshot,
+    currentState,
+    indexEntry,
+    versionIndex: [...versionIndex, indexEntry],
+    reviewArtifact: reviewHtmlPath,
+    reviewArtifactBundle: reviewBundle,
+    opened: Boolean(overrides.open),
+  };
 }
 
 async function diffWorkspace(projectRoot, options = {}) {
@@ -139,14 +280,15 @@ async function clarifyWorkspace(projectRoot, options = {}) {
   const analysis = analyzePrdSnapshot(snapshot);
   const basePlan = buildClarificationPlan(snapshot, analysis);
   const scenario = await detectWorkspaceScenario(projectRoot, ws, versionIndex);
-  const clarification = buildClarificationState({
+  const requirementGate = await readActiveRequirementGate(projectRoot);
+  const clarification = applyRequirementIntakeDepth(buildClarificationState({
     snapshot,
     analysis,
     basePlan,
     scenario,
     captureMeta: ws.data.currentState?.captureMeta ?? {},
     limit: Number(options.limit ?? 8),
-  });
+  }), requirementGate);
 
   await appendWorkflowEvent(ws, 'clarify', {
     missingRequiredFields: clarification.missingRequiredFields,
@@ -154,12 +296,95 @@ async function clarifyWorkspace(projectRoot, options = {}) {
     scenario: clarification.scenario.id,
   });
   await appendOpenQuestions(ws, clarification.mustAskUser.map((item) => item.prompt));
+  const clarifyHtmlPath = defaultClarifyArtifactPath(ws);
+  await writeHtmlArtifact(clarifyHtmlPath, renderClarifyArtifact({ snapshot, clarification }));
+  const clarifyBundle = artifactBundlePaths(ws, `${snapshot.versionId}-clarify`);
+  await writeHtmlArtifact(clarifyBundle.html, renderClarifyArtifact({ snapshot, clarification }));
+  await writeText(clarifyBundle.markdown, renderMarkdownDataDocument({
+    title: `${snapshot.title} clarify data`,
+    sections: [
+      {
+        title: 'must-ask',
+        lines: clarification.mustAskUser.map((item) => `- [ ] ${item.id}: ${item.prompt}`),
+      },
+      {
+        title: 'can-infer-later',
+        lines: clarification.canInferLater.map((item) => `- ${item.id}: ${item.prompt}`),
+      },
+    ],
+  }));
+  await writeJson(clarifyBundle.patch, {
+    action: 'capture',
+    nextRecommendedPhase: clarification.shouldAskUser ? 'clarify' : 'synthesize',
+    confirmedQuestionIds: clarification.mustAskUser.map((item) => item.id),
+  });
+  if (options.open) {
+    await openArtifactInBrowser(clarifyHtmlPath);
+  }
 
   return {
     ws,
     snapshot,
     analysis,
     clarification,
+    clarifyArtifact: clarifyHtmlPath,
+    clarifyArtifactBundle: clarifyBundle,
+    opened: Boolean(options.open),
+  };
+}
+
+async function playgroundWorkspace(projectRoot, options = {}) {
+  const ws = await loadWorkspace(projectRoot);
+  if (!(await exists(ws.workspaceRoot))) {
+    throw new Error(`Missing workspace: ${ws.workspaceRoot}`);
+  }
+
+  const versionIndex = await readVersionIndex(ws);
+  const currentState = ws.data.currentState ?? {};
+  const snapshot = (await loadLatestVersionSnapshot(ws))?.snapshot ?? buildPrdSnapshot(ws, {
+    ...currentState,
+    versionNumber: currentState.prdVersion ?? (versionIndex.at(-1)?.versionNumber ?? 0),
+    versionId: currentState.prdVersion > 0
+      ? formatVersionId(currentState.prdVersion)
+      : (versionIndex.at(-1)?.versionId ?? 'v0000'),
+    productType: resolveCurrentProductType(ws),
+    templatePack: resolveActiveTemplatePack(ws),
+    status: currentState.status ?? 'draft',
+  });
+
+  const state = buildPlaygroundState(snapshot);
+  const bundle = artifactBundlePaths(ws, `${snapshot.versionId}-playground`);
+  const markdown = renderPlaygroundMarkdown({ snapshot, state });
+  const patch = renderPlaygroundPatch({ state });
+  await writeText(bundle.markdown, markdown);
+  await writeJson(bundle.patch, patch);
+  await writeHtmlArtifact(bundle.html, renderPlaygroundArtifact({
+    snapshot,
+    state,
+    markdownPath: bundle.markdown,
+    patchPath: bundle.patch,
+  }));
+  await appendWorkflowEvent(ws, 'playground_generated', {
+    versionId: snapshot.versionId,
+    htmlPath: bundle.html,
+    markdownPath: bundle.markdown,
+    patchPath: bundle.patch,
+  });
+  await appendProgress(ws, [
+    `已生成 playground artifact bundle: ${path.relative(ws.workspaceRoot, bundle.dir)}。`,
+  ]);
+  if (options.open) {
+    await openArtifactInBrowser(bundle.html);
+  }
+
+  return {
+    ws,
+    snapshot,
+    state,
+    htmlPath: bundle.html,
+    markdownPath: bundle.markdown,
+    patchPath: bundle.patch,
+    opened: Boolean(options.open),
   };
 }
 
@@ -178,7 +403,34 @@ async function captureWorkspace(projectRoot, options = {}) {
 
   const updates = [];
 
-  if (options.jsonFile) {
+  if (options.artifactMarkdown) {
+    const artifactText = await readText(path.resolve(options.artifactMarkdown));
+    const artifact = parseArtifactFrontmatter(artifactText);
+    const payload = artifact.capturePatch;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('Artifact markdown frontmatter is missing capturePatch.');
+    }
+
+    for (const [field, rawEntry] of Object.entries(payload)) {
+      const stateKey = FIELD_PATH_TO_STATE_KEY[field];
+      if (!stateKey) {
+        throw new Error(`Unsupported capture field in artifact markdown: ${field}`);
+      }
+      const value = rawEntry?.value ?? rawEntry;
+      const source = rawEntry?.source ?? options.source;
+      const append = rawEntry?.append ?? options.append;
+      if (value === null || value === undefined) {
+        throw new Error(`Missing capture value in artifact markdown for field: ${field}`);
+      }
+      updates.push({
+        field,
+        stateKey,
+        value,
+        source: CAPTURE_SOURCES.includes(source) ? source : 'user-confirmed',
+        append: Boolean(append),
+      });
+    }
+  } else if (options.jsonFile) {
     const payload = await readJson(path.resolve(options.jsonFile));
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('Capture JSON file must contain an object at the root');
@@ -276,14 +528,15 @@ async function captureWorkspace(projectRoot, options = {}) {
   const analysis = analyzePrdSnapshot(snapshot);
   const diagramState = await getDiagramReviewState({ ...ws, data: { ...ws.data, currentState } }, snapshot);
   const scenario = await detectWorkspaceScenario(projectRoot, { ...ws, data: { ...ws.data, currentState } }, await readVersionIndex(ws));
-  const clarification = buildClarificationState({
+  const requirementGate = await readActiveRequirementGate(projectRoot);
+  const clarification = applyRequirementIntakeDepth(buildClarificationState({
     snapshot,
     analysis,
     basePlan: buildClarificationPlan(snapshot, analysis),
     scenario,
     captureMeta: currentState.captureMeta,
     limit: 8,
-  });
+  }), requirementGate);
   await writeJson(ws.paths.taskGraph, buildWorkflowTaskGraph(snapshot, analysis, { diagramState, clarificationState: clarification }));
   await appendWorkflowEvent(ws, 'capture', {
     fields: applied.map((item) => item.field),
@@ -299,6 +552,7 @@ async function captureWorkspace(projectRoot, options = {}) {
   return {
     ws: { ...ws, data: { ...ws.data, currentState } },
     applied,
+    artifactMarkdown: options.artifactMarkdown ?? null,
     field: applied[0]?.field ?? null,
     stateKey: applied[0]?.stateKey ?? null,
     value: applied[0]?.value ?? null,
@@ -326,14 +580,15 @@ async function computeWorkspaceGuidance(ws, options = {}) {
   const hasProductType = isSupportedProductType(currentProductType ?? analysis.productType);
   const diagramState = await getDiagramReviewState(ws, analysisSnapshot);
   const scenario = await detectWorkspaceScenario(ws.projectRoot, ws, versionIndex);
-  const clarification = buildClarificationState({
+  const requirementGate = await readActiveRequirementGate(ws.projectRoot);
+  const clarification = applyRequirementIntakeDepth(buildClarificationState({
     snapshot: analysisSnapshot,
     analysis,
     basePlan: buildClarificationPlan(analysisSnapshot, analysis),
     scenario,
     captureMeta: currentState.captureMeta ?? {},
     limit: Number(options.questionLimit ?? 5),
-  });
+  }), requirementGate);
 
   let nextAction = 'synthesize';
   let reason = 'PRD 可以合成为第一个版本。';
@@ -577,5 +832,6 @@ export {
   historyWorkspace,
   interviewWorkspace,
   nextWorkspace,
+  playgroundWorkspace,
   synthesizeWorkspace
 };

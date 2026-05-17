@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { preferSimplifiedChinese } from '../language-policy.js';
+import { needsBusinessGuardrails } from '../prd-core.js';
 import { OPENSPEC_TASK_MAX_ITEMS_PER_FILE } from './constants.js';
 import { openPrdChangeRoot, openPrdDiscoveryConfigPath, readDiscoveryConfig } from './paths.js';
 
@@ -91,6 +93,8 @@ function buildProposal({ changeId, capability, snapshot }) {
     '',
     bullets([
       ...arrayValue(sections.users?.primaryUsers).map((item) => `主要用户: ${item}`),
+      ...arrayValue(sections.businessGuardrails?.costDrivers).map((item) => `成本来源: ${item}`),
+      ...arrayValue(sections.businessGuardrails?.usageLimits).map((item) => `额度限制: ${item}`),
       ...arrayValue(sections.constraints?.dependencies).map((item) => `依赖: ${item}`),
       ...arrayValue(sections.risks?.risks).map((item) => `风险: ${item}`),
     ], ['Agent 可以通过 OpenPrd 从 PRD 继续推进到 specs、tasks、validation 和 execution。']),
@@ -123,6 +127,17 @@ function buildDesign({ snapshot }) {
       ...arrayValue(sections.constraints?.dependencies),
     ]),
     '',
+    '## 业务护栏',
+    '',
+    bullets([
+      ...arrayValue(sections.businessGuardrails?.costDrivers).map((item) => `成本来源: ${item}`),
+      ...arrayValue(sections.businessGuardrails?.usageLimits).map((item) => `额度限制: ${item}`),
+      ...arrayValue(sections.businessGuardrails?.abusePrevention).map((item) => `滥用防护: ${item}`),
+      ...arrayValue(sections.businessGuardrails?.monitoringSignals).map((item) => `监控信号: ${item}`),
+      ...arrayValue(sections.businessGuardrails?.alertThresholds).map((item) => `报警阈值: ${item}`),
+      ...arrayValue(sections.businessGuardrails?.stopLossActions).map((item) => `止损动作: ${item}`),
+    ]),
+    '',
     '## 风险与开放问题',
     '',
     bullets([
@@ -136,31 +151,34 @@ function buildDesign({ snapshot }) {
 
 function buildSpec({ snapshot }) {
   const sections = snapshot.sections ?? {};
-  const title = safeRequirementTitle(snapshot.title, '生成的产品行为');
-  const flow = arrayValue(sections.scenarios?.primaryFlows)[0] ?? '主要用户完成主流程';
-  const acceptance = arrayValue(sections.goals?.acceptanceGoals)[0]
-    ?? arrayValue(sections.requirements?.functional)[0]
-    ?? '预期产品结果得到满足';
-  const edgeCase = arrayValue(sections.scenarios?.edgeCases)[0] ?? '出现边界情况';
-  const failureMode = arrayValue(sections.scenarios?.failureModes)[0] ?? '出现失败模式';
+  const title = safeRequirementTitle(
+    preferSimplifiedChinese(snapshot.title, '当前 PRD 描述的产品行为'),
+    '当前 PRD 描述的产品行为',
+  );
+  const acceptanceSource = arrayValue(sections.goals?.acceptanceGoals)[0]
+    ?? arrayValue(sections.requirements?.functional)[0];
+  const flow = preferSimplifiedChinese(arrayValue(sections.scenarios?.primaryFlows)[0], '主要用户完成主流程');
+  const acceptance = preferSimplifiedChinese(acceptanceSource, '预期产品结果得到满足');
+  const edgeCase = preferSimplifiedChinese(arrayValue(sections.scenarios?.edgeCases)[0], '出现边界情况');
+  const failureMode = preferSimplifiedChinese(arrayValue(sections.scenarios?.failureModes)[0], '出现失败模式');
 
   return [
-    '## ADDED Requirements',
+    '## 新增需求',
     '',
-    `### Requirement: ${title} SHALL 满足当前 PRD`,
-    scalar(sections.problem?.problemStatement, '生成的能力 SHALL 保持最新 OpenPrd 快照描述的行为。'),
+    `### 需求：${title}`,
+    preferSimplifiedChinese(sections.problem?.problemStatement, '生成的能力应保持最新 OpenPrd 快照描述的行为。'),
     '',
-    '#### Scenario: 主流程成功',
-    `- **WHEN** ${flow}`,
-    `- **THEN** ${acceptance}`,
+    '#### 场景：主流程成功',
+    `- **当** ${flow}`,
+    `- **则** ${acceptance}`,
     '',
-    '#### Scenario: 边界情况保持可见',
-    `- **WHEN** ${edgeCase}`,
-    '- **THEN** 产品 SHALL 保持该情况明确可见，以支持实现和验证',
+    '#### 场景：边界情况保持可见',
+    `- **当** ${edgeCase}`,
+    '- **则** 产品应保持该情况明确可见，以支持实现和验证',
     '',
-    '#### Scenario: 失败模式得到处理',
-    `- **WHEN** ${failureMode}`,
-    '- **THEN** 产品 SHALL 提供有边界且可评审的结果',
+    '#### 场景：失败模式得到处理',
+    `- **当** ${failureMode}`,
+    '- **则** 产品应提供有边界且可评审的结果',
     '',
   ].join('\n');
 }
@@ -173,7 +191,14 @@ function buildTaskItems({ changeId, snapshot, capability }) {
     ...arrayValue(sections.requirements?.functional).map((item) => [`实现需求: ${item}`, `需求已实现: ${item}`]),
     ...arrayValue(sections.goals?.acceptanceGoals).map((item) => [`验证验收目标: ${item}`, `验收目标已满足: ${item}`]),
     ...arrayValue(sections.requirements?.nonFunctional).map((item) => [`验证非功能需求: ${item}`, `非功能需求已满足: ${item}`]),
-    ['维护 docs/basic 项目基础文档', '已检查 docs/basic 是否缺失或因本次需求、流程、结构、依赖、产品行为变化而过期；需要更新的基础文档已同步'],
+    ...(needsBusinessGuardrails(snapshot)
+      ? [
+          ['验证成本与额度护栏', '已验证免费、试用或低权限用户不能绕过额度、并发、频率或总量限制'],
+          ['验证滥用与越权路径', '已覆盖重复请求、并发请求、越权身份和异常恢复等负向场景'],
+          ['验证成本监控、报警和止损', '已确认用量或成本信号、报警阈值和人工/自动止损动作可执行'],
+        ]
+      : []),
+    ['维护 docs/basic 项目基础文档', '已检查 docs/basic 是否缺失或因本次需求、流程、结构、依赖、产品行为变化而过期；若涉及后端、脚本、Agent 或工具链变更，已同步评估 CLI 与 API 接入面，并在 backend-structure.md 中记录事实或不适用原因；需要更新的基础文档已同步'],
     ['更新文件说明书和文件夹 README', '本次变更涉及的文件说明书和文件夹 README 已检查；缺失的已补齐，过期的已更新'],
     ['运行 OpenPrd spec 校验', '生成的 change 通过 OpenPrd 校验'],
   ];

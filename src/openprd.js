@@ -10,19 +10,23 @@ import { doctorOpenPrdAgentIntegration, setupOpenPrdAgentIntegration, updateOpen
 import { finishLoopWorkspace, initLoopWorkspace, nextLoopWorkspace, planLoopWorkspace, promptLoopWorkspace, runLoopWorkspace, statusLoopWorkspace, verifyLoopWorkspace } from './loop.js';
 import { timestamp } from './time.js';
 import { parseCommandArgs, usage } from './cli/args.js';
-import { printAcceptedSpecsResult, printAgentIntegrationResult, printCaptureResult, printClarifyResult, printClassifyResult, printDiagramResult, printDiffResult, printDoctorResult, printFleetResult, printFreezeResult, printHandoffResult, printHistoryResult, printInitResult, printInterviewResult, printLoopResult, printNextResult, printOpenPrdChangeActionResult, printOpenPrdChangesResult, printOpenSpecChangeValidationResult, printOpenSpecDiscoveryResult, printOpenSpecGenerateResult, printOpenSpecTaskResult, printRunResult, printStandardsResult, printStatus, printSynthesizeResult, printValidation } from './cli/print.js';
+import { printAcceptedSpecsResult, printAgentIntegrationResult, printBenchmarkResult, printCaptureResult, printClarifyResult, printClassifyResult, printDiagramResult, printDiffResult, printDoctorResult, printFleetResult, printFreezeResult, printHandoffResult, printHistoryResult, printInitResult, printInterviewResult, printLearningResult, printLoopResult, printNextResult, printOpenPrdChangeActionResult, printOpenPrdChangesResult, printOpenSpecChangeValidationResult, printOpenSpecDiscoveryResult, printOpenSpecGenerateResult, printOpenSpecTaskResult, printPlaygroundResult, printQualityResult, printRunResult, printStandardsResult, printStatus, printSynthesizeResult, printValidation } from './cli/print.js';
 import { cjoin, exists, writeJson, writeText, writeYaml } from './fs-utils.js';
 import { diagramWorkspace } from './diagram-workspace.js';
 import { createOpenSpecDiscoveryWorkspace } from './discovery.js';
 import { createFleetWorkspace } from './fleet.js';
+import { generateLearningReviewWorkspace, setLearningReviewModeWorkspace } from './learning-review.js';
+import { addBenchmarkWorkspace, approveBenchmarkWorkspace, benchmarkWorkspace, listBenchmarkWorkspace, verifyBenchmarkWorkspace } from './benchmark.js';
+import { initQualityWorkspace, qualityWorkspace, verifyQualityWorkspace, learnQualityWorkspace } from './quality.js';
 import { createRunWorkspace } from './run-harness.js';
-import { captureWorkspace, clarifyWorkspace, classifyWorkspace, computeWorkspaceGuidance, diffWorkspace, historyWorkspace, interviewWorkspace, nextWorkspace, synthesizeWorkspace } from './workspace-workflow.js';
+import { captureWorkspace, clarifyWorkspace, classifyWorkspace, computeWorkspaceGuidance, diffWorkspace, historyWorkspace, interviewWorkspace, nextWorkspace, playgroundWorkspace, synthesizeWorkspace } from './workspace-workflow.js';
 import { appendDecision, appendProgress, appendVerification, appendWorkflowEvent, buildWorkflowTaskGraph, computeWorkspaceDigest, CORE_TEMPLATE_FILES, ensureWorkspaceSkeleton, isSupportedProductType, loadLatestVersionSnapshot, loadWorkspace, migrateWorkspaceSkeleton, normalizeVersionId, readVersionIndex, resolveActiveTemplatePack, resolveCurrentProductType, validateWorkspace } from './workspace-core.js';
 
 async function initWorkspace(projectRoot, options) {
   const ws = await ensureWorkspaceSkeleton(projectRoot, options);
   const workspace = await loadWorkspace(projectRoot);
   const standards = await initStandardsWorkspace(projectRoot, { force: Boolean(options.force) });
+  const quality = await initQualityWorkspace(projectRoot, { force: Boolean(options.force) });
   const agentIntegration = await setupOpenPrdAgentIntegration(projectRoot, {
     tools: options.tools ?? 'all',
     force: Boolean(options.force),
@@ -38,6 +42,19 @@ async function initWorkspace(projectRoot, options) {
   if (!config.activeTemplatePack) {
     config.activeTemplatePack = 'base';
   }
+  config.learningReview = {
+    enabled: config.learningReview?.enabled !== false,
+    autoOpen: config.learningReview?.autoOpen !== false,
+    defaultGenre: config.learningReview?.defaultGenre ?? 'internet-product',
+    sourceScope: config.learningReview?.sourceScope ?? 'workspace',
+    ...config.learningReview,
+  };
+  config.quality = {
+    enabled: config.quality?.enabled !== false,
+    command: config.quality?.command ?? 'openprd quality . --verify',
+    reportFormat: config.quality?.reportFormat ?? 'html',
+    ...config.quality,
+  };
   await writeYaml(workspace.paths.config, config);
 
   const currentState = {
@@ -63,7 +80,7 @@ async function initWorkspace(projectRoot, options) {
     `模板包: ${currentState.templatePack}。`,
   ]);
 
-  return { ws: workspace, created: ws.created, currentState, standards, agentIntegration };
+  return { ws: workspace, created: ws.created, currentState, standards, quality, agentIntegration };
 }
 
 async function setupAgentIntegrationWorkspace(projectRoot, options = {}) {
@@ -73,6 +90,7 @@ async function setupAgentIntegrationWorkspace(projectRoot, options = {}) {
       ...initResult.agentIntegration,
       initialized: true,
       standards: initResult.standards,
+      quality: initResult.quality,
       init: {
         workspaceRoot: initResult.ws.workspaceRoot,
         created: initResult.created,
@@ -83,6 +101,7 @@ async function setupAgentIntegrationWorkspace(projectRoot, options = {}) {
 
   const migration = await migrateWorkspaceSkeleton(projectRoot, { recordEvent: true });
   const standards = await initStandardsWorkspace(projectRoot, { force: Boolean(options.force) });
+  const quality = await initQualityWorkspace(projectRoot, { force: false });
   const agentIntegration = await setupOpenPrdAgentIntegration(projectRoot, {
     tools: options.tools ?? 'all',
     force: Boolean(options.force),
@@ -91,12 +110,13 @@ async function setupAgentIntegrationWorkspace(projectRoot, options = {}) {
     codexHome: options.codexHome,
     hookProfile: options.hookProfile,
   });
-  return { ...agentIntegration, initialized: false, migration, standards };
+  return { ...agentIntegration, initialized: false, migration, standards, quality };
 }
 
 async function updateAgentIntegrationWorkspace(projectRoot, options = {}) {
   const migration = await migrateWorkspaceSkeleton(projectRoot, { recordEvent: true });
   const standards = await initStandardsWorkspace(projectRoot, { force: false });
+  const quality = await initQualityWorkspace(projectRoot, { force: false });
   const agentIntegration = await updateOpenPrdAgentIntegration(projectRoot, {
     tools: options.tools ?? 'all',
     force: Boolean(options.force),
@@ -104,7 +124,7 @@ async function updateAgentIntegrationWorkspace(projectRoot, options = {}) {
     codexHome: options.codexHome,
     hookProfile: options.hookProfile,
   });
-  return { ...agentIntegration, migration, standards };
+  return { ...agentIntegration, migration, standards, quality };
 }
 
 async function doctorWorkspace(projectRoot, options = {}) {
@@ -171,6 +191,7 @@ const runWorkspace = createRunWorkspace({
   validateOpenSpecChangeWorkspace,
   validateWorkspace,
   verifyOpenSpecDiscoveryWorkspace,
+  verifyQualityWorkspace,
 });
 
 const fleetWorkspace = createFleetWorkspace({ setupAgentIntegrationWorkspace, updateAgentIntegrationWorkspace, doctorWorkspace });
@@ -508,6 +529,50 @@ export async function main(argv = process.argv.slice(2)) {
       return result.ok ? 0 : 1;
     }
 
+    if (command === 'quality') {
+      const result = await qualityWorkspace(projectPath, {
+        init: flags.init,
+        verify: flags.verify,
+        report: flags.report,
+        html: flags.html,
+        learn: Boolean(flags.learn),
+        from: flags.from,
+        force: flags.force,
+      });
+      printQualityResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
+    if (command === 'benchmark') {
+      const subcommand = positionals[0] ?? 'list';
+      const benchmarkProjectPath = path.resolve(
+        flags.path
+          ?? ((subcommand === 'list' || subcommand === 'verify') ? positionals[1] : null)
+          ?? process.cwd(),
+      );
+      const target = positionals[1] ?? null;
+      let result;
+      if (subcommand === 'add') {
+        result = await addBenchmarkWorkspace(benchmarkProjectPath, {
+          source: target ?? flags.source,
+          notes: flags.notes,
+        });
+      } else if (subcommand === 'approve') {
+        result = await approveBenchmarkWorkspace(benchmarkProjectPath, {
+          id: flags.id ?? target,
+        });
+      } else if (subcommand === 'verify') {
+        result = await verifyBenchmarkWorkspace(benchmarkProjectPath);
+      } else if (subcommand === 'list') {
+        result = await listBenchmarkWorkspace(benchmarkProjectPath);
+      } else {
+        console.log('Usage: openprd benchmark <add|list|approve|verify> [target-or-id] [path-for-list-or-verify] [--path <project>] [--notes <text>] [--id <benchmark-id>]');
+        return 1;
+      }
+      printBenchmarkResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
     if (command === 'classify') {
       const productType = flags.productType ?? positionals[1] ?? positionals[0];
       if (!productType) {
@@ -520,7 +585,7 @@ export async function main(argv = process.argv.slice(2)) {
     }
 
     if (command === 'clarify') {
-      const result = await clarifyWorkspace(projectPath, {});
+      const result = await clarifyWorkspace(projectPath, { open: flags.open });
       printClarifyResult(result, flags.json);
       return 0;
     }
@@ -530,6 +595,7 @@ export async function main(argv = process.argv.slice(2)) {
         field: flags.field,
         value: flags.value,
         jsonFile: flags.jsonFile,
+        artifactMarkdown: flags.artifactMarkdown,
         source: flags.source,
         append: flags.append,
       });
@@ -544,6 +610,37 @@ export async function main(argv = process.argv.slice(2)) {
       return 0;
     }
 
+    if (command === 'playground') {
+      const result = await playgroundWorkspace(projectPath, { open: flags.open });
+      printPlaygroundResult(result, flags.json);
+      return 0;
+    }
+
+    if (command === 'learn') {
+      if (flags.enable || flags.disable) {
+        const enabled = flags.enable ? true : false;
+        if (flags.enable && flags.disable) {
+          throw new Error('Cannot use --enable and --disable together.');
+        }
+        const result = await setLearningReviewModeWorkspace(projectPath, enabled);
+        printLearningResult(result, flags.json);
+        return result.ok ? 0 : 1;
+      }
+
+      const result = await generateLearningReviewWorkspace(projectPath, {
+        topic: flags.topic,
+        genre: flags.genre,
+        style: flags.style,
+        sourceScope: flags.source,
+        contentJson: flags.contentJson,
+        open: flags.open || !flags.json,
+        trigger: 'manual',
+        respectConfig: false,
+      });
+      printLearningResult(result, flags.json);
+      return result.ok ? 0 : 1;
+    }
+
     if (command === 'synthesize') {
       const result = await synthesizeWorkspace(projectPath, {
         title: flags.title,
@@ -552,6 +649,7 @@ export async function main(argv = process.argv.slice(2)) {
         whyNow: flags.whyNow,
         evidence: flags.evidence,
         productType: flags.productType,
+        open: flags.open,
       });
       printSynthesizeResult(result, flags.json);
       return 0;
@@ -759,6 +857,9 @@ export {
   finishLoopWorkspace,
   clarifyWorkspace,
   captureWorkspace,
+  playgroundWorkspace,
+  generateLearningReviewWorkspace,
+  setLearningReviewModeWorkspace,
   synthesizeWorkspace,
   nextWorkspace,
   diffWorkspace,
@@ -783,4 +884,13 @@ export {
   loadWorkspace,
   initStandardsWorkspace,
   checkStandardsWorkspace,
+  initQualityWorkspace,
+  verifyQualityWorkspace,
+  learnQualityWorkspace,
+  qualityWorkspace,
+  benchmarkWorkspace,
+  addBenchmarkWorkspace,
+  listBenchmarkWorkspace,
+  approveBenchmarkWorkspace,
+  verifyBenchmarkWorkspace,
 };

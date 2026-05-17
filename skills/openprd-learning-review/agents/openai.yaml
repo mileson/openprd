@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenPrd Learning Review"
+  short_description: "Generate project learning books and genre templates"
+  default_prompt: "Use $openprd-learning-review to design or generate OpenPrd learning-review packages, genre templates, evidence manifests, and HTML ebook-reader artifacts."

@@ -91,7 +91,7 @@ function executionGate() {
     requiresExplicitIntent: true,
     allowedIntents: ['开发', '实现', '修复', '继续任务', '落地执行', '深度调研', '深度对标', '复刻落地', '提交'],
     readOnlyIntents: ['看看', '规划', '梳理', '分析', '评估', '预计动哪些文件', '怎么改', '代码审查'],
-    rule: 'Only run executionCommand when the current user message explicitly asks to implement, continue, deeply research/benchmark, or commit. For planning, analysis, file-impact questions, and reviews, stay read-only and answer from evidence.',
+    rule: '只有当用户当前明确要求实现、继续、深度调研、对标或提交时，才运行 executionCommand。规划、分析、文件影响范围和审查类请求保持只读，并基于证据回答。',
   };
 }
 
@@ -316,6 +316,7 @@ async function verifyRunWorkspace(projectRoot, dependencies) {
     validateOpenSpecChangeWorkspace,
     validateWorkspace,
     verifyOpenSpecDiscoveryWorkspace,
+    verifyQualityWorkspace,
   } = dependencies;
   const context = await buildRunContext(projectRoot, dependencies);
   const standards = await checkStandardsWorkspace(projectRoot);
@@ -324,6 +325,20 @@ async function verifyRunWorkspace(projectRoot, dependencies) {
     { name: 'standards', ok: standards.ok, errors: standards.errors ?? [] },
     { name: 'validate', ok: validation.valid, errors: validation.errors ?? [] },
   ];
+  if (verifyQualityWorkspace) {
+    const quality = await verifyQualityWorkspace(projectRoot).catch((error) => ({
+      ok: false,
+      errors: [error instanceof Error ? error.message : String(error)],
+    }));
+    checks.push({
+      name: 'quality',
+      ok: quality.ok,
+      errors: quality.errors ?? [],
+      reportPath: quality.reportPath ?? null,
+      htmlPath: quality.htmlPath ?? null,
+      productionReady: quality.report?.readiness?.productionReady ?? null,
+    });
+  }
   if (context.activeChange) {
     const change = await validateOpenSpecChangeWorkspace(projectRoot, { change: context.activeChange });
     checks.push({ name: 'change', ok: change.ok, errors: change.errors ?? [] });

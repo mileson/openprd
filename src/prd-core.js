@@ -34,6 +34,64 @@ function normalizeArray(value) {
   return [value];
 }
 
+const BUSINESS_GUARDRAIL_RISK_TOKENS = [
+  'free user',
+  'free tier',
+  'trial',
+  'quota',
+  'usage limit',
+  'rate limit',
+  'credit',
+  'token',
+  'metered',
+  'cost',
+  'spend',
+  'third-party cost',
+  'third-party api',
+  'ai generation',
+  'model call',
+  'openai',
+  'anthropic',
+  '免费用户',
+  '免费额度',
+  '试用',
+  '额度',
+  '用量',
+  '限流',
+  '积分',
+  '点数',
+  '令牌',
+  '成本',
+  '消耗',
+  '第三方成本',
+  '第三方调用',
+  '第三方 API',
+  '大模型',
+  '模型调用',
+  'AI 生成',
+  '图像生成',
+  '内容生成',
+  '薅',
+  '滥用',
+];
+
+function flattenForSearch(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => flattenForSearch(item)).join('\n');
+  }
+  if (isPlainObject(value)) {
+    return Object.entries(value)
+      .map(([key, entryValue]) => `${key}\n${flattenForSearch(entryValue)}`)
+      .join('\n');
+  }
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function includesRiskToken(text) {
+  const normalized = String(text ?? '').toLowerCase();
+  return BUSINESS_GUARDRAIL_RISK_TOKENS.some((token) => normalized.includes(token.toLowerCase()));
+}
+
 function renderScalar(value) {
   if (value === null || value === undefined || `${value}`.trim() === '') {
     return TBD_ZH;
@@ -196,6 +254,14 @@ export function buildPrdSnapshot(ws, options = {}) {
       nonFunctional: normalizeArray(pickValue(options.nonFunctional, state.nonFunctional)),
       businessRules: normalizeArray(pickValue(options.businessRules, state.businessRules)),
     },
+    businessGuardrails: {
+      costDrivers: normalizeArray(pickValue(options.costDrivers, state.costDrivers)),
+      usageLimits: normalizeArray(pickValue(options.usageLimits, state.usageLimits)),
+      abusePrevention: normalizeArray(pickValue(options.abusePrevention, state.abusePrevention)),
+      monitoringSignals: normalizeArray(pickValue(options.monitoringSignals, state.monitoringSignals)),
+      alertThresholds: normalizeArray(pickValue(options.alertThresholds, state.alertThresholds)),
+      stopLossActions: normalizeArray(pickValue(options.stopLossActions, state.stopLossActions)),
+    },
     constraints: {
       technical: normalizeArray(pickValue(options.technical, state.technical)),
       compliance: normalizeArray(pickValue(options.compliance, state.compliance)),
@@ -313,6 +379,14 @@ export function renderPrdMarkdown(snapshot) {
       ['非功能需求', sections.requirements.nonFunctional],
       ['业务规则', sections.requirements.businessRules],
     ]),
+    renderSection('业务护栏', [
+      ['成本来源', sections.businessGuardrails.costDrivers],
+      ['额度与限制', sections.businessGuardrails.usageLimits],
+      ['滥用防护', sections.businessGuardrails.abusePrevention],
+      ['监控信号', sections.businessGuardrails.monitoringSignals],
+      ['报警阈值', sections.businessGuardrails.alertThresholds],
+      ['止损动作', sections.businessGuardrails.stopLossActions],
+    ]),
     renderSection('约束、依赖与风险', [
       ['技术约束', sections.constraints.technical],
       ['合规要求', sections.constraints.compliance],
@@ -371,6 +445,15 @@ const BASE_REQUIRED_FIELD_DESCRIPTORS = [
   { section: 'handoff', path: 'handoff.owner', label: '交接负责人', prompt: 'PRD freeze 后由谁负责下一步？' },
   { section: 'handoff', path: 'handoff.nextStep', label: '下一步', prompt: 'PRD freeze 后马上做什么？' },
   { section: 'handoff', path: 'handoff.targetSystem', label: '目标系统', prompt: '交接到哪里？' },
+];
+
+const BUSINESS_GUARDRAIL_FIELD_DESCRIPTORS = [
+  { section: 'businessGuardrails', path: 'businessGuardrails.costDrivers', label: '成本来源', prompt: '哪些用户行为、第三方服务或模型调用会产生成本？' },
+  { section: 'businessGuardrails', path: 'businessGuardrails.usageLimits', label: '额度与限制', prompt: '免费、试用或低权限用户的每日、月度、并发或总量限制是什么？' },
+  { section: 'businessGuardrails', path: 'businessGuardrails.abusePrevention', label: '滥用防护', prompt: '如何防止重复请求、并发绕过、越权使用或免费额度被刷？' },
+  { section: 'businessGuardrails', path: 'businessGuardrails.monitoringSignals', label: '监控信号', prompt: '需要监控哪些用量、成本、失败率或异常行为信号？' },
+  { section: 'businessGuardrails', path: 'businessGuardrails.alertThresholds', label: '报警阈值', prompt: '哪些金额、调用量、错误率或增长速度达到阈值后要报警？' },
+  { section: 'businessGuardrails', path: 'businessGuardrails.stopLossActions', label: '止损动作', prompt: '触发异常后，应该降级、暂停、关闭哪些能力，谁来处理？' },
 ];
 
 const TYPE_REQUIRED_FIELD_DESCRIPTORS = {
@@ -439,9 +522,28 @@ export function getRequiredFieldDescriptors(productType) {
   return descriptors;
 }
 
+export function needsBusinessGuardrails(snapshot) {
+  const sections = snapshot?.sections ?? {};
+  const riskSource = {
+    problem: sections.problem,
+    users: sections.users,
+    goals: sections.goals,
+    scope: { inScope: sections.scope?.inScope },
+    scenarios: sections.scenarios,
+    requirements: sections.requirements,
+    constraints: sections.constraints,
+    risks: sections.risks,
+    typeSpecific: sections.typeSpecific,
+  };
+  return includesRiskToken(flattenForSearch(riskSource));
+}
+
 export function analyzePrdSnapshot(snapshot) {
   const productType = snapshot.productType ?? null;
   const descriptors = getRequiredFieldDescriptors(productType);
+  if (needsBusinessGuardrails(snapshot)) {
+    descriptors.push(...BUSINESS_GUARDRAIL_FIELD_DESCRIPTORS);
+  }
   const missingFields = [];
   const completeFields = [];
 

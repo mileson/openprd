@@ -1,0 +1,973 @@
+{
+  "version": 1,
+  "generatedAt": "2026-05-12 18:21:36",
+  "sourceScope": "all",
+  "sourceCount": 17,
+  "claimCount": 4,
+  "sources": [
+    {
+      "id": "current-state",
+      "title": "当前状态",
+      "type": "json",
+      "groups": [
+        "workspace",
+        "loop"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/state/current.json",
+      "relativePath": "state/current.json",
+      "summary": "状态: seed · PRD 版本: 0",
+      "excerpt": "{\n  \"version\": 1,\n  \"status\": \"seed\",\n  \"activeEngagement\": \"active\",\n  \"prdVersion\": 0,\n  \"productType\": null,\n  \"templatePack\": \"base\",\n  \"projectRoot\": \"/Users/mileson/Workspace/AI工作室/OpenPrd\",\n  \"workspaceRoot\": \"/Users/mileson/Workspace/AI工作室/OpenPrd/.openprd\",\n  \"createdAt\": \"2026-04-12T00:00:00.000Z\",\n  \"learnin…",
+      "digest": "bb3e60694194aca6f0f70b75c5664eea2d665d10",
+      "note": null,
+      "data": {
+        "version": 1,
+        "status": "seed",
+        "activeEngagement": "active",
+        "prdVersion": 0,
+        "productType": null,
+        "templatePack": "base",
+        "projectRoot": "/Users/mileson/Workspace/AI工作室/OpenPrd",
+        "workspaceRoot": "/Users/mileson/Workspace/AI工作室/OpenPrd/.openprd",
+        "createdAt": "2026-04-12T00:00:00.000Z",
+        "learningReview": {
+          "enabled": true,
+          "defaultGenre": "internet-product",
+          "autoOpen": true,
+          "sourceScope": "all",
+          "lastPackageId": "lr-20260512-180430-openprd-复盘学习模式",
+          "lastGeneratedAt": "2026-05-12 18:04:30",
+          "lastGenreId": "xianxia",
+          "lastTopic": "OpenPrd 复盘学习模式",
+          "lastTrigger": "manual",
+          "lastOpened": false,
+          "lastStyleId": "cultivation"
+        }
+      }
+    },
+    {
+      "id": "task-graph",
+      "title": "任务图",
+      "type": "json",
+      "groups": [
+        "workspace",
+        "loop"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/state/task-graph.json",
+      "relativePath": "state/task-graph.json",
+      "summary": "下一个就绪节点: clarify · 节点数: 21",
+      "excerpt": "{\n  \"version\": 1,\n  \"generatedAt\": \"2026-05-12 17:49:33\",\n  \"nextReadyNode\": \"clarify\",\n  \"workflow\": [\n    {\n      \"id\": \"clarify\",\n      \"label\": \"clarify\",\n      \"kind\": \"workflow-step\",\n      \"status\": \"ready\",\n      \"dependsOn\": []\n    },\n    {\n      \"id\": \"classify\",\n      \"label\": \"classify\",\n      \"kind\": \"work…",
+      "digest": "9256dcc87e4cd664ca318456a9c07cd909e35f15",
+      "note": null,
+      "data": {
+        "version": 1,
+        "generatedAt": "2026-05-12 17:49:33",
+        "nextReadyNode": "clarify",
+        "workflow": [
+          {
+            "id": "clarify",
+            "label": "clarify",
+            "kind": "workflow-step",
+            "status": "ready",
+            "dependsOn": []
+          },
+          {
+            "id": "classify",
+            "label": "classify",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "clarify"
+            ]
+          },
+          {
+            "id": "interview",
+            "label": "interview",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "classify"
+            ]
+          },
+          {
+            "id": "synthesize",
+            "label": "synthesize",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "classify",
+              "interview"
+            ]
+          },
+          {
+            "id": "validate",
+            "label": "validate",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "diagram",
+            "label": "diagram",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "freeze",
+            "label": "freeze",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "validate"
+            ]
+          },
+          {
+            "id": "handoff",
+            "label": "handoff",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "freeze"
+            ]
+          },
+          {
+            "id": "archive",
+            "label": "archive",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "handoff"
+            ]
+          }
+        ],
+        "artifacts": [
+          {
+            "id": "decision-log",
+            "label": "decision-log.md",
+            "kind": "record",
+            "status": "ready",
+            "dependsOn": []
+          },
+          {
+            "id": "open-questions",
+            "label": "open-questions.md",
+            "kind": "record",
+            "status": "ready",
+            "dependsOn": [
+              "interview"
+            ]
+          },
+          {
+            "id": "progress",
+            "label": "progress.md",
+            "kind": "record",
+            "status": "ready",
+            "dependsOn": [
+              "classify"
+            ]
+          },
+          {
+            "id": "verification",
+            "label": "verification.md",
+            "kind": "record",
+            "status": "ready",
+            "dependsOn": [
+              "freeze"
+            ]
+          },
+          {
+            "id": "architecture-diagram",
+            "label": "architecture-diagram.html",
+            "kind": "artifact",
+            "status": "blocked",
+            "dependsOn": [
+              "diagram"
+            ]
+          },
+          {
+            "id": "product-flow-diagram",
+            "label": "product-flow-diagram.html",
+            "kind": "artifact",
+            "status": "blocked",
+            "dependsOn": [
+              "diagram"
+            ]
+          },
+          {
+            "id": "prd",
+            "label": "prd.md",
+            "kind": "artifact",
+            "status": "ready",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "clarify-artifact",
+            "label": "clarify.html",
+            "kind": "artifact",
+            "status": "ready",
+            "dependsOn": [
+              "clarify"
+            ]
+          },
+          {
+            "id": "review-artifact",
+            "label": "review.html",
+            "kind": "artifact",
+            "status": "blocked",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "flows",
+            "label": "flows.md",
+            "kind": "artifact",
+            "status": "ready",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "roles",
+            "label": "roles.md",
+            "kind": "artifact",
+            "status": "ready",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "handoff",
+            "label": "handoff.md",
+            "kind": "artifact",
+            "status": "blocked",
+            "dependsOn": [
+              "freeze"
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "clarify",
+            "label": "clarify",
+            "kind": "workflow-step",
+            "status": "ready",
+            "dependsOn": []
+          },
+          {
+            "id": "classify",
+            "label": "classify",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "clarify"
+            ]
+          },
+          {
+            "id": "interview",
+            "label": "interview",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "classify"
+            ]
+          },
+          {
+            "id": "synthesize",
+            "label": "synthesize",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "classify",
+              "interview"
+            ]
+          },
+          {
+            "id": "validate",
+            "label": "validate",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "diagram",
+            "label": "diagram",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "freeze",
+            "label": "freeze",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "validate"
+            ]
+          },
+          {
+            "id": "handoff",
+            "label": "handoff",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "freeze"
+            ]
+          },
+          {
+            "id": "archive",
+            "label": "archive",
+            "kind": "workflow-step",
+            "status": "blocked",
+            "dependsOn": [
+              "handoff"
+            ]
+          },
+          {
+            "id": "decision-log",
+            "label": "decision-log.md",
+            "kind": "record",
+            "status": "ready",
+            "dependsOn": []
+          },
+          {
+            "id": "open-questions",
+            "label": "open-questions.md",
+            "kind": "record",
+            "status": "ready",
+            "dependsOn": [
+              "interview"
+            ]
+          },
+          {
+            "id": "progress",
+            "label": "progress.md",
+            "kind": "record",
+            "status": "ready",
+            "dependsOn": [
+              "classify"
+            ]
+          },
+          {
+            "id": "verification",
+            "label": "verification.md",
+            "kind": "record",
+            "status": "ready",
+            "dependsOn": [
+              "freeze"
+            ]
+          },
+          {
+            "id": "architecture-diagram",
+            "label": "architecture-diagram.html",
+            "kind": "artifact",
+            "status": "blocked",
+            "dependsOn": [
+              "diagram"
+            ]
+          },
+          {
+            "id": "product-flow-diagram",
+            "label": "product-flow-diagram.html",
+            "kind": "artifact",
+            "status": "blocked",
+            "dependsOn": [
+              "diagram"
+            ]
+          },
+          {
+            "id": "prd",
+            "label": "prd.md",
+            "kind": "artifact",
+            "status": "ready",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "clarify-artifact",
+            "label": "clarify.html",
+            "kind": "artifact",
+            "status": "ready",
+            "dependsOn": [
+              "clarify"
+            ]
+          },
+          {
+            "id": "review-artifact",
+            "label": "review.html",
+            "kind": "artifact",
+            "status": "blocked",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "flows",
+            "label": "flows.md",
+            "kind": "artifact",
+            "status": "ready",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "roles",
+            "label": "roles.md",
+            "kind": "artifact",
+            "status": "ready",
+            "dependsOn": [
+              "synthesize"
+            ]
+          },
+          {
+            "id": "handoff",
+            "label": "handoff.md",
+            "kind": "artifact",
+            "status": "blocked",
+            "dependsOn": [
+              "freeze"
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "clarify",
+            "to": "classify",
+            "relation": "unblocks"
+          },
+          {
+            "from": "classify",
+            "to": "interview",
+            "relation": "enables"
+          },
+          {
+            "from": "interview",
+            "to": "synthesize",
+            "relation": "enables"
+          },
+          {
+            "from": "synthesize",
+            "to": "validate",
+            "relation": "enables"
+          },
+          {
+            "from": "synthesize",
+            "to": "diagram",
+            "relation": "enables"
+          },
+          {
+            "from": "diagram",
+            "to": "freeze",
+            "relation": "confirms"
+          },
+          {
+            "from": "validate",
+            "to": "freeze",
+            "relation": "guards"
+          },
+          {
+            "from": "freeze",
+            "to": "handoff",
+            "relation": "enables"
+          },
+          {
+            "from": "handoff",
+            "to": "archive",
+            "relation": "enables"
+          },
+          {
+            "from": "interview",
+            "to": "open-questions",
+            "relation": "updates"
+          },
+          {
+            "from": "synthesize",
+            "to": "prd",
+            "relation": "produces"
+          },
+          {
+            "from": "clarify",
+            "to": "clarify-artifact",
+            "relation": "produces"
+          },
+          {
+            "from": "synthesize",
+            "to": "review-artifact",
+            "relation": "produces"
+          },
+          {
+            "from": "synthesize",
+            "to": "flows",
+            "relation": "produces"
+          },
+          {
+            "from": "synthesize",
+            "to": "roles",
+            "relation": "produces"
+          },
+          {
+            "from": "diagram",
+            "to": "architecture-diagram",
+            "relation": "produces"
+          },
+          {
+            "from": "diagram",
+            "to": "product-flow-diagram",
+            "relation": "produces"
+          },
+          {
+            "from": "freeze",
+            "to": "verification",
+            "relation": "produces"
+          },
+          {
+            "from": "freeze",
+            "to": "handoff",
+            "relation": "produces"
+          }
+        ],
+        "blockers": [
+          {
+            "id": "problem.problemStatement",
+            "label": "问题陈述",
+            "question": "我们要解决什么问题？",
+            "section": "problem",
+            "status": "blocked"
+          },
+          {
+            "id": "problem.whyNow",
+            "label": "为什么是现在",
+            "question": "为什么现在是解决这个问题的合适时机？",
+            "section": "problem",
+            "status": "blocked"
+          },
+          {
+            "id": "problem.evidence",
+            "label": "证据",
+            "question": "有哪些证据支持这个问题？",
+            "section": "problem",
+            "status": "blocked"
+          },
+          {
+            "id": "users.primaryUsers",
+            "label": "主要用户",
+            "question": "主要用户是谁？",
+            "section": "users",
+            "status": "blocked"
+          },
+          {
+            "id": "users.stakeholders",
+            "label": "相关方",
+            "question": "还有谁会参与或受到影响？",
+            "section": "users",
+            "status": "blocked"
+          },
+          {
+            "id": "goals.goals",
+            "label": "目标",
+            "question": "我们希望达成什么结果？",
+            "section": "goals",
+            "status": "blocked"
+          },
+          {
+            "id": "goals.successMetrics",
+            "label": "成功指标",
+            "question": "如何衡量成功？",
+            "section": "goals",
+            "status": "blocked"
+          },
+          {
+            "id": "goals.acceptanceGoals",
+            "label": "验收目标",
+            "question": "满足什么条件才能认为完成？",
+            "section": "goals",
+            "status": "blocked"
+          },
+          {
+            "id": "scope.inScope",
+            "label": "范围内",
+            "question": "这个版本包含哪些范围？",
+            "section": "scope",
+            "status": "blocked"
+          },
+          {
+            "id": "scope.outOfScope",
+            "label": "范围外",
+            "question": "哪些内容明确不在范围内？",
+            "section": "scope",
+            "status": "blocked"
+          },
+          {
+            "id": "scenarios.primaryFlows",
+            "label": "主流程",
+            "question": "主要用户流程是什么？",
+            "section": "scenarios",
+            "status": "blocked"
+          },
+          {
+            "id": "scenarios.edgeCases",
+            "label": "边界情况",
+            "question": "哪些边界情况需要处理？",
+            "section": "scenarios",
+            "status": "blocked"
+          },
+          {
+            "id": "scenarios.failureModes",
+            "label": "失败模式",
+            "question": "需要处理哪些失败模式？",
+            "section": "scenarios",
+            "status": "blocked"
+          },
+          {
+            "id": "requirements.functional",
+            "label": "功能需求",
+            "question": "产品必须做什么？",
+            "section": "requirements",
+            "status": "blocked"
+          },
+          {
+            "id": "requirements.nonFunctional",
+            "label": "非功能需求",
+            "question": "有哪些性能、可靠性或安全要求？",
+            "section": "requirements",
+            "status": "blocked"
+          },
+          {
+            "id": "requirements.businessRules",
+            "label": "业务规则",
+            "question": "需要遵守哪些业务规则？",
+            "section": "requirements",
+            "status": "blocked"
+          },
+          {
+            "id": "constraints.technical",
+            "label": "技术约束",
+            "question": "存在哪些技术约束？",
+            "section": "constraints",
+            "status": "blocked"
+          },
+          {
+            "id": "constraints.compliance",
+            "label": "合规要求",
+            "question": "是否存在合规或策略约束？",
+            "section": "constraints",
+            "status": "blocked"
+          },
+          {
+            "id": "constraints.dependencies",
+            "label": "依赖",
+            "question": "这个需求依赖什么？",
+            "section": "constraints",
+            "status": "blocked"
+          },
+          {
+            "id": "risks.assumptions",
+            "label": "假设",
+            "question": "我们做了哪些假设？",
+            "section": "risks",
+            "status": "blocked"
+          },
+          {
+            "id": "risks.risks",
+            "label": "风险",
+            "question": "需要关注哪些风险？",
+            "section": "risks",
+            "status": "blocked"
+          },
+          {
+            "id": "risks.openQuestions",
+            "label": "开放问题",
+            "question": "还有哪些问题未解决？",
+            "section": "risks",
+            "status": "blocked"
+          }
+        ]
+      }
+    },
+    {
+      "id": "version-index",
+      "title": "版本索引",
+      "type": "json",
+      "groups": [
+        "workspace",
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/state/version-index.json",
+      "relativePath": "state/version-index.json",
+      "summary": "版本数: 0",
+      "excerpt": "[]",
+      "digest": "97d170e1550eee4afc0af065b78cda302a97674c",
+      "note": null,
+      "data": []
+    },
+    {
+      "id": "active-prd",
+      "title": "当前 PRD",
+      "type": "text",
+      "groups": [
+        "workspace",
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/prd.md",
+      "relativePath": "engagements/active/prd.md",
+      "summary": "当前工作区的主 PRD 文档。",
+      "excerpt": "# PRD 草稿\n\n## 元信息",
+      "digest": "1bff626d7f2c4b218339db9394a91419baf5c267",
+      "note": null,
+      "data": "# PRD 草稿\n\n## 元信息\n\n- 标题:\n- 负责人:\n- 状态:\n- 版本:\n- 产品类型:\n\n## 问题\n\n- 问题陈述:\n- 为什么现在做:\n- 证据:\n\n## 用户与相关方\n\n- 主要用户:\n- 次要用户:\n- 相关方:\n\n## 目标与成功标准\n\n- 目标:\n- 成功指标:\n- 验收目标:\n\n## 范围与非目标\n\n- 范围内:\n- 范围外:\n\n## 场景与流程\n\n- 主流程:\n- 边界情况:\n- 失败模式:\n\n## 需求\n\n- 功能需求:\n- 非功能需求:\n- 业务规则:\n\n## 约束、依赖与风险\n\n- 技术约束:\n- 依赖:\n- 风险:\n- 开放问题:\n\n## 类型专项模块\n\n- Consumer: 用户画像 / 用户旅程 / 激活 / 留存\n- B2B: 角色 / 现状 / 目标 / 权限 / 审批\n- Agent: Human-Agent contract / 自主 / 工具 / 状态 / 评估\n"
+    },
+    {
+      "id": "active-flows",
+      "title": "流程文档",
+      "type": "text",
+      "groups": [
+        "workspace",
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/flows.md",
+      "relativePath": "engagements/active/flows.md",
+      "summary": "主流程与边界流程的工作区文档。",
+      "excerpt": "# Flows\n\n## Primary Flow",
+      "digest": "5da31bb113342a14699b2d63da4836b88f86665e",
+      "note": null,
+      "data": "# Flows\n\n## Primary Flow\n\n```text\nclassify -> interview -> synthesize -> validate -> freeze -> handoff\n```\n\n## Notes\n\n- Capture the main user journey here.\n- Capture important branches here.\n- Capture failure paths here.\n"
+    },
+    {
+      "id": "active-roles",
+      "title": "角色文档",
+      "type": "text",
+      "groups": [
+        "workspace",
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/roles.md",
+      "relativePath": "engagements/active/roles.md",
+      "summary": "角色和类型专项信息的工作区文档。",
+      "excerpt": "# Roles\n\n## Stakeholders",
+      "digest": "be555b7e3e24f222daef829b4f09ed1087a58f6f",
+      "note": null,
+      "data": "# Roles\n\n## Stakeholders\n\n- Buyer:\n- User:\n- Admin:\n- Operator:\n- Reviewer:\n- Approver:\n\n## Notes\n\n- Which role owns the decision?\n- Which role executes the work?\n- Which role approves freeze?\n"
+    },
+    {
+      "id": "active-handoff",
+      "title": "交接文档",
+      "type": "text",
+      "groups": [
+        "workspace",
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/handoff.md",
+      "relativePath": "engagements/active/handoff.md",
+      "summary": "交接目标、下一步与版本信息。",
+      "excerpt": "# Handoff\n\n## Target",
+      "digest": "72669c8173b10a19d7dd895c1d6960ccb7b71bdb",
+      "note": null,
+      "data": "# Handoff\n\n## Target\n\n- OpenSpec\n\n## Deliverables\n\n- PRD\n- Flows\n- Role map\n- Validation report\n- Freeze snapshot\n\n## Next Step\n\n- Export the current engagement into an execution-ready bundle.\n"
+    },
+    {
+      "id": "decision-log",
+      "title": "决策记录",
+      "type": "text",
+      "groups": [
+        "workspace",
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/decision-log.md",
+      "relativePath": "engagements/active/decision-log.md",
+      "summary": "围绕协同过程积累的决策记录。",
+      "excerpt": "# 决策记录\n\n- 已初始化 OpenPrd 决策跟踪。",
+      "digest": "33082313be5a016d88c3c85546a1ae588086a439",
+      "note": null,
+      "data": "# 决策记录\n\n- 已初始化 OpenPrd 决策跟踪。\n\n## 2026-05-12 16:44:27\n\n- 复盘学习包已生成: lr-20260512-164427-openprd-复盘学习模式。\n- 证据源: 17。\n- 章节数: 5。\n\n## 2026-05-12 17:43:53\n\n- 复盘学习包已生成: lr-20260512-174353-openprd-复盘学习模式。\n- 证据源: 17。\n- 章节数: 5。\n\n## 2026-05-12 17:56:50\n\n- 复盘学习包已生成: lr-20260512-175650-openprd-复盘学习模式。\n- 证据源: 17。\n- 章节数: 5。\n\n## 2026-05-12 18:03:13\n\n- 复盘学习包已生成: lr-20260512-180313-openprd-复盘学习模式。\n- 证据源: 17。\n- 章节数: 5。\n\n## 2026-05-12 18:04:30\n\n- 复盘学习包已生成: lr-20260512-180430-openprd-复盘学习模式。\n- 证据源: 17。\n- 章节数: 5。\n"
+    },
+    {
+      "id": "open-questions",
+      "title": "开放问题",
+      "type": "text",
+      "groups": [
+        "workspace",
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/open-questions.md",
+      "relativePath": "engagements/active/open-questions.md",
+      "summary": "仍需要确认或继续推进的问题。",
+      "excerpt": "# 开放问题\n\n- 已初始化 OpenPrd 问题跟踪。",
+      "digest": "3ad14cf0092db04ba7056c1ec37800cfe87b95a8",
+      "note": null,
+      "data": "# 开放问题\n\n- 已初始化 OpenPrd 问题跟踪。\n\n## 2026-04-28 10:05:37\n- 缺少必填字段: 25。\n- 这个 PRD 由谁负责？\n- 这是 consumer、b2b 还是 agent 产品？\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 哪些证据支持这个问题？\n\n## 2026-05-04 00:32:47\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 01:39:35\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 01:39:48\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 01:40:30\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 01:46:00\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 11:42:30\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 11:42:30\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 11:43:01\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 11:43:01\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 11:43:38\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 11:51:37\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 12:00:44\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 17:49:59\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-04 17:50:09\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-11 11:38:57\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-11 11:38:57\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-11 16:52:11\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-12 10:09:17\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-12 10:11:36\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-12 15:18:34\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-12 16:27:09\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-12 16:27:09\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-12 16:28:12\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-12 16:36:40\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-12 16:42:10\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n\n## 2026-05-12 17:49:33\n\n- 缺少必填字段: 22。\n- 我们要解决什么问题？\n- 为什么现在是解决这个问题的合适时机？\n- 有哪些证据支持这个问题？\n- 主要用户是谁？\n- 还有谁会参与或受到影响？\n"
+    },
+    {
+      "id": "progress",
+      "title": "进度记录",
+      "type": "text",
+      "groups": [
+        "workspace",
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/progress.md",
+      "relativePath": "engagements/active/progress.md",
+      "summary": "工作区的过程进展与阶段性总结。",
+      "excerpt": "# 进度\n\n- 已初始化 OpenPrd 进度跟踪。",
+      "digest": "5dc0b8f13b545df7cdaa12e59346487fd3caa1b8",
+      "note": null,
+      "data": "# 进度\n\n- 已初始化 OpenPrd 进度跟踪。\n\n## 2026-04-28 10:05:37\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 00:32:47\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 01:39:35\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 01:39:48\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 01:40:30\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 01:46:00\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 11:42:30\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 11:42:30\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 11:43:01\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 11:43:01\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 11:43:38\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 11:51:37\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 12:00:44\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 17:49:59\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-04 17:50:09\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-11 11:38:57\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-11 11:38:57\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-11 16:52:11\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 10:09:17\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 10:11:36\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 15:18:34\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 16:27:09\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 16:27:09\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 16:28:12\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 16:36:40\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 16:42:10\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 16:44:27\n\n- 已生成学习包 lr-20260512-164427-openprd-复盘学习模式。\n- 题材: 仙侠修真。\n- HTML: learning/archive/lr-20260512-164427-openprd/reader.html。\n\n## 2026-05-12 17:43:53\n\n- 已生成学习包 lr-20260512-174353-openprd-复盘学习模式。\n- 题材: 仙侠修真。\n- HTML: learning/archive/lr-20260512-174353-openprd/reader.html。\n\n## 2026-05-12 17:49:33\n\n- 建议下一步: clarify-user。\n- 原因: 工作区缺少用户确认的关键信息，需要先澄清再继续合成。\n\n## 2026-05-12 17:56:50\n\n- 已生成学习包 lr-20260512-175650-openprd-复盘学习模式。\n- 题材: 仙侠修真。\n- HTML: learning/archive/lr-20260512-175650-openprd/reader.html。\n\n## 2026-05-12 18:03:13\n\n- 已生成学习包 lr-20260512-180313-openprd-复盘学习模式。\n- 题材: 仙侠修真。\n- HTML: learning/archive/lr-20260512-180313-openprd/reader.html。\n\n## 2026-05-12 18:04:30\n\n- 已生成学习包 lr-20260512-180430-openprd-复盘学习模式。\n- 题材: 仙侠修真。\n- HTML: learning/archive/lr-20260512-180430-openprd/reader.html。\n"
+    },
+    {
+      "id": "verification",
+      "title": "验证记录",
+      "type": "text",
+      "groups": [
+        "workspace",
+        "loop"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/verification.md",
+      "relativePath": "engagements/active/verification.md",
+      "summary": "验证命令、验证结果和回归结论。",
+      "excerpt": "# 验证\n\n- 已初始化 OpenPrd 验证跟踪。",
+      "digest": "59e0939781712880c165098fa96f594734ece631",
+      "note": null,
+      "data": "# 验证\n\n- 已初始化 OpenPrd 验证跟踪。\n"
+    },
+    {
+      "id": "docs-basic-file-structure",
+      "title": "docs/basic/file-structure.md",
+      "type": "text",
+      "groups": [
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/docs/basic/file-structure.md",
+      "relativePath": "../docs/basic/file-structure.md",
+      "summary": "文件结构和目录边界的基础文档。",
+      "excerpt": "# 项目文件结构\n\n## 项目定位",
+      "digest": "b6b8c6605842a0df473871660fc408f22db176c7",
+      "note": null,
+      "data": "# 项目文件结构\n\n## 项目定位\n\nOpenPrd 是一个 Node.js CLI 项目，入口命令通过 `bin/openprd.js` 调用 `src/openprd.js` 的 `main` 函数。`src/openprd.js` 保留 CLI 分发、初始化、freeze、handoff 和公开导出，工作区核心能力与横向流程拆入独立模块，避免入口文件继续承担所有实现细节。\n\n## 核心目录\n\n- `bin/`: CLI 可执行入口。\n- `src/`: OpenPrd CLI 源码。\n- `src/cli/`: 命令行参数解析和终端输出渲染。\n- `src/openspec/`: OpenPrd change、spec、task 的结构化文件操作。\n- `src/diagram-workspace.js`: diagram 命令的 artifact 生成、评审状态和浏览器打开逻辑。\n- `src/discovery.js`: discovery 运行、覆盖矩阵、claims 和验证逻辑。\n- `src/fleet.js`: 历史项目扫描和批量 setup/update/doctor 编排。\n- `src/fs-utils.js`: 共享文件、JSON、YAML、JSONL 读写工具。\n- `src/run-harness.js`: `openprd run` 的 hook-stable context、verify 和 hook 事件记录。\n- `src/source-inventory.js`: discovery 使用的源码盘点和忽略规则。\n- `src/workspace-core.js`: workspace 骨架、迁移、校验、版本索引、事件日志和共享文档渲染。\n- `src/workspace-workflow.js`: classify、interview、clarify、capture、synthesize、diff、history、next、status guidance。\n- `docs/basic/`: 项目级基础说明。\n- `skills/`: OpenPrd 自带 agent skills。\n- `test/`: Node test runner 测试用例。\n\n## 文件组织规则\n\n- 新增或修改文件时，应同步判断 `docs/basic/`、文件说明书、所在文件夹说明书是否缺失或过期；缺失的要补齐，受本次变更影响的已有说明要更新。\n- 跨模块移动文件时，应更新本文件中的目录结构和职责说明。\n- CLI 表层逻辑优先放入 `src/cli/`，不要回填到 `src/openprd.js`。\n- 共享 IO 工具优先放入 `src/fs-utils.js`，业务模块只保留自己的领域判断。\n- discovery、fleet、run harness 这类可独立验证的流程应保持在各自模块内，通过依赖注入接入工作区核心能力。\n- 工作区核心状态工具归入 `src/workspace-core.js`；面向用户的工作流命令归入 `src/workspace-workflow.js`。\n\n## 维护规则\n\n- 每次新增、删除、移动目录或核心文件后，必须检查并更新本文件。\n- 本文档只记录项目结构事实，不承载具体功能需求细节。\n"
+    },
+    {
+      "id": "docs-basic-app-flow",
+      "title": "docs/basic/app-flow.md",
+      "type": "text",
+      "groups": [
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/docs/basic/app-flow.md",
+      "relativePath": "../docs/basic/app-flow.md",
+      "summary": "产品流程和状态流的基础文档。",
+      "excerpt": "# 产品流程说明\n\n## 核心流程",
+      "digest": "59623ab4d90578e67acd3cce96a994e32fab92a1",
+      "note": null,
+      "data": "# 产品流程说明\n\n## 核心流程\n\nOpenPrd 的核心流程是：用户在项目中初始化或接入 `.openprd/` 工作区，Agent 先读取 `openprd run --context`、`status`、`next` 等只读状态，再根据用户当前意图决定是否推进实现、持续调研、变更任务或只读分析。当前流程强调两层协作面：前半段通过 `clarify.html`、`review.html` 等 HTML artifact 帮用户看清楚、比较清楚、确认清楚；后半段通过 tasks、loop、回归报告把执行与验证沉淀成结构化证据。实现阶段必须同步经过 standards 门禁，确认基础文档、文件说明书和文件夹说明书是否需要补齐或更新。\n\n## 用户路径\n\n- 初始化项目：用户运行 `openprd init` 或 `openprd setup`，生成 `.openprd/`、`docs/basic/`、AGENTS 和各端 agent guidance；Codex hook 默认使用 `lite`，只在明确 OpenPrd/深度流程提示词下注入上下文。\n- 规划或分析：用户要求“看看、梳理、怎么改、预计动哪些文件”时，Agent 只读检查代码、文档和 OpenPrd 状态后输出证据化结论，不启动 loop 或推进任务。\n- 澄清与确认：当需求仍模糊、只有一句话、或需要多方案比较时，Agent 优先运行 `openprd clarify`，生成 `clarify.html` 给用户确认问题树、探索方向和导回 payload；合成 PRD 后再生成 `review.html` 用于 freeze 前确认问题、范围、流程和风险。\n- 实现或继续任务：用户明确要求开发、实现、继续、深度调研、深度对标或复刻落地时，Agent 才能运行 execution command，并在完成前检查 `docs/basic/`、文件说明书和文件夹说明书是否缺失或过期。\n- 回归与 readiness：实现完成后运行项目测试、`openprd standards --verify`、`openprd run --verify` 和必要的 `doctor`。同时沉淀阶段性回归报告：前端任务优先记录界面验证策略，后端任务记录脚本或命令验证；最终输出结构化测试报告和 HTML 回归报告。\n\n## 状态变化\n\n- `run --context` 只产生 advisory context，不自动授权执行。\n- 默认 hook 不再为每个工具调用运行 PreToolUse/PostToolUse；只有 `guarded` 或 `full` profile 才启用更重的 per-tool 门禁。\n- `loop --run`、`tasks --advance`、`discovery --advance`、`finish --commit` 只有在用户明确执行意图下才进入执行状态。\n- `clarify` 会产出 `clarify.html`，把本轮关键问题、发散方向和导回 payload 变成可打开确认的协作面。\n- `synthesize` 会产出 `review.html`，把问题、范围、主流程、风险和开放问题压缩成 freeze 前的人机确认界面。\n- `loop --finish` 会同时产出 Markdown 测试报告和 HTML 回归报告，用于复盘、交接和重复验证。\n- 新增或修改文件会触发文档影响判定：缺失文档进入补齐状态，已有但受影响的文档进入更新状态，无需更新时要说明理由。\n- standards、validate 或 doctor 失败时，状态回到修复阶段，不应声明实现完成。\n\n## 维护规则\n\n- 每次用户流程、页面跳转、任务状态或异常处理发生变化后，必须检查并更新本文件。\n"
+    },
+    {
+      "id": "docs-basic-backend-structure",
+      "title": "docs/basic/backend-structure.md",
+      "type": "text",
+      "groups": [
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/docs/basic/backend-structure.md",
+      "relativePath": "../docs/basic/backend-structure.md",
+      "summary": "后端模块和数据流的基础文档。",
+      "excerpt": "# 后端架构设计\n\n## 适用范围",
+      "digest": "bdb3bb0bcf050ed56ea407769dda48f9afa16e6b",
+      "note": null,
+      "data": "# 后端架构设计\n\n## 适用范围\n\n说明后端服务、接口、数据处理和外部依赖的项目级架构约定。\n\n## 服务边界\n\n- CLI 入口: `bin/openprd.js` 只负责调用 `src/openprd.js` 的 `main(argv)` 并设置退出码。\n- CLI 分发: `src/openprd.js` 负责命令分发、workspace 初始化、freeze、handoff、change 生成和对外导出。\n- 工作区核心: `src/workspace-core.js` 负责 workspace 骨架、迁移、校验、版本索引、事件日志和共享文档渲染。\n- 工作流命令: `src/workspace-workflow.js` 负责 classify、interview、clarify、capture、synthesize、diff、history、next 和 status guidance，并在 clarify / synthesize 阶段生成 HTML 协作 artifact。\n- 图表工作区: `src/diagram-workspace.js` 负责 diagram artifact 生成、评审状态读写和可选浏览器打开。\n- HTML artifact: `src/html-artifacts.js` 负责 `clarify.html`、`review.html`、回归报告 HTML 等 human-in-the-loop 协作界面渲染。\n- CLI 表层: `src/cli/args.js` 解析参数，`src/cli/print.js` 统一渲染终端输出。\n- 文件基础设施: `src/fs-utils.js` 统一封装文本、JSON、YAML、JSONL 读写。\n- 运行编排: `src/run-harness.js` 负责 `openprd run` 上下文、hook 记录和 verify 门禁。\n- Agent 集成: `src/agent-integration.js` 负责生成 AGENTS、skills、commands、Codex hooks、hook profile、Codex hooks feature flag 迁移和执行/文档门禁提示。\n- 标准化: `src/standards.js` 负责 `docs/basic/`、文件说明书模板、文件夹说明书模板和 standards 校验。\n- Loop 编排: `src/loop.js` 负责长任务拆分、单任务 prompt、session 记录、任务 verify 和 finish。\n- 规模化操作: `src/fleet.js` 负责扫描历史项目并按依赖注入调用 setup/update/doctor。\n- 持续调研: `src/discovery.js` 负责 discovery run、source inventory、coverage matrix、claims 和 discovery 验证。\n- OpenSpec 文件域: `src/openspec/` 负责 change/spec/task 的读写、验证、应用和归档。\n\n## 数据流\n\n- 用户命令进入 `main(argv)`，由 `src/cli/args.js` 解析 flags 和 positionals。\n- `main` 根据命令分发到 workspace workflow、diagram、standards、loop、openspec、discovery、fleet 或 run 模块。\n- 工作区状态主要读写 `.openprd/` 下的 config、templates、state、engagements、exports 和 harness 文件。JSON/Markdown 继续作为事实源和归档层，HTML artifact 作为主要确认与评审界面。\n- 模块返回结构化 result，`src/cli/print.js` 再根据 `--json` 决定输出 JSON 或用户可读文本。\n- `run-harness`、`fleet`、`discovery` 通过工厂依赖注入调用核心工作区能力，避免从子模块反向导入 `src/openprd.js`。\n- `agent-integration` 将 canonical skills 和 AGENTS 合同渲染到各端 adapter；这些生成物必须包含意图门禁、轻量 hook profile、HTML 协作优先的确认规则和文档影响判定规则。\n- `openspec/generate` 在生成 change tasks 时加入 `docs/basic` 与说明书维护任务，`standards` 在 verify 阶段检查基础契约是否存在并满足结构要求。\n- `loop` 在 finish 阶段同时沉淀 Markdown 测试报告与 HTML 回归报告，供后续复盘、交接和重复执行使用。\n\n## 维护规则\n\n- 每次服务边界、数据流、存储或外部依赖发生变化后，必须检查并更新本文件。\n"
+    },
+    {
+      "id": "docs-basic-frontend-guidelines",
+      "title": "docs/basic/frontend-guidelines.md",
+      "type": "text",
+      "groups": [
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/docs/basic/frontend-guidelines.md",
+      "relativePath": "../docs/basic/frontend-guidelines.md",
+      "summary": "前端阅读器和交互规范的基础文档。",
+      "excerpt": "# 前端开发规范\n\n## 适用范围",
+      "digest": "2610cadea84e3908e3c351d9eb778b4b273391b3",
+      "note": null,
+      "data": "# 前端开发规范\n\n## 适用范围\n\n说明前端界面、组件、交互和样式的项目级约定。\n\n## 界面结构\n\n- 书页式阅读器优先使用“目录 + 当前页正文”的结构，目录只保留章节和章节内结构节点，不把具体练习题当成目录叶子。\n- 当前页正文可以在自身容器内滚动，但页眉、标题、控制区应保持较轻，避免和正文争夺视觉重心。\n\n## 交互规范\n\n- 章节切换优先采用换页语义，而不是让整篇内容形成长卷滚动。\n- 阅读进度、上一章、下一章、字号控制应服务于正文阅读，不应把控制区做成主视觉。\n\n## 维护规则\n\n- 每次新增界面模式、组件规范或交互规则后，必须检查并更新本文件。\n"
+    },
+    {
+      "id": "docs-basic-prd",
+      "title": "docs/basic/prd.md",
+      "type": "text",
+      "groups": [
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/docs/basic/prd.md",
+      "relativePath": "../docs/basic/prd.md",
+      "summary": "产品需求和验收标准的基础文档。",
+      "excerpt": "# 产品逻辑说明\n\n## 问题与目标",
+      "digest": "38b5b4f5c3898c7215f622bd606bb97337599f8f",
+      "note": null,
+      "data": "# 产品逻辑说明\n\n## 问题与目标\n\nOpenPrd 要解决的是 Agent 在需求、调研、实现和交付之间缺少统一工作区状态与质量门禁的问题，同时避免质量门禁在小需求上变成额外负担。目标用户是使用 Codex、Claude 或 Cursor 进行产品/工程协作的团队。成功标准是 Agent 能基于 `.openprd/` 判断当前任务边界，只在明确执行意图下推进任务，并在实现完成前维护基础文档、文件说明书和文件夹说明书。\n\n## 用户故事\n\n- 作为项目负责人，我希望 Agent 在我要求“看看、梳理、怎么改”时只做只读分析，从而避免误启动执行任务。\n- 作为开发者，我希望一句话小需求不会触发每个工具调用的 OpenPrd hook，从而让简单改动保持轻量。\n- 作为工程协作者，我希望 Agent 在新增或修改代码时自动判断文档影响，从而让 `docs/basic/`、文件说明书和文件夹说明书保持可信。\n- 作为维护者，我希望旧项目通过 fleet 刷新后也获得同样的 agent guidance，从而减少历史项目沿用旧规则的风险。\n\n## 功能范围\n\n- 包含：OpenPrd workspace 初始化、agent guidance 生成、意图门禁、run/loop/discovery/task 执行建议、standards 校验、历史项目 fleet 刷新。\n- 包含：Codex hook profile，默认 `lite` 只安装 `UserPromptSubmit`，`guarded/full` 作为显式 opt-in。\n- 包含：实现阶段的文档影响判定规则，覆盖缺失文档补齐和已有文档过期检查。\n- 不包含：自动推断所有文档内容是否语义最新；Agent 仍需基于本次变更证据进行人工级判断并说明理由。\n\n## 验收标准\n\n- 规划、分析、审查类请求不会因 `run --context` 推荐而自动执行 loop、task advance、discovery advance 或 commit。\n- 默认安装后的 Codex 配置不包含 OpenPrd 的 PreToolUse/PostToolUse per-tool hooks。\n- 明确实现类请求在完成前会检查基础文档、文件说明书、文件夹说明书是否缺失或过期，并补齐或说明无需更新。\n- `npm test`、`openprd standards --verify`、`openprd run --verify` 能验证关键门禁没有回退。\n\n## 维护规则\n\n- 每次需求边界、用户故事、验收标准发生变化后，必须检查并更新本文件。\n"
+    },
+    {
+      "id": "docs-basic-tech-stack",
+      "title": "docs/basic/tech-stack.md",
+      "type": "text",
+      "groups": [
+        "docs"
+      ],
+      "path": "/Users/chaojifeng/Projects/harness-engineer/openprd/docs/basic/tech-stack.md",
+      "relativePath": "../docs/basic/tech-stack.md",
+      "summary": "运行环境和依赖工具链的基础文档。",
+      "excerpt": "# 项目技术栈\n\n## 运行环境",
+      "digest": "02529c99d10824098baf1150c52006baf51037a9",
+      "note": null,
+      "data": "# 项目技术栈\n\n## 运行环境\n\n- Node.js 20.19.0 或更高版本。\n- ESM 模块格式，`package.json` 设置 `\"type\": \"module\"`。\n\n## 核心依赖\n\n- `yaml`: 读写 `.openprd/config.yaml`、schema 和 OpenSpec 元数据。\n- Node.js 标准库: `fs/promises`、`path`、`crypto`、`child_process`、`url`。\n\n## 工具链\n\n- `npm test`: 使用 Node test runner 运行全量测试。\n- `node --check <file>`: 对单个 ESM 文件做语法检查。\n- `node ./bin/openprd.js standards . --verify`: 校验 `docs/basic/` 和 standards 基础契约。\n- `node ./bin/openprd.js run . --context`: 生成 hook-stable 执行上下文。\n- `node ./bin/openprd.js update . --hook-profile lite|guarded|full`: 刷新 agent guidance 并选择 Codex hook 重量。\n\n## 维护规则\n\n- 每次新增、移除或升级核心依赖、运行时和工具链后，必须检查并更新本文件。\n"
+    }
+  ],
+  "claims": [
+    {
+      "id": "claim-1",
+      "statement": "当前工作区状态已可被结构化读取，说明 learning review 可以从 .openprd/state 直接接管。",
+      "sourceIds": [
+        "current-state"
+      ],
+      "confidence": 0.94,
+      "kind": "fact"
+    },
+    {
+      "id": "claim-2",
+      "statement": "任务图能够提供 nextReadyNode 与节点结构，适合作为长程任务完成后的复盘入口。",
+      "sourceIds": [
+        "task-graph"
+      ],
+      "confidence": 0.92,
+      "kind": "fact"
+    },
+    {
+      "id": "claim-3",
+      "statement": "验证记录可以把“是否完成”与“证据是否可信”分开，方便写成可读学习书。",
+      "sourceIds": [
+        "verification"
+      ],
+      "confidence": 0.89,
+      "kind": "fact"
+    },
+    {
+      "id": "claim-4",
+      "statement": "docs/basic 已经给出产品流程与后端结构的基线，因此学习内容可以围绕稳定的项目边界展开。",
+      "sourceIds": [
+        "docs-basic-app-flow",
+        "docs-basic-backend-structure"
+      ],
+      "confidence": 0.84,
+      "kind": "inference"
+    }
+  ],
+  "gaps": []
+}

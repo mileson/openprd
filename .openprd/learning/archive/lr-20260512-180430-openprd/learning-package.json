@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "generatedAt": "2026-05-12 18:04:30",
+  "packageId": "lr-20260512-180430-openprd-复盘学习模式",
+  "title": "《OpenPrd 复盘学习模式》修行札记",
+  "topic": "OpenPrd 复盘学习模式",
+  "genreId": "xianxia",
+  "genreLabel": "仙侠修真",
+  "styleId": "cultivation",
+  "styleLabel": "修行札记",
+  "promptPackId": "xianxia.cultivation",
+  "trigger": "manual",
+  "sourceScope": "all",
+  "autoOpen": false,
+  "related": {
+    "changeId": null,
+    "taskId": null,
+    "verifyCommand": null,
+    "testReport": null,
+    "commitSha": null
+  },
+  "paths": {
+    "readerHtml": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260512-180430-openprd/reader.html",
+    "packageJson": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260512-180430-openprd/learning-package.json",
+    "contentJson": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260512-180430-openprd/learning-content.json",
+    "contentMarkdown": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260512-180430-openprd/learning-content.md",
+    "evidenceManifest": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260512-180430-openprd/evidence-manifest.json"
+  },
+  "sourceCount": 17,
+  "claimCount": 4,
+  "chapterCount": 5
+}

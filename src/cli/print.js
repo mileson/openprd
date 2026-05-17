@@ -9,9 +9,9 @@ function printValidation(report, json) {
   }
 
   if (report.valid) {
-    console.log('OpenPrd validation passed');
+    console.log('OpenPrd 校验通过');
     if (report.warnings.length > 0) {
-      console.log('Warnings:');
+      console.log('警告:');
       for (const warning of report.warnings) {
         console.log(`- ${warning}`);
       }
@@ -19,12 +19,12 @@ function printValidation(report, json) {
     return;
   }
 
-  console.log('OpenPrd validation failed');
+  console.log('OpenPrd 校验失败');
   for (const error of report.errors) {
     console.log(`- ${error}`);
   }
   if (report.warnings.length > 0) {
-    console.log('Warnings:');
+    console.log('警告:');
     for (const warning of report.warnings) {
       console.log(`- ${warning}`);
     }
@@ -33,6 +33,7 @@ function printValidation(report, json) {
 
 function printStatus(ws, report, guidance, json) {
   const versionIndex = Array.isArray(ws.data.versionIndex) ? ws.data.versionIndex : [];
+  const learningReview = ws.data.config?.learningReview ?? null;
   const summary = {
     projectRoot: ws.projectRoot,
     workspaceRoot: ws.workspaceRoot,
@@ -50,6 +51,8 @@ function printStatus(ws, report, guidance, json) {
     userParticipationMode: guidance?.clarification?.scenario?.userParticipation ?? null,
     currentGate: guidance?.gates?.currentGate ?? null,
     upcomingGate: guidance?.gates?.upcomingGate ?? null,
+    learningReview,
+    learningCurrent: ws.data.learningCurrent ?? null,
   };
 
   if (json) {
@@ -76,6 +79,15 @@ function printStatus(ws, report, guidance, json) {
   }
   if (summary.upcomingGate) {
     console.log(`后续门禁: ${summary.upcomingGate}`);
+  }
+  if (summary.learningReview) {
+    console.log(`复盘学习模式: ${summary.learningReview.enabled !== false ? '开启' : '关闭'}`);
+    console.log(`默认题材: ${summary.learningReview.defaultGenre ?? 'internet-product'}`);
+    console.log(`自动打开: ${summary.learningReview.autoOpen !== false ? '是' : '否'}`);
+    console.log(`来源范围: ${summary.learningReview.sourceScope ?? 'workspace'}`);
+  }
+  if (summary.learningCurrent?.packageId) {
+    console.log(`最近学习包: ${summary.learningCurrent.packageId}`);
   }
   console.log(`验证: ${summary.valid ? '通过' : '失败'}`);
   if (summary.errors.length > 0) {
@@ -116,6 +128,9 @@ function printClarifyResult(result, json) {
   for (const item of result.clarification.mustAskUser) {
     console.log(`- ${item.prompt}`);
   }
+  if (result.clarifyArtifact) {
+    console.log(`HTML 澄清面板: ${result.clarifyArtifact}`);
+  }
   if (result.clarification.canInferLater.length > 0) {
     console.log('之后可以推断或细化:');
     for (const item of result.clarification.canInferLater.slice(0, 5)) {
@@ -141,6 +156,9 @@ function printCaptureResult(result, json) {
     console.log(`来源: ${result.source}`);
     console.log(`值: ${JSON.stringify(result.value)}`);
   }
+  if (result.artifactMarkdown) {
+    console.log(`来源 artifact markdown: ${result.artifactMarkdown}`);
+  }
   console.log(`剩余缺失必填字段: ${result.analysis.missingRequiredFields}`);
 }
 
@@ -155,6 +173,59 @@ function printInterviewResult(result, json) {
   console.log(result.transcript);
 }
 
+function printPlaygroundResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`已生成 Playground: ${result.snapshot.title}`);
+  console.log(`HTML: ${result.htmlPath}`);
+  console.log(`Markdown 数据源: ${result.markdownPath}`);
+  console.log(`捕获补丁: ${result.patchPath}`);
+  console.log(`已打开: ${result.opened ? '是' : '否'}`);
+}
+
+function printLearningResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.action === 'learning-review-config') {
+    console.log(`复盘学习模式: ${result.enabled ? '已开启' : '已关闭'}`);
+    console.log(`默认题材: ${result.config?.defaultGenre ?? 'internet-product'}`);
+    console.log(`自动打开: ${result.config?.autoOpen !== false ? '是' : '否'}`);
+    return;
+  }
+
+  if (result.skipped) {
+    console.log('复盘学习包: 已跳过');
+    console.log(`原因: ${result.reason}`);
+    return;
+  }
+
+  console.log(`复盘学习包: ${result.packageId}`);
+  console.log(`题材: ${result.genre?.label ?? result.packageMeta?.genreLabel ?? '未知'}`);
+  if (result.packageMeta?.styleLabel || result.content?.stylePromptPack?.label) {
+    console.log(`子风格: ${result.packageMeta?.styleLabel ?? result.content?.stylePromptPack?.label}`);
+  }
+  console.log(`主题: ${result.content?.topic ?? result.packageMeta?.topic ?? '未知'}`);
+  if (result.packageMeta?.authoringStatus) {
+    console.log(`写作状态: ${result.packageMeta.authoringStatus}`);
+  }
+  console.log(`HTML: ${result.packagePaths?.readerHtml ?? '无'}`);
+  console.log(`内容合同: ${result.packagePaths?.contentJson ?? '无'}`);
+  console.log(`证据清单: ${result.packagePaths?.evidenceManifest ?? '无'}`);
+  if (result.packagePaths?.agentPrompt) {
+    console.log(`Agent 写作提示: ${result.packagePaths.agentPrompt}`);
+  }
+  if (result.packagePaths?.agentContext) {
+    console.log(`Agent 上下文: ${result.packagePaths.agentContext}`);
+  }
+  console.log(`已打开: ${result.opened ? '是' : '否'}`);
+}
+
 
 function printSynthesizeResult(result, json) {
   if (json) {
@@ -165,7 +236,10 @@ function printSynthesizeResult(result, json) {
   console.log(`已合成 PRD 版本 ${result.snapshot.versionId}`);
   console.log(`标题: ${result.snapshot.title}`);
   console.log(`产品类型: ${result.snapshot.productType ?? '未分类'}`);
-  console.log(`Digest: ${result.snapshot.digest}`);
+  console.log(`摘要指纹: ${result.snapshot.digest}`);
+  if (result.reviewArtifact) {
+    console.log(`HTML 评审面板: ${result.reviewArtifact}`);
+  }
 }
 
 function printHistoryResult(result, json) {
@@ -186,7 +260,7 @@ function printDiffResult(result, json) {
     return;
   }
 
-  console.log(`Diff ${result.diff.fromVersionId} -> ${result.diff.toVersionId}`);
+  console.log(`差异 ${result.diff.fromVersionId} -> ${result.diff.toVersionId}`);
   console.log(`变更章节: ${result.diff.changedSections.length > 0 ? result.diff.changedSections.join(', ') : '无'}`);
   for (const change of result.diff.changes) {
     console.log(`- ${change.path}: ${JSON.stringify(change.before)} -> ${JSON.stringify(change.after)}`);
@@ -301,7 +375,7 @@ function printDoctorResult(result, json) {
   }
   console.log('Agent 集成检查:');
   for (const check of result.agentIntegration.checks) {
-    console.log(`- ${check.ok ? 'ok' : 'missing'}: ${check.path}`);
+      console.log(`- ${check.ok ? '通过' : '缺失'}: ${check.path}`);
   }
   if (result.errors.length > 0) {
     console.log('错误:');
@@ -331,7 +405,7 @@ function printFleetResult(result, json) {
   console.log(`- OpenPrd: ${result.summary.openprd}`);
   console.log(`- Agent-only: ${result.summary.agentConfigured}`);
   console.log(`- Plain: ${result.summary.plain}`);
-  console.log(`结果: planned ${result.summary.planned}, updated ${result.summary.updated}, setup ${result.summary.setup}, doctored ${result.summary.doctored}, failed ${result.summary.failed}, skipped ${result.summary.skipped}`);
+  console.log(`结果: 计划 ${result.summary.planned}，已更新 ${result.summary.updated}，已接入 ${result.summary.setup}，已检查 ${result.summary.doctored}，失败 ${result.summary.failed}，跳过 ${result.summary.skipped}`);
 
   const visibleProjects = result.projects
     .filter((project) => project.category !== 'plain-project' || project.status === 'failed')
@@ -341,7 +415,7 @@ function printFleetResult(result, json) {
     for (const project of visibleProjects) {
       console.log(`- ${project.status}: ${project.relativePath} (${project.category}) -> ${project.plannedAction}`);
       for (const error of project.errors.slice(0, 3)) {
-        console.log(`  error: ${error}`);
+        console.log(`  错误: ${error}`);
       }
     }
   }
@@ -361,15 +435,15 @@ function printRunResult(result, json) {
   }
 
   if (result.action === 'run-record-hook') {
-    console.log(`OpenPrd run hook recorded: ${result.event.eventName} -> ${result.event.outcome}`);
-    console.log(`Iterations: ${result.files.iterations}`);
+    console.log(`OpenPrd run hook 已记录: ${result.event.eventName} -> ${result.event.outcome}`);
+    console.log(`迭代记录: ${result.files.iterations}`);
     return;
   }
 
   if (result.action === 'run-verify') {
     console.log(`OpenPrd run verify: ${result.ok ? '通过' : '失败'}`);
     for (const check of result.checks) {
-      console.log(`- ${check.ok ? 'ok' : 'failed'}: ${check.name}`);
+    console.log(`- ${check.ok ? '通过' : '失败'}: ${check.name}`);
     }
     if (result.errors.length > 0) {
       console.log('错误:');
@@ -380,7 +454,7 @@ function printRunResult(result, json) {
     return;
   }
 
-  console.log('OpenPrd run context');
+  console.log('OpenPrd 运行上下文');
   console.log(`项目: ${result.projectRoot}`);
   console.log(`验证: ${result.validation.valid ? '通过' : '失败'}`);
   if (result.activeChange) {
@@ -390,7 +464,7 @@ function printRunResult(result, json) {
     console.log(`任务: ${result.taskSummary.completed}/${result.taskSummary.total} 完成，${result.taskSummary.pending} 待处理，${result.taskSummary.blocked} 阻塞`);
   }
   if (result.discovery) {
-    console.log(`Discovery: ${result.discovery.runId} 已覆盖 ${result.discovery.summary.covered}/${result.discovery.summary.total}，待处理 ${result.discovery.summary.pending}`);
+    console.log(`持续发现: ${result.discovery.runId} 已覆盖 ${result.discovery.summary.covered}/${result.discovery.summary.total}，待处理 ${result.discovery.summary.pending}`);
   }
   console.log(`下一步类型: ${result.recommendation.type}`);
   console.log(`下一步: ${result.recommendation.title}`);
@@ -419,12 +493,12 @@ function printLoopResult(result, json) {
   }
 
   if (result.action === 'loop-prompt') {
-    console.log(`OpenPrd loop prompt: ${result.ok ? 'ready' : 'blocked'}`);
+    console.log(`OpenPrd loop 提示词: ${result.ok ? '就绪' : '阻塞'}`);
     if (result.task) {
       console.log(`任务: ${result.task.id} ${result.task.title}`);
     }
     if (result.promptPath) {
-      console.log(`Prompt: ${result.promptPath}`);
+      console.log(`提示词: ${result.promptPath}`);
     }
     if (result.invocation?.display) {
       console.log(`执行: ${result.invocation.display}`);
@@ -436,12 +510,12 @@ function printLoopResult(result, json) {
   }
 
   if (result.action === 'loop-run') {
-    console.log(`OpenPrd loop run: ${result.ok ? '通过' : '失败'}${result.dryRun ? ' (dry-run)' : ''}`);
+    console.log(`OpenPrd loop 运行: ${result.ok ? '通过' : '失败'}${result.dryRun ? ' (dry-run)' : ''}`);
     if (result.task) console.log(`任务: ${result.task.id} ${result.task.title}`);
-    if (result.promptPath) console.log(`Prompt: ${result.promptPath}`);
+    if (result.promptPath) console.log(`提示词: ${result.promptPath}`);
     if (result.invocation?.display) console.log(`执行: ${result.invocation.display}`);
     if (result.finish?.commit) {
-      console.log(`Commit: ${result.finish.commit.skipped ? '跳过' : result.finish.commit.sha}`);
+      console.log(`提交: ${result.finish.commit.skipped ? '跳过' : result.finish.commit.sha}`);
     }
     if (result.finish?.testReport) {
       console.log(`测试报告: ${result.finish.testReport}`);
@@ -455,8 +529,23 @@ function printLoopResult(result, json) {
   if (result.action === 'loop-finish') {
     console.log(`OpenPrd loop finish: ${result.ok ? '通过' : '失败'}`);
     if (result.task) console.log(`任务: ${result.task.id} ${result.task.title}`);
-    if (result.commit) console.log(`Commit: ${result.commit.skipped ? '跳过' : result.commit.sha}`);
+    if (result.commit) console.log(`提交: ${result.commit.skipped ? '跳过' : result.commit.sha}`);
     if (result.testReport) console.log(`测试报告: ${result.testReport}`);
+    if (result.learningReview) {
+      if (result.learningReview.skipped) {
+        console.log(`复盘学习包: 已跳过 (${result.learningReview.reason})`);
+      } else if (result.learningReview.ok === false) {
+        console.log(`复盘学习包: 生成失败 (${result.learningReview.errors?.[0] ?? 'unknown'})`);
+      } else {
+        console.log(`复盘学习包: ${result.learningReview.packageId}`);
+        console.log(`HTML: ${result.learningReview.packagePaths?.readerHtml ?? '无'}`);
+        console.log(`题材: ${result.learningReview.genre?.label ?? '未知'}`);
+        if (result.learningReview.packageMeta?.styleLabel) console.log(`子风格: ${result.learningReview.packageMeta.styleLabel}`);
+        if (result.learningReview.packageMeta?.authoringStatus) console.log(`写作状态: ${result.learningReview.packageMeta.authoringStatus}`);
+        if (result.learningReview.packagePaths?.agentPrompt) console.log(`Agent 写作提示: ${result.learningReview.packagePaths.agentPrompt}`);
+        console.log(`已打开: ${result.learningReview.opened ? '是' : '否'}`);
+      }
+    }
     if (result.next) console.log(`下一任务: ${result.next.id} ${result.next.title}`);
     if (result.errors?.length) {
       for (const error of result.errors) console.log(`- ${error}`);
@@ -465,7 +554,7 @@ function printLoopResult(result, json) {
   }
 
   console.log(`OpenPrd loop: ${result.action} ${result.ok ? '通过' : '失败'}`);
-  if (result.changeId) console.log(`Change: ${result.changeId}`);
+  if (result.changeId) console.log(`变更: ${result.changeId}`);
   if (result.summary) {
     console.log(`任务: ${result.summary.done}/${result.summary.total} 完成，${result.summary.pending} 待处理，${result.summary.failed} 失败，${result.summary.blocked} 阻塞`);
   }
@@ -510,6 +599,59 @@ function printStandardsResult(result, json) {
     for (const warning of result.warnings) {
       console.log(`- ${warning}`);
     }
+  }
+}
+
+function printQualityResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.action === 'quality-init') {
+    console.log(`OpenPrd quality: 已初始化 (${result.changed})`);
+    console.log(`配置: ${result.files.config}`);
+    console.log(`报告目录: ${result.files.reportsDir}`);
+    console.log(`知识库索引: ${result.files.knowledgeIndex}`);
+    return;
+  }
+
+  if (result.action === 'quality-learn') {
+    console.log(`OpenPrd quality learn: ${result.ok ? '已沉淀' : '失败'}`);
+    if (result.ok) {
+      console.log(`来源报告: ${result.sourceReportPath}`);
+      console.log(`事故: ${result.files.incident}`);
+      console.log(`模式: ${result.files.pattern}`);
+      console.log(`经验 Skill: ${result.files.skill}`);
+      return;
+    }
+    for (const error of result.errors ?? []) {
+      console.log(`- ${error}`);
+    }
+    return;
+  }
+
+  console.log(`OpenPrd quality: ${result.ok ? '完成' : '失败'}`);
+  if (result.report) {
+    console.log(`质量状态: ${result.report.summary.status}`);
+    console.log(`生产就绪: ${result.report.readiness.productionReady ? '是' : '否'}`);
+    console.log(`执行模式: ${result.report.readiness.enforcement}`);
+    if (result.report.readiness.attentionGates.length > 0) {
+      console.log(`需关注门禁: ${result.report.readiness.attentionGates.join(', ')}`);
+    }
+    console.log('门禁:');
+    for (const gate of result.report.gates) {
+      console.log(`- ${gate.status}: ${gate.label}`);
+    }
+  }
+  if (result.reportPath) {
+    console.log(`JSON: ${result.reportPath}`);
+  }
+  if (result.htmlPath) {
+    console.log(`HTML: ${result.htmlPath}`);
+  }
+  for (const error of result.errors ?? []) {
+    console.log(`- ${error}`);
   }
 }
 
@@ -752,6 +894,55 @@ function printAcceptedSpecsResult(result, json) {
   console.log(`已应用 changes: ${result.appliedChanges.length}`);
 }
 
+function printBenchmarkResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.action === 'benchmark-add') {
+    console.log(`OpenPrd benchmark add: ${result.ok ? '已加入 candidate' : '失败'}`);
+    if (result.source) {
+      console.log(`ID: ${result.source.id}`);
+      console.log(`标题: ${result.source.title}`);
+      console.log(`来源: ${result.source.url ?? result.source.path ?? 'unknown'}`);
+      console.log(`场景: ${result.source.scenarios.join(', ') || '未分类'}`);
+    }
+    if (result.error) {
+      console.log(`错误: ${result.error}`);
+    }
+    return;
+  }
+
+  if (result.action === 'benchmark-approve') {
+    console.log('OpenPrd benchmark approve: 已加入 approved registry');
+    console.log(`ID: ${result.source.id}`);
+    console.log(`标题: ${result.source.title}`);
+    console.log(`已批准来源: ${result.counts.approved}`);
+    console.log(`待确认来源: ${result.counts.candidates}`);
+    return;
+  }
+
+  if (result.action === 'benchmark-verify') {
+    console.log(`OpenPrd benchmark verify: ${result.ok ? '通过' : '失败'}`);
+    for (const check of result.checks) {
+      console.log(`- ${check.ok ? '通过' : '失败'}: ${check.id}`);
+      for (const issue of check.issues) {
+        console.log(`  ${issue.level === 'error' ? '错误' : '警告'}: ${issue.message}`);
+      }
+    }
+    return;
+  }
+
+  console.log(`OpenPrd benchmark list: approved ${result.counts.approved}, candidate ${result.counts.candidates}`);
+  for (const source of result.approved) {
+    console.log(`- approved ${source.id}: ${source.title}`);
+  }
+  for (const source of result.candidates) {
+    console.log(`- candidate ${source.id}: ${source.title}`);
+  }
+}
+
 
 export {
   printValidation,
@@ -760,6 +951,8 @@ export {
   printClarifyResult,
   printCaptureResult,
   printInterviewResult,
+  printPlaygroundResult,
+  printLearningResult,
   printSynthesizeResult,
   printHistoryResult,
   printDiffResult,
@@ -771,6 +964,7 @@ export {
   printRunResult,
   printLoopResult,
   printStandardsResult,
+  printQualityResult,
   printFreezeResult,
   printDiagramResult,
   printHandoffResult,
@@ -780,5 +974,6 @@ export {
   printOpenSpecTaskResult,
   printOpenPrdChangesResult,
   printOpenPrdChangeActionResult,
-  printAcceptedSpecsResult
+  printAcceptedSpecsResult,
+  printBenchmarkResult
 };

@@ -20,6 +20,11 @@ async function readYaml(filePath) {
   return parsed ?? {};
 }
 
+function parseYamlText(text) {
+  const parsed = YAML.parse(text);
+  return parsed ?? {};
+}
+
 async function readJson(filePath) {
   const text = await readText(filePath);
   return JSON.parse(text);
@@ -70,6 +75,7 @@ export {
   readJsonl,
   readText,
   readYaml,
+  parseYamlText,
   stringifyYaml,
   writeJson,
   writeText,

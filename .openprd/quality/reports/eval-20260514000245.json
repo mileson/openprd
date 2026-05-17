@@ -1,0 +1,270 @@
+{
+  "version": 1,
+  "schema": "openprd.eval-report.v1",
+  "id": "eval-20260514000245",
+  "generatedAt": "2026-05-14 00:02:45",
+  "projectRoot": "/Users/chaojifeng/Projects/harness-engineer/openprd",
+  "summary": {
+    "status": "needs-attention",
+    "filesScanned": 78,
+    "activeChange": null,
+    "gateCount": 7,
+    "attentionCount": 5
+  },
+  "readiness": {
+    "ok": true,
+    "productionReady": false,
+    "enforcement": "advisory",
+    "failingGates": [],
+    "attentionGates": [
+      "redaction",
+      "smoke",
+      "normal-performance",
+      "extreme-performance",
+      "knowledge"
+    ]
+  },
+  "gates": [
+    {
+      "id": "traceability",
+      "label": "日志链路可追踪",
+      "status": "pass",
+      "warnings": []
+    },
+    {
+      "id": "redaction",
+      "label": "日志脱敏策略",
+      "status": "needs-evidence",
+      "warnings": [
+        "需要在项目文档或平台配置中确认敏感字段脱敏策略。"
+      ]
+    },
+    {
+      "id": "smoke",
+      "label": "冒烟测试体系",
+      "status": "needs-attention",
+      "warnings": [
+        "缺少冒烟/e2e 证据。"
+      ]
+    },
+    {
+      "id": "feature-coverage",
+      "label": "任务与功能覆盖",
+      "status": "pass",
+      "warnings": []
+    },
+    {
+      "id": "normal-performance",
+      "label": "正常性能基线",
+      "status": "needs-attention",
+      "warnings": [
+        "缺少性能测试命令。"
+      ]
+    },
+    {
+      "id": "extreme-performance",
+      "label": "极端场景压力",
+      "status": "needs-attention",
+      "warnings": [
+        "缺少极端数据或压力场景。"
+      ]
+    },
+    {
+      "id": "knowledge",
+      "label": "经验 Skill 沉淀",
+      "status": "needs-attention",
+      "warnings": [
+        "项目级经验 skill 库尚为空；首次问题修复后应沉淀抽象经验。"
+      ]
+    }
+  ],
+  "observability": {
+    "status": "pass",
+    "centralizedTools": [
+      "@opentelemetry/",
+      "opentelemetry",
+      "sentry",
+      "datadog",
+      "newrelic",
+      "rollbar",
+      "logtail",
+      "grafana",
+      "loki",
+      "elastic-apm",
+      "cloudwatch",
+      "azure monitor"
+    ],
+    "localLoggers": [
+      "pino",
+      "winston",
+      "bunyan",
+      "log4js",
+      "console."
+    ],
+    "correlationFields": [
+      "trace_id",
+      "span_id",
+      "request_id",
+      "task_id",
+      "user_session_id",
+      "error_id"
+    ],
+    "missingCorrelation": [],
+    "surfaces": {
+      "frontend": false,
+      "backend": false,
+      "agent": true
+    },
+    "requiredSurfaces": [
+      "frontend",
+      "backend",
+      "agent"
+    ],
+    "redactionRequired": true,
+    "recommendations": [
+      "为前端交互、后端入口、异步任务、Agent 工具调用统一注入 trace/request/task/error 关联字段。",
+      "错误日志必须能回查用户会话、任务、请求、下游调用和异常栈，敏感字段默认脱敏。",
+      "每个新增功能在实现阶段都要自评是否需要新增结构化日志或查询样例。"
+    ],
+    "warnings": []
+  },
+  "evalHarness": {
+    "status": "needs-attention",
+    "hasUnitOrCommandTests": true,
+    "smoke": {
+      "present": false,
+      "commands": []
+    },
+    "performance": {
+      "present": false,
+      "commands": [],
+      "normalBaseline": {
+        "cpuPercentP95Max": 70,
+        "memoryMBP95Max": 512,
+        "pageLoadMsP95Max": 2500,
+        "apiLatencyMsP95Max": 500,
+        "errorRatePercentMax": 0.1
+      },
+      "extremeBaseline": {
+        "cpuPercentP95Max": 85,
+        "memoryMBP95Max": 1024,
+        "pageLoadMsP95Max": 5000,
+        "apiLatencyMsP95Max": 1200,
+        "errorRatePercentMax": 1
+      },
+      "ratchetPolicy": "agent-initialized average baseline; user may override; agent ratchet may only tighten thresholds"
+    },
+    "extremeData": {
+      "present": false,
+      "evidence": []
+    },
+    "featureCoverage": {
+      "activeTasks": {
+        "activeChange": null,
+        "total": 0,
+        "done": 0,
+        "pending": 0,
+        "blocked": 0,
+        "tasks": []
+      },
+      "requiredFlows": [
+        "主流程",
+        "异常流程",
+        "逆向流程",
+        "边界条件"
+      ]
+    },
+    "warnings": [
+      "未检测到明确的冒烟/e2e 测试体系。",
+      "未检测到性能/压力测试命令或脚本。",
+      "未检测到极端数据 fixtures 或压力场景数据。"
+    ],
+    "recommendations": [
+      "如果项目没有冒烟测试，优先补一组最短主流程用例，并让后续功能持续补充。",
+      "每次阶段性开发结束都要把任务清单映射到主流程、异常流程、逆向流程和边界条件。",
+      "性能标准从项目级 baseline 开始，功能级可以加严；Agent 自动更新阈值时只能更严格。"
+    ]
+  },
+  "knowledge": {
+    "status": "needs-attention",
+    "enabled": true,
+    "skillDir": ".openprd/knowledge/skills",
+    "skills": [],
+    "incidents": [],
+    "recommendations": [
+      "每次问题修复后记录症状、排查路径、根因模式、修复方式、验证证据和下次触发条件。",
+      "只有重复、高影响、隐性知识或 Agent 误判类问题才升级为项目级 skill。",
+      "生成 skill 时按抽象模式写触发条件和验证步骤，避免只记录一次性事故流水账。"
+    ],
+    "warnings": [
+      "项目级经验 skill 库尚为空；首次问题修复后应沉淀抽象经验。"
+    ]
+  },
+  "configSnapshot": {
+    "version": 1,
+    "schema": "openprd.quality.v1",
+    "updatedAt": "2026-05-13 14:08:50",
+    "enforcement": "advisory",
+    "observability": {
+      "centralizedLoggingRequired": true,
+      "requiredSignals": [
+        "logs",
+        "traces",
+        "metrics",
+        "errors"
+      ],
+      "requiredCorrelationFields": [
+        "trace_id",
+        "span_id",
+        "request_id",
+        "task_id",
+        "user_session_id",
+        "error_id"
+      ],
+      "requiredSurfaces": [
+        "frontend",
+        "backend",
+        "agent"
+      ],
+      "redactionRequired": true,
+      "retentionDays": 30,
+      "samplingPolicy": "errors and high-risk flows are never sampled out; routine success logs may be sampled",
+      "queryExamplesRequired": true
+    },
+    "evalHarness": {
+      "smokeRequired": true,
+      "featureCoverageRequired": true,
+      "normalPerformanceRequired": true,
+      "extremePerformanceRequired": true,
+      "reportFormat": "html",
+      "baselinePolicy": "agent-initialized average baseline; user may override; agent ratchet may only tighten thresholds",
+      "projectBaseline": {
+        "normal": {
+          "cpuPercentP95Max": 70,
+          "memoryMBP95Max": 512,
+          "pageLoadMsP95Max": 2500,
+          "apiLatencyMsP95Max": 500,
+          "errorRatePercentMax": 0.1
+        },
+        "extreme": {
+          "cpuPercentP95Max": 85,
+          "memoryMBP95Max": 1024,
+          "pageLoadMsP95Max": 5000,
+          "apiLatencyMsP95Max": 1200,
+          "errorRatePercentMax": 1
+        }
+      }
+    },
+    "knowledge": {
+      "enabled": true,
+      "skillGenerationRequiredFor": [
+        "repeated-issue",
+        "high-impact-fix",
+        "hidden-debug-knowledge",
+        "agent-misjudgment"
+      ],
+      "skillDir": ".openprd/knowledge/skills",
+      "abstractionRequired": true
+    }
+  }
+}

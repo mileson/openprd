@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "schema": "openprd.learning-content.v1",
+  "packageId": "lr-20260513-171625-空-reader-复核",
+  "generatedAt": "2026-05-13 17:16:25",
+  "contentMode": "agent-authored",
+  "authoringStatus": "awaiting-agent-content",
+  "title": "",
+  "topic": "空 reader 复核",
+  "subtitle": "",
+  "genre": {
+    "id": "internet-product",
+    "label": "互联网产品",
+    "voice": "清晰、务实、讲路径、讲状态、讲证据。",
+    "chapterLabels": [
+      "问题地图",
+      "系统结构",
+      "证据链",
+      "工作示例",
+      "下一步动作"
+    ],
+    "opening": "把这一轮复盘看成一次产品读本：先看入口，再看结构，最后回到可验证的事实。",
+    "closing": "下一次翻开这本书时，先读目录，再读证据，再回到行动清单。"
+  },
+  "stylePromptPack": {
+    "id": "internet-product.default",
+    "styleId": "default",
+    "label": "默认风格迁移",
+    "concept": "保持事实层不变，只做轻量语气迁移。"
+  },
+  "stylePromptEngineering": {
+    "version": 1,
+    "mode": "agent-in-the-loop-style-transfer",
+    "promptPackId": "internet-product.default",
+    "label": "默认风格迁移",
+    "concept": "保持事实层不变，只做轻量语气迁移。",
+    "titlePatterns": [],
+    "outlineArc": [],
+    "imageryBank": [],
+    "sentenceRhythm": null,
+    "taboo": [],
+    "prompts": {
+      "system": "根据 agent-context 和 evidence-manifest 写作，按 genre voice 调整表达。",
+      "title": "保留 topic 核心名词，根据证据生成清晰标题。",
+      "outline": "根据任务事实生成可扫描目录。",
+      "chapter": "根据证据顺序组织章节，优化阅读节奏。",
+      "proseRewrite": "改写表达，不改写事实锚点。",
+      "evidenceBinding": "保留 evidenceIds 和 source paths。",
+      "qualityReview": "检查事实是否可追溯，风格是否一致。"
+    },
+    "loop": [
+      "Agent 先读取 agent-context 和 evidence-manifest。",
+      "Agent 使用 title/outline/chapter/proseRewrite prompts 自行写出标题、大纲和正文。",
+      "Agent 使用 evidenceBinding prompt 保留 evidenceIds、路径和不可改写字段。",
+      "Agent 使用 qualityReview prompt 做风格一致性与事实不漂移检查。",
+      "通过后把内容写入 learning-content.json，再渲染 reader.html。"
+    ]
+  },
+  "styleTransfer": {
+    "promptPackId": "internet-product.default",
+    "agentLoopRequired": true,
+    "appliedAt": null,
+    "chapterCount": 0
+  },
+  "trigger": "manual",
+  "sourceScope": "workspace",
+  "audience": null,
+  "snapshot": {
+    "versionId": "v0000",
+    "versionNumber": 0,
+    "productType": null,
+    "templatePack": "base",
+    "digest": null
+  },
+  "learningGoals": [],
+  "overviewParagraphs": [],
+  "outline": [],
+  "chapters": [],
+  "evidenceManifestPath": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/evidence-manifest.json",
+  "agentContextPath": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/agent-context.json",
+  "agentPromptPath": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/agent-prompt.md",
+  "packagePaths": {
+    "readerHtml": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/reader.html",
+    "packageJson": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/learning-package.json",
+    "contentJson": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/learning-content.json",
+    "contentMarkdown": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/learning-content.md",
+    "evidenceManifest": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/evidence-manifest.json",
+    "agentContext": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/agent-context.json",
+    "agentPrompt": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/agent-prompt.md"
+  },
+  "related": {
+    "changeId": null,
+    "taskId": null,
+    "verifyCommand": null,
+    "testReport": null,
+    "commitSha": null
+  },
+  "nextActions": []
+}

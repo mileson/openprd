@@ -1,0 +1,440 @@
+{
+  "version": 1,
+  "schema": "openprd.learning-agent-context.v1",
+  "packageId": "lr-20260513-171625-空-reader-复核",
+  "generatedAt": "2026-05-13 17:16:25",
+  "topic": "空 reader 复核",
+  "trigger": "manual",
+  "sourceScope": "workspace",
+  "genre": {
+    "id": "internet-product",
+    "label": "互联网产品",
+    "voice": "清晰、务实、讲路径、讲状态、讲证据。",
+    "chapterLabels": [
+      "问题地图",
+      "系统结构",
+      "证据链",
+      "工作示例",
+      "下一步动作"
+    ],
+    "opening": "把这一轮复盘看成一次产品读本：先看入口，再看结构，最后回到可验证的事实。",
+    "closing": "下一次翻开这本书时，先读目录，再读证据，再回到行动清单。"
+  },
+  "stylePromptPack": {
+    "id": "internet-product.default",
+    "styleId": "default",
+    "label": "默认风格迁移",
+    "concept": "保持事实层不变，只做轻量语气迁移。"
+  },
+  "snapshot": {
+    "versionId": "v0000",
+    "versionNumber": 0,
+    "productType": null,
+    "templatePack": "base",
+    "digest": null
+  },
+  "related": {
+    "changeId": null,
+    "taskId": null,
+    "verifyCommand": null,
+    "testReport": null,
+    "commitSha": null
+  },
+  "paths": {
+    "readerHtml": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/reader.html",
+    "packageJson": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/learning-package.json",
+    "contentJson": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/learning-content.json",
+    "contentMarkdown": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/learning-content.md",
+    "evidenceManifest": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/evidence-manifest.json",
+    "agentContext": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/agent-context.json",
+    "agentPrompt": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/agent-prompt.md"
+  },
+  "evidence": {
+    "manifestPath": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/evidence-manifest.json",
+    "sourceCount": 17,
+    "claimCount": 17,
+    "sources": [
+      {
+        "id": "current-state",
+        "title": "当前状态",
+        "type": "json",
+        "relativePath": "state/current.json",
+        "summary": "状态: seed · PRD 版本: 0",
+        "excerpt": "{\n  \"version\": 1,\n  \"status\": \"seed\",\n  \"activeEngagement\": \"active\",\n  \"prdVersion\": 0,\n  \"productType\": null,\n  \"templatePack\": \"base\",\n  \"projectRoot\": \"/Users/mileson/Workspace/AI工作室/OpenPrd\",\n  \"workspaceRoot\": \"/Users/mileson/Workspace/AI工作室/OpenPrd/.openprd\",\n  \"createdAt\": \"2026-04-12T00:00:00.000Z\",\n  \"learnin…",
+        "digest": "f7635bf9d36807939d2f3bf85cbd81bb3a8cc50a"
+      },
+      {
+        "id": "task-graph",
+        "title": "任务图",
+        "type": "json",
+        "relativePath": "state/task-graph.json",
+        "summary": "下一个就绪节点: clarify · 节点数: 21",
+        "excerpt": "{\n  \"version\": 1,\n  \"generatedAt\": \"2026-05-13 15:02:48\",\n  \"nextReadyNode\": \"clarify\",\n  \"workflow\": [\n    {\n      \"id\": \"clarify\",\n      \"label\": \"clarify\",\n      \"kind\": \"workflow-step\",\n      \"status\": \"ready\",\n      \"dependsOn\": []\n    },\n    {\n      \"id\": \"classify\",\n      \"label\": \"classify\",\n      \"kind\": \"work…",
+        "digest": "7b6c53068fa22960d7d7ad7a4fd9e64ee4445d82"
+      },
+      {
+        "id": "version-index",
+        "title": "版本索引",
+        "type": "json",
+        "relativePath": "state/version-index.json",
+        "summary": "版本数: 0",
+        "excerpt": "[]",
+        "digest": "97d170e1550eee4afc0af065b78cda302a97674c"
+      },
+      {
+        "id": "active-prd",
+        "title": "当前 PRD",
+        "type": "text",
+        "relativePath": "engagements/active/prd.md",
+        "summary": "当前工作区的主 PRD 文档。",
+        "excerpt": "# PRD 草稿\n\n## 元信息",
+        "digest": "1bff626d7f2c4b218339db9394a91419baf5c267"
+      },
+      {
+        "id": "active-flows",
+        "title": "流程文档",
+        "type": "text",
+        "relativePath": "engagements/active/flows.md",
+        "summary": "主流程与边界流程的工作区文档。",
+        "excerpt": "# Flows\n\n## Primary Flow",
+        "digest": "5da31bb113342a14699b2d63da4836b88f86665e"
+      },
+      {
+        "id": "active-roles",
+        "title": "角色文档",
+        "type": "text",
+        "relativePath": "engagements/active/roles.md",
+        "summary": "角色和类型专项信息的工作区文档。",
+        "excerpt": "# Roles\n\n## Stakeholders",
+        "digest": "be555b7e3e24f222daef829b4f09ed1087a58f6f"
+      },
+      {
+        "id": "active-handoff",
+        "title": "交接文档",
+        "type": "text",
+        "relativePath": "engagements/active/handoff.md",
+        "summary": "交接目标、下一步与版本信息。",
+        "excerpt": "# Handoff\n\n## Target",
+        "digest": "72669c8173b10a19d7dd895c1d6960ccb7b71bdb"
+      },
+      {
+        "id": "decision-log",
+        "title": "决策记录",
+        "type": "text",
+        "relativePath": "engagements/active/decision-log.md",
+        "summary": "围绕协同过程积累的决策记录。",
+        "excerpt": "# 决策记录\n\n- 已初始化 OpenPrd 决策跟踪。",
+        "digest": "2ea811919bcdd1b7dc321c85f5842048ec994190"
+      },
+      {
+        "id": "open-questions",
+        "title": "开放问题",
+        "type": "text",
+        "relativePath": "engagements/active/open-questions.md",
+        "summary": "仍需要确认或继续推进的问题。",
+        "excerpt": "# 开放问题\n\n- 已初始化 OpenPrd 问题跟踪。",
+        "digest": "e7644da1bc279bf4e11199cfb7ec51ad594c240d"
+      },
+      {
+        "id": "progress",
+        "title": "进度记录",
+        "type": "text",
+        "relativePath": "engagements/active/progress.md",
+        "summary": "工作区的过程进展与阶段性总结。",
+        "excerpt": "# 进度\n\n- 已初始化 OpenPrd 进度跟踪。",
+        "digest": "5e20f4ad635b27ca56881cc34446821787b8d0c5"
+      },
+      {
+        "id": "verification",
+        "title": "验证记录",
+        "type": "text",
+        "relativePath": "engagements/active/verification.md",
+        "summary": "验证命令、验证结果和回归结论。",
+        "excerpt": "# 验证\n\n- 已初始化 OpenPrd 验证跟踪。",
+        "digest": "59e0939781712880c165098fa96f594734ece631"
+      },
+      {
+        "id": "docs-basic-file-structure",
+        "title": "docs/basic/file-structure.md",
+        "type": "text",
+        "relativePath": "../docs/basic/file-structure.md",
+        "summary": "文件结构和目录边界的基础文档。",
+        "excerpt": "# 项目文件结构\n\n## 项目定位",
+        "digest": "13303f5dbfa1e171a3bfaf4e45cecf1199ecb584"
+      },
+      {
+        "id": "docs-basic-app-flow",
+        "title": "docs/basic/app-flow.md",
+        "type": "text",
+        "relativePath": "../docs/basic/app-flow.md",
+        "summary": "产品流程和状态流的基础文档。",
+        "excerpt": "# 产品流程说明\n\n## 核心流程",
+        "digest": "c74a8e86d27927530da600017b4af7c948759881"
+      },
+      {
+        "id": "docs-basic-backend-structure",
+        "title": "docs/basic/backend-structure.md",
+        "type": "text",
+        "relativePath": "../docs/basic/backend-structure.md",
+        "summary": "后端模块和数据流的基础文档。",
+        "excerpt": "# 后端架构设计\n\n## 适用范围",
+        "digest": "1ada3f6296eea89b785ca7832532cff8a272b3f1"
+      },
+      {
+        "id": "docs-basic-frontend-guidelines",
+        "title": "docs/basic/frontend-guidelines.md",
+        "type": "text",
+        "relativePath": "../docs/basic/frontend-guidelines.md",
+        "summary": "前端阅读器和交互规范的基础文档。",
+        "excerpt": "# 前端开发规范\n\n## 适用范围",
+        "digest": "2610cadea84e3908e3c351d9eb778b4b273391b3"
+      },
+      {
+        "id": "docs-basic-prd",
+        "title": "docs/basic/prd.md",
+        "type": "text",
+        "relativePath": "../docs/basic/prd.md",
+        "summary": "产品需求和验收标准的基础文档。",
+        "excerpt": "# 产品逻辑说明\n\n## 问题与目标",
+        "digest": "cd3ee4fe757f415a099107171885b8a996cb7857"
+      },
+      {
+        "id": "docs-basic-tech-stack",
+        "title": "docs/basic/tech-stack.md",
+        "type": "text",
+        "relativePath": "../docs/basic/tech-stack.md",
+        "summary": "运行环境和依赖工具链的基础文档。",
+        "excerpt": "# 项目技术栈\n\n## 运行环境",
+        "digest": "0f0a7cc0e36c76ad5d24b4e5d6d058b199be2a72"
+      }
+    ],
+    "claims": [
+      {
+        "id": "claim-1",
+        "statement": "当前状态: 状态: seed · PRD 版本: 0",
+        "sourceIds": [
+          "current-state"
+        ],
+        "confidence": 0.94,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-2",
+        "statement": "任务图: 下一个就绪节点: clarify · 节点数: 21",
+        "sourceIds": [
+          "task-graph"
+        ],
+        "confidence": 0.94,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-3",
+        "statement": "版本索引: 版本数: 0",
+        "sourceIds": [
+          "version-index"
+        ],
+        "confidence": 0.94,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-4",
+        "statement": "当前 PRD: 当前工作区的主 PRD 文档。",
+        "sourceIds": [
+          "active-prd"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-5",
+        "statement": "流程文档: 主流程与边界流程的工作区文档。",
+        "sourceIds": [
+          "active-flows"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-6",
+        "statement": "角色文档: 角色和类型专项信息的工作区文档。",
+        "sourceIds": [
+          "active-roles"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-7",
+        "statement": "交接文档: 交接目标、下一步与版本信息。",
+        "sourceIds": [
+          "active-handoff"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-8",
+        "statement": "决策记录: 围绕协同过程积累的决策记录。",
+        "sourceIds": [
+          "decision-log"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-9",
+        "statement": "开放问题: 仍需要确认或继续推进的问题。",
+        "sourceIds": [
+          "open-questions"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-10",
+        "statement": "进度记录: 工作区的过程进展与阶段性总结。",
+        "sourceIds": [
+          "progress"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-11",
+        "statement": "验证记录: 验证命令、验证结果和回归结论。",
+        "sourceIds": [
+          "verification"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-12",
+        "statement": "docs/basic/file-structure.md: 文件结构和目录边界的基础文档。",
+        "sourceIds": [
+          "docs-basic-file-structure"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-13",
+        "statement": "docs/basic/app-flow.md: 产品流程和状态流的基础文档。",
+        "sourceIds": [
+          "docs-basic-app-flow"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-14",
+        "statement": "docs/basic/backend-structure.md: 后端模块和数据流的基础文档。",
+        "sourceIds": [
+          "docs-basic-backend-structure"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-15",
+        "statement": "docs/basic/frontend-guidelines.md: 前端阅读器和交互规范的基础文档。",
+        "sourceIds": [
+          "docs-basic-frontend-guidelines"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-16",
+        "statement": "docs/basic/prd.md: 产品需求和验收标准的基础文档。",
+        "sourceIds": [
+          "docs-basic-prd"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      },
+      {
+        "id": "claim-17",
+        "statement": "docs/basic/tech-stack.md: 运行环境和依赖工具链的基础文档。",
+        "sourceIds": [
+          "docs-basic-tech-stack"
+        ],
+        "confidence": 0.88,
+        "kind": "source-summary"
+      }
+    ],
+    "gaps": []
+  },
+  "stylePromptEngineering": {
+    "version": 1,
+    "mode": "agent-in-the-loop-style-transfer",
+    "promptPackId": "internet-product.default",
+    "label": "默认风格迁移",
+    "concept": "保持事实层不变，只做轻量语气迁移。",
+    "titlePatterns": [],
+    "outlineArc": [],
+    "imageryBank": [],
+    "sentenceRhythm": null,
+    "taboo": [],
+    "prompts": {
+      "system": "根据 agent-context 和 evidence-manifest 写作，按 genre voice 调整表达。",
+      "title": "保留 topic 核心名词，根据证据生成清晰标题。",
+      "outline": "根据任务事实生成可扫描目录。",
+      "chapter": "根据证据顺序组织章节，优化阅读节奏。",
+      "proseRewrite": "改写表达，不改写事实锚点。",
+      "evidenceBinding": "保留 evidenceIds 和 source paths。",
+      "qualityReview": "检查事实是否可追溯，风格是否一致。"
+    },
+    "loop": [
+      "Agent 先读取 agent-context 和 evidence-manifest。",
+      "Agent 使用 title/outline/chapter/proseRewrite prompts 自行写出标题、大纲和正文。",
+      "Agent 使用 evidenceBinding prompt 保留 evidenceIds、路径和不可改写字段。",
+      "Agent 使用 qualityReview prompt 做风格一致性与事实不漂移检查。",
+      "通过后把内容写入 learning-content.json，再渲染 reader.html。"
+    ]
+  },
+  "outputContract": {
+    "schema": "openprd.learning-content.v1",
+    "agentOwnedFields": [
+      "title",
+      "subtitle",
+      "learningGoals",
+      "overviewParagraphs",
+      "outline",
+      "chapters",
+      "nextActions"
+    ],
+    "chapterShape": {
+      "required": [
+        "id",
+        "label",
+        "semanticTitle",
+        "summary",
+        "paragraphs",
+        "evidenceIds"
+      ],
+      "optional": [
+        "retrievalBlocks",
+        "workedExamples"
+      ],
+      "retrievalBlockShape": [
+        "prompt",
+        "hint",
+        "answer"
+      ],
+      "workedExampleShape": [
+        "title",
+        "scenario",
+        "steps",
+        "principle"
+      ]
+    },
+    "rules": [
+      "不要让 CLI 生成标题、大纲或正文；这些字段必须由 Agent 根据证据写出。",
+      "每章 evidenceIds 只能引用 evidence-manifest.json 中存在的 source id。",
+      "正文中的任务事实必须能回到 evidence-manifest 的 source、claim 或 excerpt。",
+      "可以写推断，但要在表达上说明它来自多个证据的综合判断。"
+    ]
+  },
+  "renderCommand": "openprd learn . --content-json /Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260513-171625-reader/learning-content.json --open"
+}

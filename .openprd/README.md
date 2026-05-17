@@ -26,6 +26,8 @@ classify -> interview -> synthesize -> validate -> freeze -> handoff
 - `engagements/active/architecture-diagram.json` - structured diagram contract for iteration
 - `engagements/active/product-flow-diagram.html` - reviewable product flow diagram artifact
 - `engagements/active/product-flow-diagram.json` - structured product flow contract for iteration
+- `artifacts/active/` - HTML + Markdown + patch bundles for human-in-the-loop review and playground workflows
+- `artifacts/archive/` - archived artifact bundles after demand review or handoff
 - `state/` - runtime status, version index, freeze snapshots, session metadata, and execution graph
 - `state/task-graph.json` - workflow/task graph, blockers, and next-ready node
 - `state/events.jsonl` - append-only lifecycle event stream
@@ -48,6 +50,7 @@ Rules:
 - `classify` sets the product type; `interview` loads discovery prompts.
 - `next` recommends the next action and discovery questions.
 - `synthesize` writes a new versioned PRD snapshot.
+- HTML review and playground artifacts should be paired with a markdown data source and a machine-readable capture patch.
 - `diff` compares version snapshots.
 - `history` lists the version index.
 - Freeze requires validation to pass.

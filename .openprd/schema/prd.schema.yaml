@@ -43,6 +43,21 @@ sections:
       - functional
       - nonFunctional
 
+  businessGuardrails:
+    conditional:
+      when:
+        - free users
+        - usage limits
+        - metered cost
+        - AI or third-party cost
+    requiredFields:
+      - costDrivers
+      - usageLimits
+      - abusePrevention
+      - monitoringSignals
+      - alertThresholds
+      - stopLossActions
+
   constraints:
     requiredFields:
       - technical
@@ -95,6 +110,7 @@ validation:
       - scope
       - scenarios
       - requirements
+      - businessGuardrails
       - constraints
       - risks
 

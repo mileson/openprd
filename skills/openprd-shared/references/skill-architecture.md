@@ -5,6 +5,7 @@
 Borrow the `lark-shared` pattern:
 
 - `openprd-shared` = common rules
+- `openprd-benchmark-router` = best-practice, benchmark, and external design-source routing
 - `openprd-harness` = workflow sequencing
 - `openprd-standards` = docs/basic, file manual, and folder README standards
 - `openprd-diagram-review` = visual artifact generation and confirmation
@@ -29,6 +30,13 @@ This avoids one oversized skill and keeps trigger logic precise.
 - handoff readiness
 - clarification-first behavior across startup scenarios
 - setup/update/doctor for generated agent guidance and Codex hook health
+
+### Benchmark Router
+
+- best-practice and benchmark trigger recognition
+- source selection for OpenPrd, CLI, skills, long-running agents, harnesses, context engineering, and prompt engineering
+- DeepWiki / Context7 / official-source routing before design conclusions
+- mapping benchmark findings back to OpenPrd generated skills, agent contracts, hooks, CLI behavior, or tests
 
 ### Diagram Review
 

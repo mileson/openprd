@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-04 17:50:09",
+  "generatedAt": "2026-05-17 14:37:26",
   "nextReadyNode": "clarify",
   "workflow": [
     {
@@ -142,6 +142,24 @@
       "label": "prd.md",
       "kind": "artifact",
       "status": "ready",
+      "dependsOn": [
+        "synthesize"
+      ]
+    },
+    {
+      "id": "clarify-artifact",
+      "label": "clarify.html",
+      "kind": "artifact",
+      "status": "ready",
+      "dependsOn": [
+        "clarify"
+      ]
+    },
+    {
+      "id": "review-artifact",
+      "label": "review.html",
+      "kind": "artifact",
+      "status": "blocked",
       "dependsOn": [
         "synthesize"
       ]
@@ -317,6 +335,24 @@
       ]
     },
     {
+      "id": "clarify-artifact",
+      "label": "clarify.html",
+      "kind": "artifact",
+      "status": "ready",
+      "dependsOn": [
+        "clarify"
+      ]
+    },
+    {
+      "id": "review-artifact",
+      "label": "review.html",
+      "kind": "artifact",
+      "status": "blocked",
+      "dependsOn": [
+        "synthesize"
+      ]
+    },
+    {
       "id": "flows",
       "label": "flows.md",
       "kind": "artifact",
@@ -398,6 +434,16 @@
     {
       "from": "synthesize",
       "to": "prd",
+      "relation": "produces"
+    },
+    {
+      "from": "clarify",
+      "to": "clarify-artifact",
+      "relation": "produces"
+    },
+    {
+      "from": "synthesize",
+      "to": "review-artifact",
       "relation": "produces"
     },
     {

@@ -5,7 +5,21 @@
   "prdVersion": 0,
   "productType": null,
   "templatePack": "base",
-  "projectRoot": "/Users/mileson/Workspace/AI\u5de5\u4f5c\u5ba4/OpenPrd",
-  "workspaceRoot": "/Users/mileson/Workspace/AI\u5de5\u4f5c\u5ba4/OpenPrd/.openprd",
-  "createdAt": "2026-04-12T00:00:00.000Z"
+  "projectRoot": "/Users/mileson/Workspace/AI工作室/OpenPrd",
+  "workspaceRoot": "/Users/mileson/Workspace/AI工作室/OpenPrd/.openprd",
+  "createdAt": "2026-04-12T00:00:00.000Z",
+  "learningReview": {
+    "enabled": true,
+    "defaultGenre": "internet-product",
+    "autoOpen": true,
+    "sourceScope": "workspace",
+    "lastPackageId": "lr-20260513-171625-空-reader-复核",
+    "lastGeneratedAt": "2026-05-13 17:16:25",
+    "lastGenreId": "internet-product",
+    "lastTopic": "空 reader 复核",
+    "lastTrigger": "manual",
+    "lastOpened": false,
+    "lastStyleId": "default",
+    "lastAuthoringStatus": "awaiting-agent-content"
+  }
 }

@@ -1,6 +1,6 @@
 function parseCommandArgs(argv) {
   const args = [...argv];
-  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, dryRun: false, updateOpenprd: false, setupMissing: false, doctor: false, context: false, recordHook: false, plan: false, prompt: false, loopRun: false, finish: false, commit: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, source: null, reference: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', hookProfile: null, templatePack: null, target: 'openprd', path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, event: null, risk: null, outcome: null, preview: null, learn: null, agent: 'codex', agentCommand: null, message: null };
+  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, dryRun: false, updateOpenprd: false, setupMissing: false, doctor: false, context: false, recordHook: false, plan: false, prompt: false, loopRun: false, finish: false, commit: false, html: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, artifactMarkdown: null, contentJson: null, source: null, reference: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', hookProfile: null, templatePack: null, target: 'openprd', path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, event: null, risk: null, outcome: null, preview: null, learn: null, genre: null, style: null, topic: null, enable: false, disable: false, agent: 'codex', agentCommand: null, message: null };
   const positionals = [];
 
   while (args.length > 0) {
@@ -15,6 +15,14 @@ function parseCommandArgs(argv) {
     }
     if (arg === '--open') {
       flags.open = true;
+      continue;
+    }
+    if (arg === '--enable') {
+      flags.enable = true;
+      continue;
+    }
+    if (arg === '--disable') {
+      flags.disable = true;
       continue;
     }
     if (arg === '--append') {
@@ -93,6 +101,10 @@ function parseCommandArgs(argv) {
       flags.commit = true;
       continue;
     }
+    if (arg === '--html') {
+      flags.html = true;
+      continue;
+    }
     if (arg === '--update-openprd') {
       flags.updateOpenprd = true;
       continue;
@@ -169,6 +181,14 @@ function parseCommandArgs(argv) {
       flags.jsonFile = args.shift() ?? null;
       continue;
     }
+    if (arg === '--artifact-markdown') {
+      flags.artifactMarkdown = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--content-json') {
+      flags.contentJson = args.shift() ?? null;
+      continue;
+    }
     if (arg === '--source') {
       flags.source = args.shift() ?? null;
       continue;
@@ -194,7 +214,7 @@ function parseCommandArgs(argv) {
       continue;
     }
     if (arg === '--report') {
-      flags.report = args.shift() ?? null;
+      flags.report = args[0] && !args[0].startsWith('-') ? args.shift() : true;
       continue;
     }
     if (arg === '--item') {
@@ -227,6 +247,18 @@ function parseCommandArgs(argv) {
     }
     if (arg === '--title') {
       flags.title = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--genre') {
+      flags.genre = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--style' || arg === '--substyle') {
+      flags.style = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--topic') {
+      flags.topic = args.shift() ?? null;
       continue;
     }
     if (arg === '--owner') {
@@ -266,7 +298,7 @@ function parseCommandArgs(argv) {
       continue;
     }
     if (arg === '--learn') {
-      flags.learn = args.shift() ?? null;
+      flags.learn = args[0] && !args[0].startsWith('-') ? args.shift() : true;
       continue;
     }
     if (arg === '--from') {
@@ -308,10 +340,14 @@ function usage() {
     '  openprd run [path] [--context|--verify|--record-hook --event <name> --risk <level> --outcome <text> --preview <text>] [--json]',
     '  openprd loop [path] [--init|--plan|--next|--prompt|--run|--verify|--finish] [--change <id>] [--item <task-id>] [--agent <codex|claude>] [--agent-command <cmd>] [--commit] [--dry-run] [--message <text>] [--json]',
     '  openprd classify [path] <consumer|b2b|agent>',
-    '  openprd clarify [path] [--json]',
-    '  openprd capture [path] (--field <section.path> --value <text|json> | --json-file <answers.json>) [--source <user-confirmed|project-derived|agent-inferred>] [--append] [--json]',
+    '  openprd clarify [path] [--open] [--json]',
+    '  openprd capture [path] (--field <section.path> --value <text|json> | --json-file <answers.json> | --artifact-markdown <artifact.md>) [--source <user-confirmed|project-derived|agent-inferred>] [--append] [--json]',
     '  openprd interview [path] [--product-type <consumer|b2b|agent>]',
-    '  openprd synthesize [path] [--title <text>] [--owner <text>] [--problem <text>] [--why-now <text>]',
+    '  openprd playground [path] [--open] [--json]',
+    '  openprd learn [path] [--topic <text>] [--genre <internet-product|scientific|fairy-tale|web-novel|xianxia>] [--style <substyle>] [--source <workspace|docs|loop|all>] [--content-json <file>] [--open] [--enable|--disable] [--json]',
+    '  openprd quality [path] [--init|--verify|--report --html|--learn --from <report-id-or-json>] [--force] [--json]',
+    '  openprd benchmark <add|list|approve|verify> [target-or-id] [path-for-list-or-verify] [--path <project>] [--notes <text>] [--id <benchmark-id>] [--json]',
+    '  openprd synthesize [path] [--title <text>] [--owner <text>] [--problem <text>] [--why-now <text>] [--open]',
     '  openprd diagram [path] [--type <architecture|product-flow>] [--input <contract.json>] [--mark <pending-confirmation|confirmed|needs-revision>] [--open] [--json]',
     '  openprd diff [path] [--from <version>] [--to <version>]',
     '  openprd history [path]',

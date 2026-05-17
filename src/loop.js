@@ -1,6 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+import { defaultRegressionArtifactPath, renderRegressionArtifact, writeHtmlArtifact } from './html-artifacts.js';
+import { generateLearningReviewWorkspace } from './learning-review.js';
 import { listOpenSpecTaskWorkspace, advanceOpenSpecTaskWorkspace, verifyOpenSpecTaskWorkspace } from './openspec/execute.js';
 import { validateOpenSpecChangeWorkspace } from './openspec/change-validate.js';
 import { timestamp } from './time.js';
@@ -129,6 +132,7 @@ function featureTaskFromOpenSpecTask(task, changeId) {
       '完成代码后必须先自测，失败就修复并重新自测。',
       '涉及前端界面时，在 Codex 客户端优先使用 Computer Use；在 Codex CLI 或 Claude Code 中优先使用 Playwright、MCP 或等价浏览器自动化。',
       '纯后端、脚本或库任务使用最贴近项目的脚本、单测、集成测试或命令行验证。',
+      '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面；检查命令入口、参数、输出契约、`help`/`doctor`/`dry-run`/`status` 与接口协议、返回结构、身份边界是否受影响，并同步更新 `docs/basic/backend-structure.md`；若某一面不适用也要明确写原因。',
       '新增或修改文件时先做文档影响判定：缺少 docs/basic、文件说明书或文件夹 README 就补齐；已有文档若因本任务职责、流程、结构、依赖或产品行为变化而过期，就同步更新。',
     ],
     updatedAt: timestamp(),
@@ -254,10 +258,12 @@ function defaultAgentInvocation(agent, projectRoot, promptPath) {
 }
 
 function renderLoopPrompt({ agent, projectRoot, featureList, task, dependency, mode }) {
+  const screenshotPath = screenshotHintPath(projectRoot, task.id);
   const frontendStrategy = [
     '- 如果任务涉及页面、组件、样式、前端交互或浏览器行为，必须做界面级验证。',
     '- Codex 客户端环境: 优先使用 Computer Use 以第三方视角打开页面、点击、输入、截图或读取可访问性树。',
     '- Codex CLI / Claude Code 环境: 优先使用 Playwright、MCP 浏览器自动化或项目已有 e2e 工具。',
+    `- 如需截图证据，默认保存到 ${screenshotPath}，并在 loop finish 时通过 --evidence 传入该路径。`,
     '- 每次发现问题后先修复，再重新运行验证；验证通过后才能提交。',
   ];
   return [
@@ -395,8 +401,63 @@ function inferUiVerificationHint(task, agent = 'codex') {
   return '识别为前端界面任务；Claude Code 优先使用 Playwright、MCP 浏览器自动化或项目已有 e2e 工具。';
 }
 
+function screenshotHintPath(projectRoot, taskId) {
+  return harnessPath(projectRoot, cjoin(LOOP_TEST_REPORTS_DIR, 'evidence', `${taskId.replace(/[^a-zA-Z0-9._-]/g, '_')}.png`));
+}
+
+function parseEvidenceArtifacts(projectRoot, evidenceText) {
+  const raw = String(evidenceText ?? '').trim();
+  if (!raw) {
+    return { screenshots: [], textualEvidence: [] };
+  }
+  const entries = raw.split(/\n+/).map((item) => item.trim()).filter(Boolean);
+  const screenshots = [];
+  const textualEvidence = [];
+  for (const entry of entries) {
+    const normalized = entry.replace(/^screenshot:\s*/i, '').trim();
+    if (/\.(png|jpe?g|webp|gif)$/i.test(normalized)) {
+      const absolute = path.isAbsolute(normalized) ? normalized : path.resolve(projectRoot, normalized);
+      screenshots.push({
+        path: absolute,
+        url: pathToFileURL(absolute).href,
+      });
+    } else {
+      textualEvidence.push(entry);
+    }
+  }
+  return { screenshots, textualEvidence };
+}
+
 async function writeTestReport(projectRoot, { task, agent, advanced, change }) {
   const relativePath = cjoin(LOOP_TEST_REPORTS_DIR, reportFileName(task.id));
+  const htmlRelativePath = cjoin(LOOP_TEST_REPORTS_DIR, `${task.id.replace(/[^a-zA-Z0-9._-]/g, '_')}.html`);
+  const evidenceText = advanced.evidence ?? inferUiVerificationHint(task, agent);
+  const notesText = advanced.notes ?? '无';
+  const evidenceArtifacts = parseEvidenceArtifacts(projectRoot, evidenceText);
+  const report = {
+    version: 1,
+    generatedAt: timestamp(),
+    kind: inferUiVerificationHint(task, agent).includes('前端界面任务') ? 'ui-regression' : 'command-regression',
+    verifyCommand: advanced.verification?.command ?? task.verify ?? '未指定',
+    summary: {
+      total: 1,
+      passed: advanced.verification?.ok ? 1 : 0,
+      failed: advanced.verification?.ok ? 0 : 1,
+    },
+    cases: [
+      {
+        id: `${task.id}.verify`,
+        title: task.title,
+        expected: task.done ?? '满足任务完成条件',
+        actual: advanced.verification?.ok ? '验证命令执行通过' : '验证命令失败或未通过',
+        passed: Boolean(advanced.verification?.ok),
+        evidence: evidenceText,
+      },
+    ],
+    screenshots: evidenceArtifacts.screenshots,
+    textualEvidence: evidenceArtifacts.textualEvidence,
+    notes: notesText,
+  };
   const lines = [
     `# 阶段性测试报告: ${task.id} ${task.title}`,
     '',
@@ -407,7 +468,18 @@ async function writeTestReport(projectRoot, { task, agent, advanced, change }) {
     `- 自测结果: ${advanced.verification?.ok ? '通过' : '失败或未运行'}`,
     `- Change 校验: ${change.ok ? '通过' : '失败'}`,
     `- 界面验证策略: ${inferUiVerificationHint(task, agent)}`,
+    `- 补充证据: ${evidenceText}`,
+    `- 备注: ${notesText}`,
     '',
+    ...(evidenceArtifacts.screenshots.length > 0 ? [
+      '## 截图证据',
+      '',
+      ...evidenceArtifacts.screenshots.flatMap((item) => [
+        `- ${item.path}`,
+        `![截图证据](${item.path})`,
+      ]),
+      '',
+    ] : []),
     '## 自测输出',
     '',
     '```text',
@@ -428,7 +500,13 @@ async function writeTestReport(projectRoot, { task, agent, advanced, change }) {
     '',
   ];
   await writeText(harnessPath(projectRoot, relativePath), `${lines.join('\n')}\n`);
-  return relativePath;
+  const htmlPath = defaultRegressionArtifactPath(projectRoot, task.id);
+  await writeHtmlArtifact(htmlPath, renderRegressionArtifact({ task, report }));
+  return {
+    markdownPath: relativePath,
+    htmlPath: htmlRelativePath,
+    report,
+  };
 }
 
 export async function initLoopWorkspace(projectRoot, options = {}) {
@@ -719,10 +797,14 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
   }
 
   let commit = null;
-  const testReportPath = await writeTestReport(projectRoot, {
+  const testReport = await writeTestReport(projectRoot, {
     task,
     agent: options.agent ?? 'codex',
-    advanced,
+    advanced: {
+      ...advanced,
+      evidence: options.evidence ?? null,
+      notes: options.notes ?? null,
+    },
     change,
   });
   if (options.commit) {
@@ -746,13 +828,47 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     lastVerifiedAt: timestamp(),
     lastCommittedAt: commit && !commit.skipped ? timestamp() : null,
     commitSha: commit?.sha ?? null,
-    lastTestReport: testReportPath,
+    lastTestReport: testReport.markdownPath,
   });
   await writeFeatureList(projectRoot, updatedList);
+  let learningReview = null;
+  try {
+    learningReview = await generateLearningReviewWorkspace(projectRoot, {
+      trigger: 'loop-finish',
+      topic: `${task.id} ${task.title}`,
+      sourceScope: 'loop',
+      respectConfig: true,
+      taskId: task.id,
+      changeId: task.changeId,
+      verifyCommand: advanced.verification?.command ?? task.verify ?? null,
+      testReport: testReport.markdownPath,
+      commitSha: commit?.sha ?? null,
+    });
+  } catch (error) {
+    learningReview = {
+      ok: false,
+      action: 'learning-review-generate',
+      skipped: false,
+      opened: false,
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+  const learningProgress = learningReview?.skipped
+    ? [`复盘学习: 已跳过 (${learningReview.reason})。`]
+    : learningReview?.ok
+      ? [
+        `复盘学习包: ${learningReview.packageId}。`,
+        `复盘写作状态: ${learningReview.packageMeta?.authoringStatus ?? 'unknown'}。`,
+        `学习阅读器: ${path.relative(projectRoot, learningReview.packagePaths.readerHtml)}。`,
+        ...(learningReview.packagePaths?.agentPrompt ? [`Agent 写作提示: ${path.relative(projectRoot, learningReview.packagePaths.agentPrompt)}。`] : []),
+      ]
+      : [`复盘学习: 生成失败 (${learningReview?.errors?.[0] ?? 'unknown'})。`];
   await appendText(harnessPath(projectRoot, LOOP_PROGRESS), renderProgressEntry(timestamp(), [
     `已完成 ${task.id}: ${task.title}。`,
     `自测: ${advanced.verification?.ok ? '通过' : '未运行'}。`,
-    `测试报告: ${testReportPath}。`,
+    `测试报告: ${testReport.markdownPath}。`,
+    `HTML 回归报告: ${testReport.htmlPath}。`,
+    ...learningProgress,
     commit ? `Commit: ${commit.skipped ? '跳过' : commit.sha}` : 'Commit: 未请求。',
   ]));
   await appendJsonl(harnessPath(projectRoot, LOOP_SESSIONS), {
@@ -763,7 +879,20 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     changeId: task.changeId,
     ok: true,
     commit: commit ? { ok: commit.ok, skipped: commit.skipped, sha: commit.sha ?? null } : null,
-    testReport: testReportPath,
+    testReport: testReport.markdownPath,
+    regressionHtml: testReport.htmlPath,
+    learningReview: learningReview?.ok
+      ? {
+        ok: true,
+        skipped: Boolean(learningReview.skipped),
+        packageId: learningReview.packageId ?? null,
+        readerHtml: learningReview.packagePaths?.readerHtml ?? null,
+      }
+      : {
+        ok: false,
+        skipped: false,
+        errors: learningReview?.errors ?? [],
+      },
   });
   await updateLoopState(projectRoot, {
     currentTaskId: advanced.nextTask?.id ?? null,
@@ -777,7 +906,9 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     advanced,
     change,
     commit,
-    testReport: testReportPath,
+    testReport: testReport.markdownPath,
+    regressionHtml: testReport.htmlPath,
+    learningReview,
     summary: buildLoopSummary(updatedList),
     next: nextLoopTask(updatedList).task,
   };

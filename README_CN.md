@@ -66,10 +66,12 @@ openprd init /path/to/project --template-pack agent
 
 `init` 会创建 `.openprd/`、`docs/basic/`、`AGENTS.md`，并生成 Codex / Claude / Cursor 三端引导。Codex 项目会同时写入 `.codex/config.toml`、`.codex/hooks.json`、`.codex/hooks/openprd-hook.mjs`，并开启用户级 Codex `codex_hooks = true`。
 
-Codex hooks 默认使用 `lite` 模式：只安装 `UserPromptSubmit`，并且只有当提示词
-明确提到 OpenPrd、PRD、深度调研、深度对标、复刻、standards、fleet 或文档
-标准化时才注入上下文。需要高风险 `PreToolUse` 门禁时使用 `--hook-profile guarded`；
-只有临时深度诊断才使用 `full`。
+Codex hooks 默认使用 `lite` 模式：安装 `UserPromptSubmit` 和轻量
+`PreToolUse` 写入门禁。明确提到 OpenPrd、PRD、深度调研、深度对标、复刻、
+standards、fleet、文档标准化，或看起来像新产品 / 模块 / 流程需求的提示词都会
+注入上下文；`lite` 写入门禁只匹配直接编辑工具，让只读 shell 探查保持安静。
+需要连 shell 命令也进入写入门禁时使用 `guarded`，只有临时深度诊断才使用
+`full`。
 
 ### 2. 查看当前协同节奏
 
@@ -209,6 +211,37 @@ OpenPrd 生成的 change 会包含标准化维护任务，change 校验也会检
 或产品行为变化影响，也必须同步更新。如果无需更新，应说明已经完成影响判定以及
 为什么现有文档仍然准确。
 
+## 质量评估报告
+
+`openprd init` 同时会创建质量契约：
+
+- `.openprd/quality/config.json`
+- `.openprd/quality/reports/`
+- `.openprd/knowledge/`
+
+检查命令：
+
+```bash
+openprd quality /path/to/project --verify
+```
+
+该命令会在 `.openprd/quality/reports/` 下同时写入 JSON 和 HTML。HTML 质量评估报告
+是阶段性质量审查的主要产物，用于审查中心化日志与链路追踪、业务成本与滥用护栏、
+冒烟/e2e 覆盖、任务与功能完整性、正常与极端性能基线、压力数据以及项目知识库缺口。
+
+当需求涉及免费用户、额度、AI 调用、第三方 API、生成、存储、下载或其他消耗型成本时，
+`quality --verify` 会额外检查是否存在成本来源、用户级限制、负向验证、用量/成本监控、
+报警阈值和止损动作，避免免费额度或高成本路径在上线后才暴露。
+
+当一个问题已经修复并完成验证后，可以把抽象模式沉淀为项目级经验：
+
+```bash
+openprd quality /path/to/project --learn --from <report-id-or-json>
+```
+
+这会在 `.openprd/knowledge/` 下写入 incident、pattern 和经验 Skill，
+让后续任务能提前触发同类经验，而不是重新排查一遍。
+
 ## Agent 自动接入
 
 OpenPrd 会把协同规则装进项目，让用户不需要记住具体 skill、命令或 hook：
@@ -239,9 +272,8 @@ openprd loop /path/to/project --run --agent codex --dry-run
 
 `doctor` 会检查三端引导、Codex hooks 开关、项目标准化和 OpenPrd 工作区验证是否健康。`update` 会从 OpenPrd 的统一源刷新这些生成文件，并保留用户自己已有的 hook 分组。
 
-这套 harness 是有状态的，但 hook 重量由 profile 控制。默认 `lite` 不再为每个
-工具调用安装 PreToolUse/PostToolUse，避免小需求被 hook 噪声拖慢。`guarded`
-增加高风险 PreToolUse 检查，`full` 只建议用于临时深度诊断。`freeze`、`handoff`、accepted spec apply/archive、commit、push、release、publish 等高风险动作会先经过 `openprd run . --verify`，覆盖标准化、工作区校验、激活 change 校验和激活 discovery 校验。
+这套 harness 是有状态的，但 hook 重量由 profile 控制。默认 `lite` 保留轻量
+PreToolUse 写入门禁，并把匹配范围限制在直接编辑工具上，避免只读 shell 和 PostToolUse/Stop 遥测噪声；`guarded` 会额外覆盖 shell 工具，`full` 只建议用于临时深度诊断。`freeze`、`handoff`、accepted spec apply/archive、commit、push、release、publish 等高风险动作会先经过 `openprd run . --verify`，覆盖标准化、工作区校验、激活 change 校验和激活 discovery 校验。
 
 `openprd run . --context` 是类似 Ralph 的循环控制面。它会从激活 change 任务、discovery coverage 或普通 OpenPrd 工作流状态里选择下一项可执行单元，并把 hook turn 记录到 `.openprd/harness/iterations.jsonl`。
 
@@ -287,7 +319,9 @@ Loop 状态会沉淀在 `.openprd/harness/`：
 
 OpenPrd 面向用户的时间统一使用上海时区的 `YYYY-MM-DD HH:mm:ss` 格式，不输出
 `T`、`Z` 或毫秒后缀。除命令、字段名、文件路径、API 名称等必要专有术语外，生成
-文档、进度日志、proposal、prompt 和测试报告默认使用简体中文。
+文档、进度日志、proposal、prompt 和测试报告默认使用简体中文。`spec.md` 会额外
+校验正文语言：新生成的结构字段使用“新增需求”“需求”“场景”“当”“则”等中文表达；
+校验器仍兼容历史 OpenSpec 英文结构字段，但实际内容必须使用简体中文。
 
 历史项目不要手写 shell 循环批量改。使用 `fleet` 先扫描报告；`--update-openprd` 只刷新已经有 `.openprd/` 的项目，只有 agent 配置或普通项目默认保持不变，除非显式用 `--setup-missing` 接管。
 
