@@ -92,7 +92,7 @@ Put the reference and implementation into one side-by-side artifact for staged
 UI review, especially for auth-entry redesign, localized legal pages, and modal
 replication work.
 
-![OpenPrd visual compare case study](./docs/assets/openprd-visual-compare-case-study.png)
+![OpenPrd visual compare case study](./docs/assets/openprd-visual-compare-case-study-en.png)
 
 ## Features
 
