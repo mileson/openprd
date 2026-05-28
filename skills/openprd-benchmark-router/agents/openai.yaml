@@ -1,4 +1,4 @@
 interface:
   display_name: "OpenPrd Benchmark Router"
-  short_description: "Route OpenPrd benchmark and best-practice requests to the right evidence"
-  default_prompt: "Use $openprd-benchmark-router to choose benchmark sources and route best-practice research before changing OpenPrd."
+  short_description: "Route OpenPrd benchmark, deep-review-lane, and icon resource requests to the right evidence"
+  default_prompt: "Use $openprd-benchmark-router to choose benchmark sources and route best-practice, PR-review-harness, or icon-resource research before changing OpenPrd."

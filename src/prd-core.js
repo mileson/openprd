@@ -42,7 +42,6 @@ const BUSINESS_GUARDRAIL_RISK_TOKENS = [
   'usage limit',
   'rate limit',
   'credit',
-  'token',
   'metered',
   'cost',
   'spend',
@@ -60,7 +59,6 @@ const BUSINESS_GUARDRAIL_RISK_TOKENS = [
   '限流',
   '积分',
   '点数',
-  '令牌',
   '成本',
   '消耗',
   '第三方成本',
@@ -293,6 +291,9 @@ export function buildPrdSnapshot(ws, options = {}) {
     owner,
     status: 'synthesized',
     sections,
+    reviewPresentation: pickValue(options.reviewPresentation, state.reviewPresentation, null),
+    workUnitId: pickValue(options.workUnitId, state.activeWorkUnitId, null),
+    targetRoot: pickValue(options.targetRoot, state.targetRoot, ws.projectRoot),
   };
 }
 
@@ -524,16 +525,23 @@ export function getRequiredFieldDescriptors(productType) {
 
 export function needsBusinessGuardrails(snapshot) {
   const sections = snapshot?.sections ?? {};
+  if (!isMissingPrdValue(sections.businessGuardrails)) {
+    return true;
+  }
   const riskSource = {
     problem: sections.problem,
     users: sections.users,
     goals: sections.goals,
-    scope: { inScope: sections.scope?.inScope },
+    scope: {
+      inScope: sections.scope?.inScope,
+      outOfScope: sections.scope?.outOfScope,
+    },
     scenarios: sections.scenarios,
-    requirements: sections.requirements,
-    constraints: sections.constraints,
+    requirements: {
+      functional: sections.requirements?.functional,
+      businessRules: sections.requirements?.businessRules,
+    },
     risks: sections.risks,
-    typeSpecific: sections.typeSpecific,
   };
   return includesRiskToken(flattenForSearch(riskSource));
 }
@@ -641,5 +649,7 @@ export function summarizeSnapshot(snapshot) {
     templatePack: snapshot.templatePack,
     status: snapshot.status,
     digest: snapshot.digest ?? null,
+    workUnitId: snapshot.workUnitId ?? null,
+    targetRoot: snapshot.targetRoot ?? null,
   };
 }

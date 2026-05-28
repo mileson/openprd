@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import os from 'node:os';
@@ -6,13 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { renderApprovedBenchmarkRegistrySection } from './benchmark.js';
 import { timestamp } from './time.js';
+import { upsertWorkspaceRegistryEntry } from './workspace-registry.js';
 
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const OPENPRD_AGENT_TOOLS = ['codex', 'claude', 'cursor'];
 const OPENPRD_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop'];
 const OPENPRD_HOOK_PROFILES = {
-  lite: ['UserPromptSubmit', 'PreToolUse'],
-  guarded: ['UserPromptSubmit', 'PreToolUse'],
+  lite: ['UserPromptSubmit', 'PreToolUse', 'Stop'],
+  guarded: ['UserPromptSubmit', 'PreToolUse', 'Stop'],
   full: OPENPRD_EVENTS,
 };
 const OPENPRD_DEFAULT_HOOK_PROFILE = 'lite';
@@ -27,6 +29,38 @@ const OPENPRD_HARNESS_DRIFT = cjoin(OPENPRD_HARNESS_DIR, 'drift-report.json');
 const LEGACY_CODEX_HOOK_OUTPUT_FIELDS = ['should_stop', 'additional_contexts', 'should_block', 'block_reason'];
 
 const CANONICAL_SKILLS = [
+  {
+    id: 'openprd-router',
+    description: 'OpenPrd 入口路由 skill：先判断当前任务该读哪个 skill、哪个命令面和哪个门禁。',
+    body: [
+      '# OpenPrd Router',
+      '',
+      '把这份 skill 当成 OpenPrd 的入口路由，而不是长文规则仓库。',
+      '',
+      '## 先做什么',
+      '',
+      '1. 先读 `.openprd/` 当前状态，并把 `openprd run . --context` 当作建议上下文，而不是自动执行指令。',
+      '2. 需要具体命令时，优先读取 `.openprd/harness/command-catalog.md`，不要把命令清单继续塞回 `AGENTS.md`。',
+      '3. 需要共用约束时，读 `$openprd-shared`；需要主工作流时，读 `$openprd-harness`。',
+      '',
+      '## 路由表',
+      '',
+      '- 主工作流、需求入口、review/change/tasks、`run/loop`：`$openprd-harness`',
+      '- 最佳实践、benchmark、公开 GitHub 仓库、第三方技术事实、prompt/context engineering：`$openprd-benchmark-router`',
+      '- `docs/basic/`、文件说明书、文件夹 README、文档标准：`$openprd-standards`',
+      '- 就绪验证、EVO 门禁、HTML 质量评估报告、项目经验沉淀：`$openprd-quality`',
+      '- 架构图、产品流程图、可视化评审：`$openprd-diagram-review`',
+      '- 长时间只读挖掘、参考项目持续调研、requirements/specs/tasks 补全：`$openprd-discovery-loop`',
+      '- 学习包、归档阅读器、知识整理：`$openprd-learning-review`',
+      '',
+      '## 路由原则',
+      '',
+      '- `AGENTS.md` 只保留轻量入口合同；详细规则放进 repo-local skills、`.openprd/harness/command-catalog.md` 和 hooks。',
+      '- 公开 GitHub 仓库架构/对标先 DeepWiki；第三方库、API、SDK、MCP、CLI 用法先查本地证据，本地不足时再按 `resolve_library_id -> query_docs` 使用 Context7。',
+      '- hooks 已经强制处理 requirement / research / secrets / skill-visualization / weapp / browser / copy 这些门禁；不要再把它们膨胀回 `AGENTS.md` 静态长文。',
+      '',
+    ].join('\n'),
+  },
   {
     id: 'openprd-shared',
     description: 'OpenPrd 工作区、语言规则、门禁和 workspace-first 推理的共用守则。',
@@ -48,26 +82,48 @@ const CANONICAL_SKILLS = [
       '- 动手前先从 `.openprd/` 重建上下文。',
       '- 选择写入命令前，优先运行 `openprd status .` 和 `openprd next .`。',
       '- 用户可见文档、进度日志、proposal、prompt 和报告默认使用简体中文；只保留必要专有名词、命令名、路径、字段名和 API 术语。',
-      '- 当 `locale` 为 `zh-CN` 时，diagram contract 中所有可见字段都必须使用简体中文。',
+      '- 当 `locale` 为 `zh-CN` 时，diagram contract 中所有可见字段都必须使用简体中文；面向用户的 review.html 或 diagram HTML 文案不要使用 `freeze` 这类内部流程词，改写为“需求定稿前”“进入实现前确认”等业务可理解表达。',
+      '- OpenPrd 用户默认懂业务和产品，但不想读技术黑话；对外输出先给结论和下一步，能一句讲清楚就不要拆成两步。',
+      '- 主动替用户补全范围边界、失败路径、恢复路径、实现成本、维护成本、滥用风险和第三方依赖；默认按性价比选方案。',
+      '- 涉及第三方 API、模型、云服务或付费工具时，用表格比较效果、价格、接入成本、限制、风险和推荐理由；用户明确质量优先时，提高质量和稳定性权重。',
+      '- 当用户的问题包含多个对象、方案、文件、场景、风险、验证项、素材或任务，并且需要同时呈现状态、证据、影响、动作或推荐时，Agent 应主动使用 Markdown 表格，不等用户要求。先用一句话给结论，再给表格。',
+      '- 表格优先用于方案对比、状态盘点、问题排查、风险审查、多对象 QA、文件/命令清单、需求场景覆盖和内容/素材规划；单一结论、单一动作、代码示例、命令示例和叙事型说明不要强行表格化。',
       '- 面向用户的时间统一使用上海时区 `YYYY-MM-DD HH:mm:ss` 格式，不带 `T`、`Z` 或毫秒。',
       '- 保持未解决假设可见，不要悄悄补脑。',
       '- 项目基线文档路径只能是 `docs/basic/`。',
       '- 声称就绪前，至少通过 `openprd validate .` 和 `openprd standards . --verify`。',
-      '- 实现就绪还要运行 `openprd quality . --verify`，并审阅 HTML 质量评估报告中的可观测性、业务护栏、评估执行环境、性能和知识缺口。',
+      '- 实现就绪还要运行 `openprd quality . --verify`，并审阅 HTML 质量评估报告中的场景标签、必需 EVO 门禁、可观测性、业务护栏、评估执行环境、性能和知识缺口。',
+      '- 用户要求生成图片、封面图、配图、海报、插画、图标、贴纸、头像、banner、主视觉/KV、运营图、效果图、视觉稿、mockup、先看样子或先确认设计方向时，默认直接调用 Codex 原生 Image 2 生图能力产出图片；对 logo、icon、avatar、badge 等开发素材，如果用户未明确要求 mockup、场景图、设备框、卡片承载、名片/包装展示或参考界面复刻，默认按独立素材输出（standalone asset）处理：使用全画布单主体，不额外添加 UI frame、卡片、设备壳、名片、桌面陈列、手持实拍或其他展示容器。只有当用户明确要求 mockup、场景化效果图、容器化呈现，或参考图本身包含这些结构时，才生成对应容器或场景；除非用户明确指定 HTML、SVG、CSS、Canvas、代码稿或可编辑矢量/source artifact，不要改用临时 HTML/SVG/CSS 再截图。',
+      '- OpenPrd 的 `review.html` 用于需求评审，不能替代图片或效果图生成；`visual-compare` 只用于实现阶段已有参考图之后的实现截图对比。',
+      '- 界面、页面、视觉、样式或前端体验开发中，只要已经有效果图、设计稿、图片资产或用户给图并进入实现阶段，阶段性完成后必须先截实现图，再运行 `openprd visual-compare . --reference <效果图> --actual <实现截图>` 生成左右对比 JPG。左侧标注“效果图”，右侧标注“实现截图”；Agent 必须查看合成图并继续对标，直到没有明显视觉差异，不能只凭主观判断宣称完成。',
       '- 看到生成文件疑似过期时，先运行 `openprd doctor .`。',
       '- `openprd run . --context` 只是建议。规划、分析、review、影响范围说明等请求保持只读，除非当前用户消息明确要求开发、实现、继续任务、深度调研、对标复刻或 commit/push。',
+      '- 用户给出会话 ID 并要求继续时，按工具无关的历史会话精确续接；不要要求或使用工具专属 ID；当前 active change、相似历史或 requirement gate 只能作为背景，不能替代该会话 ID。',
+      '- 代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 `openprd dev-check . <file...>` 或 `node scripts/openprd-dev-check.mjs . <file...>`；700 行以内正常，701-1500 行需说明局部职责，超过 1500 行要判断本轮是否扩大职责，扩大则先重构/拆分/解耦并复查，窄 bugfix 或小修暂不拆时说明原因和后续拆分建议。',
+      '- 执行中发现配置缺口、未知代码扩展名、可复用豁免、命令习惯或用户偏好时，先沉淀为 `.openprd/growth` 候选并运行 `openprd grow . --review`；共享规则必须经用户确认后再 apply。',
+      '- 维护 OpenPrd 本身时，只要新增或修改配置类能力（阈值、规则、识别、豁免、命令别名、环境差异、用户偏好或策略开关），都要做 grow-aware 自检：高置信应可成长时默认纳入 `openprd grow`；不确定时主动问用户；明确一次性或固定规则时才保持静态配置。',
       '- 只要实现新增或修改文件，就做文档影响检查；缺失的 `docs/basic/`、文件说明书和文件夹 README 要补齐，已有文档受影响时要更新。',
       '- 涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：检查命令入口、参数、输出契约、`help`、`doctor`、`dry-run`、`status` 与接口协议、返回结构、身份边界是否受影响，并同步更新 `docs/basic/backend-structure.md`；若某一面不适用也要明确写原因。',
-      '- Codex hooks 默认使用 `lite`：`UserPromptSubmit` 加轻量 `PreToolUse` 写入门禁。只有高风险流程才需要完整遥测。',
-      '- 新产品、模块、流程需求在改代码前必须先完成需求入口：clarify、评审、任务拆解和用户明确确认。',
-      '- 涉及最佳实践、benchmark、对标、参考产品、prompt engineering、Agent harness、context engineering、CLI 或 skill 体系设计时，先使用 `$openprd-benchmark-router` 选择证据源，再进入 Context7、DeepWiki 或官方资料调研。',
+      '- Codex hooks 默认使用 `lite`：`UserPromptSubmit` 注入上下文、轻量 `PreToolUse` 写入门禁，以及 `Stop` 本轮收工回顾。只有项目明确需要更重的工具级遥测时，才切到 `full`。',
+      '- 先按复杂度分流：L0 小修（空格、错别字、按钮文案、简单样式、明确 bugfix）直接处理并事后说明；L1 中等改动先给对话内 mini-plan 再执行；L2 新产品、模块、流程需求在改代码前必须先完成需求入口：clarify、评审、任务拆解。`review --mark confirmed` 只记录稳定评审稿确认；如果用户原始意图已经明确要求实现，tasks 就绪后可直接进入执行，否则等待一句明确的执行指令。',
+      '- 涉及最佳实践、benchmark、对标、参考产品、prompt engineering、Agent harness、context engineering、图标资源、CLI 或 skill 体系设计时，先使用 `$openprd-benchmark-router` 选择证据源，再进入 Context7、DeepWiki 或官方资料调研。',
+      '- 入口路由优先看 `$openprd-router`；具体命令速查优先看 `.openprd/harness/command-catalog.md`。',
+      '- `AGENTS.md` 只保留轻量合同；详细执行细则优先沉淀到 repo-local skills、command catalog 和 hooks。',
+      '- 任务需要 API key、token、账号信息、第三方服务凭证或个人信息时，先使用 `secrets-vault` skill，且不要直接读取原始 vault 文件。',
+      '- 修改 skill、`SKILL.md`、`AGENTS.md` 或相关 workflow 前，先读取现状、输出彩色 Mermaid 方案图，并等待用户确认后再编辑相关文件。',
+      '- 涉及微信小程序测试、验证、截图、日志、网络请求、开发者工具自动化或运行态相关改动时，先使用 `weapp-dev-mcp` skill；未通过本地 MCP 实际验证时，不要宣称“小程序已验证”。',
+      '- 用户明确要求 Computer Use 时优先使用 Computer Use，并尽量在 Codex-owned browser window 中操作；对提交、删除、发送、切换账号、退出登录、支付、关闭标签页等高风险网页动作先确认窗口归属。',
+      '- 修改用户可见文案前，先检查 `i18n`、`locales`、`translations`、`Localizable` 或其他语言资源；若项目已有多语言结构，用户可见文案要同步维护到所有已支持语言，并避免暴露 API、SDK、模型、数据库、缓存或错误码等实现细节。',
       '',
       '## 写入纪律',
       '',
       '- 只读命令优先：`status`、`next`、`validate`、`standards --verify`、`doctor`。',
       '- 下一道门禁没看清之前，不要贸然执行写入命令。',
       '- 面对规划、分析、审查类请求，不要运行 `openprd loop --run`、`openprd tasks --advance`、`openprd discovery --advance`、`openprd loop --finish --commit`、git commit 或 git push。',
+      '- 代码改动完成后，要回顾 `openprd dev-check` 输出；若出现 `attention` 或 `warning`，说明是否已局部处理、是否已拆分，或为什么窄修暂不拆。',
+      '- 代码改动完成后，要回顾 `openprd grow . --review`；只说明待确认候选，不要把未确认候选描述成已固化规则。',
       '- 代码改动完成后，要说明 `docs/basic/`、文件说明书和文件夹 README 是新增、更新还是有意不变。',
+      '- 用户要求生成图片、封面图、配图、海报、插画、图标、贴纸、头像、banner、主视觉/KV、运营图、效果图、视觉稿、mockup、先看样子或先确认设计方向时，最终回复应给出 Image 2 生成的图片结果；如果是 logo、icon、avatar、badge 等开发素材且用户未明确要求 mockup 或场景化呈现，默认给出独立素材输出结果。只有实现阶段已有参考图时，才给出 `openprd visual-compare` 生成的 JPG 路径并说明对比后是否仍有差异。',
       '- `freeze`、`handoff`、`change --apply`、`change --archive`、commit、push、release、publish 等高风险动作都要求前置门禁全绿。',
       '',
       '## 修复路径',
@@ -75,18 +131,18 @@ const CANONICAL_SKILLS = [
       '1. 运行 `openprd doctor .`。',
       '2. 如果生成引导或 hooks 漂移，运行 `openprd update .`。',
       '3. 运行 `openprd standards . --verify` 并修复文档标准。',
-      '4. 运行 `openprd quality . --verify` 并审阅 HTML 质量评估报告。',
+      '4. 运行 `openprd quality . --verify` 并审阅 HTML 质量评估报告；若 `productionReady=false`，最终回复必须列出缺证据或需关注的必需 EVO 门禁。',
       '5. 报告就绪前运行 `openprd validate .`。',
       '',
     ].join('\n'),
   },
   {
     id: 'openprd-benchmark-router',
-    description: '为 OpenPrd 产品、CLI、Agent harness、上下文工程和提示词优化选择对标来源与调研路径。',
+    description: '为 OpenPrd 产品、CLI、Agent harness、AI code review / PR review harness、上下文工程、提示词优化和图标资源选择对标来源与调研路径。',
     body: [
       '# OpenPrd Benchmark Router',
       '',
-      '当用户要求最佳实践、benchmark、对标、参考设计、产品优化、CLI 优化、Agent harness 优化、上下文工程或提示词工程时，先使用这份 skill。',
+      '当用户要求最佳实践、benchmark、对标、参考设计、产品优化、CLI 优化、Agent harness 优化、AI code review / PR review harness、上下文工程、提示词工程或图标资源时，先使用这份 skill。',
       '',
       '## 核心原则',
       '',
@@ -98,13 +154,14 @@ const CANONICAL_SKILLS = [
       '',
       '## 触发信号',
       '',
-      '- 用户提到 OpenPrd、OpenSpec、Superpowers、Anthropic Skills、Lark CLI、Agent harness、long-running agents、context engineering、prompt engineering、最佳实践、对标、参考、复刻或优化设计。',
+      '- 用户提到 OpenPrd、OpenSpec、Superpowers、Anthropic Skills、Lark CLI、Agent harness、AI code review、PR review、review lane、long-running agents、context engineering、prompt engineering、最佳实践、对标、参考、复刻或优化设计。',
+      '- 用户提到图标、icon、图标站、图标库、图标资源、UI 图标、AI 图标、技术图标、3D 图标、功能图标、iconfont 或视觉资产参考。',
       '- 用户要求解释某个 Codex / Claude / Cursor agent 为什么没有发现 skill，或希望提升 skill 自动识别、路由、生成、安装和持续执行能力。',
       '- 用户没有显式说 skill 名也要触发；不要要求用户记住 `$openprd-benchmark-router`。',
       '',
       '## 路由流程',
       '',
-      '1. 先识别优化对象：OpenPrd 产品/PRD 流程、CLI、skill 体系、长程任务、通用 harness、context engineering、prompt engineering。',
+      '1. 先识别优化对象：OpenPrd 产品/PRD 流程、CLI、skill 体系、长程任务、通用 harness、AI code review / PR review harness、context engineering、prompt engineering、图标资源或图标实现库。',
       '2. 读取当前工作区证据：`.openprd/`、`.openprd/benchmarks/index.md`、`.openprd/benchmarks/sources.yaml`、`AGENTS.md`、repo-local skills、生成的 `.codex/.claude/.cursor` 引导和相关源码。',
       '3. 选择最小足够的外部证据源：公开 GitHub 仓库走 DeepWiki；第三方工具、SDK、CLI 或官方 API 用 Context7；产品官方文档、工程博客和一手资料用官方来源。',
       '4. 形成 OpenPrd 设计判断时，明确区分已证实事实、从来源归纳出的设计原则，以及对本项目的推断。',
@@ -120,11 +177,12 @@ const CANONICAL_SKILLS = [
       '',
       '## Source Policy',
       '',
-      '- GitHub 仓库：需要理解架构、核心模块、关键流程或对标结论时，先用 DeepWiki 的结构读取和聚焦问答；DeepWiki 不可用或覆盖不足时，再回退到 GitHub README、源码和官方文档。',
-      '- 官方技术文档：涉及第三方库、框架、API、SDK、MCP、CLI 工具的用法、配置、限制、版本差异或迁移路径时，先用 Context7；Context7 不足时说明缺口，再补官方文档、源码或其他一手资料。',
+      '- GitHub 仓库：需要理解架构、核心模块、关键流程或对标结论时，先用 DeepWiki。默认顺序是 `read_wiki_structure` 1 次，再 `ask_question` 1-2 次；只有在本地源码和已有结论仍不足时才追加。DeepWiki 不可用或覆盖不足时，再回退到 GitHub README、源码和官方文档。',
+      '- 官方技术文档：涉及第三方库、框架、API、SDK、MCP、CLI 工具的用法、配置、限制、版本差异或迁移路径时，先检查本地代码、锁文件、README、类型定义；本地不足时再用 Context7，默认顺序是 `resolve_library_id` 1 次，再 `query_docs` 1-2 次。Context7 不足时说明缺口，再补官方文档、源码或其他一手资料。',
       '- 工程文章和产品文档：优先读取当前线上一手页面，只抽取和当前任务相关的观点与设计原则，不复制长文；如果内容可能过时，要说明时效风险。',
       '- 本地源码优先：当前工作区已经有相关源码时，常规修 bug、查实现、改功能优先读本地代码；DeepWiki 主要用于外部仓库架构理解和对标分析。',
       '- 停止调研：找到足以支持当前决策的 1-3 个高相关来源后停止扩展；候选来源重复时保留更权威、更新或更贴近当前任务的来源。',
+      '- 追加调用前先写清“已确认什么、还缺什么”；不要为了同一问题只换个说法反复查询。',
       '',
       '## Source Map',
       '',
@@ -132,15 +190,20 @@ const CANONICAL_SKILLS = [
       '- CLI 与 skill 体系对标：`larksuite/cli`、`anthropics/skills`、Claude Skills 官方文档、Claude Code Skills 官方文档。',
       '- 长程 Agent 任务：Anthropic long-running agents harness 工程文章。',
       '- 通用 harness：OpenAI harness engineering、LangChain agent harness anatomy。',
+      '- AI code review / PR review harness：Nolan Lawson 的 “Using AI to write better code more slowly”、Milvus 关于多模型代码审查辩论/交叉验证的实验文章。',
       '- Context engineering：Manus context engineering、Anthropic context engineering。',
       '- Prompt engineering：OpenAI prompt engineering / prompt guidance、Claude prompt engineering、Gemini prompting strategies。',
+      '- 图标资源站一级最佳实践：UI 图标优先看 Phosphor Icons（https://phosphoricons.com/）；AI 公司与产品图标看 LobeHub Icons（https://lobehub.com/icons）；技术栈图标看 Tech Icons（https://techicons.dev/）；透明底 3D 图标看 Thiings（https://www.thiings.co/things）；功能图标、矢量插画、3D 插画和字体资源看 iconfont（https://www.iconfont.cn/）。',
+      '- 图标实现库二级最佳实践：Lucide、Tabler、React Icons。需要落到前端代码时，再结合当前项目框架、包管理器、bundle 体积和导入方式选择具体库。',
       '',
       '## Evaluation Lenses',
       '',
       '- 产品与工作流：用户从哪里开始、如何知道下一步、模糊输入如何变成结构化产物、哪些步骤要保存/展示/恢复、哪些步骤必须保留用户确认。',
       '- Agent 与 Harness：目标、边界、停止条件、工具选择、进度记录、证据、验证结果、失败恢复和人工接管点是否清楚。',
+      '- PR 审查 lane：reviewer 是否独立审查、主代理是否先汇总再验证、是否有误报过滤、agreement matrix、严重级别和 merge recommendation。',
       '- 上下文工程：哪些信息常驻、哪些按需检索，是否使用稳定路径、链接和来源 ID 支持 just-in-time 检索，如何处理过期、冲突和可信度。',
       '- 提示词与 Skill 设计：触发描述是否具体但不过度强制，主说明是否短，细节是否按需放到 reference，是否明确不要硬套参考源。',
+      '- 图标与视觉资产：先判断用途是 UI、AI 品牌、技术栈、3D 物件还是功能图标；优先选最贴近用途的资源站，再在实现阶段选择合适的代码图标库。',
       '- CLI 与开发者体验：命令是否可发现、可组合、可预测；错误信息是否说明发生了什么、影响是什么、下一步怎么做；危险操作是否有确认。',
       '',
       '## 设计输出',
@@ -169,16 +232,26 @@ const CANONICAL_SKILLS = [
       '',
       '1. 先运行 `openprd run . --context`，获取 hook-stable 执行视图。',
       '2. 先判断当前用户意图，再决定是否跟随建议。',
+      '- 会话 ID 续接：用户给出会话 ID 并要求继续时，把它当成工具无关的历史会话续接请求；先精确恢复该会话历史，不要把当前 active change、相似历史或当前 requirement gate 当成替代目标，也不要把它称为工具专属 ID。',
       '3. 面对规划、分析、架构评审、“怎么改”或“会动哪些文件”类请求，保持只读并基于代码、文档和状态回答。',
       '4. 需要完整工作流细节时，运行 `openprd status .` 和 `openprd next .`。',
-      '5. 涉及最佳实践、benchmark、对标、参考产品、prompt engineering、Agent harness、context engineering、CLI 或 skill 体系设计时，先使用 `$openprd-benchmark-router`。',
-      '6. 新产品、模块、流程需求在改代码前必须先走需求入口：clarify、capture、synthesize/review、生成或检查 change、拆任务，并等待用户明确确认。',
-      '7. 事实缺失时，用 `openprd clarify .` 和 `openprd capture .` 补全。',
-      '8. 当 PRD 需要进入实现准备时，再运行 `openprd change . --generate --change <id>`。',
-      '9. 长程实现使用 `openprd loop . --plan --change <id>`，并且只有用户明确要求开发、继续任务、深度调研、对标复刻或 commit 时才执行单任务 fresh session。',
-      '10. 实现过程中，每次新增或修改文件都做文档影响检查，补齐缺失的 `docs/basic/`、文件说明书和文件夹 README，并更新受影响文档；涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、`help`、`doctor`、`dry-run`、`status` 与接口协议、返回结构、身份边界是否受影响，并更新 `docs/basic/backend-structure.md` 或明确写不适用原因。',
-      '11. 声称就绪前，运行 `openprd standards . --verify` 和 `openprd run . --verify`。',
-      '12. 阶段性代码完成后，运行 `openprd quality . --verify`，把 HTML 质量评估报告当作日志、业务成本与滥用护栏、冒烟覆盖、性能、极端场景和项目知识的评审产物。',
+      '5. 涉及最佳实践、benchmark、对标、参考产品、prompt engineering、Agent harness、context engineering、图标资源、CLI 或 skill 体系设计时，先使用 `$openprd-benchmark-router`。',
+      '6. 先做 L0/L1/L2 分流：L0 小修直接处理并事后说明；L1 给对话内 mini-plan 后执行；L2 新产品、模块、流程需求在改代码前必须先走需求入口：`openprd clarify .` 会生成需求入口自省，并只在对话内输出澄清摘要或简短清单；正式 HTML 评审留给后续 review。',
+      '7. 事实缺失时，用 `openprd clarify .` 和 `openprd capture .` 补全，再 synthesize/review、生成或检查 change、拆任务。`clarifyPresentation.mode` 为 `inline` 或 `inline-with-checklist`，直接在对话中用目标、范围、非目标和验收方式压缩确认，不打开澄清 HTML。review 重点摘要胶囊应控制在 15 个字以内，作为扫读标签，不写成长句；对用户给稳定 artifact 路径，确认命令使用页面复制出的 `--version`、`--digest` 和 `--work-unit`，不要把可被其他对话覆盖的 active review 当成唯一确认入口，也不要把“可以开做”“继续实现”之类实现授权当成 `review --mark confirmed` 的依据。如果 synthesize 被简体中文 spec 预检阻断，先把纯内部措辞整理用 `openprd capture . --source agent-normalized` 写回，再重新 synthesize；这类非语义规范化不应重开用户 review。默认 approval policy 是 decision-points：需要时保留稳定 `review.html`，但只有当前 lane 仍要求人类决策时才停下来请求确认；如果用户一开始就明确要求直接做且不需要再评审/确认，则允许按当前稳定 artifact 的精确 `version + digest + work-unit` 记录 review，再继续 change/tasks。若用户原始意图已明确要求实现，则在当前 approval policy 满足且 tasks 就绪后直接进入执行；否则等待一句明确的执行指令。',
+      '8. 评审页里的需求关系图、需求流程图和重点摘要不要靠 HTML 截断；先用 `openprd review-presentation . --template` 查看展示文案契约，让 Agent 按 reviewPresentation 写短文案，再用 `openprd review-presentation . --presentation <json> --write --fail-on-violation` 校验并写回。超限时重新提炼，不裁剪原文。',
+      '9. 对外说明默认用业务和产品语言，先给结论和下一步；涉及第三方 API、模型、云服务或付费工具时，用表格比较多家方案的效果、价格、接入成本、限制、风险和推荐理由，默认选择性价比最优；当用户的问题包含多个对象、方案、文件、场景、风险、验证项、素材或任务，并且需要同时呈现状态、证据、影响、动作或推荐时，主动使用 Markdown 表格，单一结论、代码示例、命令示例和叙事型说明不要强行表格化。',
+      '10. 当 PRD 需要进入实现准备时，再运行 `openprd change . --generate --change <id>`。',
+      '11. 长程实现使用 `openprd loop . --plan --change <id>`，并且只有用户明确要求开发、继续任务、深度调研、对标复刻或 commit 时才执行单任务 fresh session。',
+      '12. 代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 `openprd dev-check . <file...>` 或 `node scripts/openprd-dev-check.mjs . <file...>` 回顾行数状态：700 行以内正常，701-1500 行需说明局部职责，超过 1500 行要判断本轮是否扩大职责，扩大则先重构/拆分/解耦并复查，窄 bugfix 或小修暂不拆时说明原因和后续拆分建议。',
+      '13. 如果执行中发现新代码后缀、豁免路径、命令别名、项目约定或用户偏好，应形成 growth candidate；先运行 `openprd grow . --review`，确认后再 `openprd grow . --apply --id <candidate-id>`，不要静默修改共享规则。',
+      '14. 维护 OpenPrd 本身时，只要新增或修改配置类能力（阈值、规则、识别、豁免、命令别名、环境差异、用户偏好或策略开关），默认先做 grow-aware 自检：高置信应可成长时直接纳入 `openprd grow` 体系；不确定时主动询问用户是否做成可成长配置。',
+      '15. 实现过程中，每次新增或修改文件都做文档影响检查，补齐缺失的 `docs/basic/`、文件说明书和文件夹 README，并更新受影响文档；涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、`help`、`doctor`、`dry-run`、`status` 与接口协议、返回结构、身份边界是否受影响，并更新 `docs/basic/backend-structure.md` 或明确写不适用原因。',
+      '16. 用户要求生成图片、封面图、配图、海报、插画、图标、贴纸、头像、banner、主视觉/KV、运营图、效果图、视觉稿、mockup、先看样子或先确认设计方向时，默认直接调用 Codex 原生 Image 2 生图能力产出图片；对 logo、icon、avatar、badge 等开发素材，如果用户未明确要求 mockup、场景图、设备框、卡片承载、名片/包装展示或参考界面复刻，默认按独立素材输出（standalone asset）处理：使用全画布单主体，不额外添加 UI frame、卡片、设备壳、名片、桌面陈列、手持实拍或其他展示容器。只有当用户明确要求 mockup、场景化效果图、容器化呈现，或参考图本身包含这些结构时，才生成对应容器或场景；除非用户明确指定 HTML、SVG、CSS、Canvas、代码稿或可编辑矢量/source artifact，不要改用临时 HTML/SVG/CSS 再截图。OpenPrd 的 `review.html` 只用于需求评审，不能替代图片或效果图生成。',
+      '17. 界面、页面、视觉、样式或前端体验任务中，如果已经有效果图、设计稿、图片资产或用户给图且进入实现阶段，阶段性完成后先截实现图，再运行 `openprd visual-compare . --reference <效果图> --actual <实现截图>`。默认输出 JPG 到 `.openprd/harness/visual-reviews/`，左侧标注“效果图”、右侧标注“实现截图”；查看合成图后继续复刻，直到没有明显视觉差异。',
+      '18. 声称就绪前，运行 `openprd standards . --verify` 和 `openprd run . --verify`。',
+      '19. 阶段性代码完成后，运行 `openprd quality . --verify`，把 HTML 质量评估报告当作当前场景必需 EVO 门禁、日志、业务成本与滥用护栏、冒烟覆盖、性能、极端场景和项目知识的评审产物。',
+      '20. `AGENTS.md` 只保留轻量合同；入口路由看 `$openprd-router`，具体命令速查看 `.openprd/harness/command-catalog.md`，更细的工作流步骤、路由边界和 hook 门禁以这份 skill、`$openprd-shared` 和 `$openprd-benchmark-router` 为准。',
+      '21. hook 会强制阻断几类场景：需求入口未完成就写实现、外部证据不足就直接改第三方集成、skill/AGENTS 变更未先可视化确认、以及敏感信息场景下直接读原始 vault 文件。',
       '',
       '## 门禁协议',
       '',
@@ -186,14 +259,14 @@ const CANONICAL_SKILLS = [
       '- 不要把 `run --context` 里的建议当成直接用户命令。',
       '- 面对“看看、规划、梳理、分析、评估、怎么改、预计动哪些文件、review、explain”等只读意图，不运行 OpenPrd 写入命令。',
       '- 现有项目需求仍模糊时，优先 discovery，再考虑 synthesize。',
-      '- freeze 或 handoff 前，运行 `openprd run . --verify` 并确认 review blocker 已关闭。',
-      '- 声称实现就绪前，审阅最新 `.openprd/quality/reports/*.html` HTML 质量评估报告。',
+      '- 进入定稿或交接前，运行 `openprd run . --verify` 并确认 review blocker 已关闭。',
+      '- 声称实现就绪前，审阅最新 `.openprd/quality/reports/*.html` HTML 质量评估报告；`productionReady=false` 时不得宣称就绪。',
       '- accepted spec 推进前，先运行 `openprd change . --validate --change <id>`。',
       '',
       '## hook 驱动循环',
       '',
       '- 把 `.openprd/harness/run-state.json` 和 `iterations.jsonl` 当成持久循环状态。',
-      '- 默认 lite hooks 不记录每一轮细节，但会在明确 OpenPrd / 深度工作提示词和产品、模块、流程需求下注入上下文，并用轻量写入门禁阻断过早改代码。',
+      '- 默认 lite hooks 不记录每一轮工具细节，但会在明确 OpenPrd / 深度工作提示词和产品、模块、流程需求下注入上下文；复杂或模糊需求提示先做三轮 Requirement Intake Reflection，轻量写入门禁会阻断过早改代码；本轮准备结束时再通过 `Stop` 做一次轻量项目经验回顾。',
       '- 只有项目确实需要完整遥测时才使用 `--hook-profile full`。',
       '- 上下文注入后，hooks 会从 OpenPrd 状态里推荐下一项 task、discovery 或 workflow 动作。',
       '- 门禁失败时，任务或覆盖项保持未完成状态，让下一轮继续重试。',
@@ -208,6 +281,8 @@ const CANONICAL_SKILLS = [
       '- 每个 loop 任务对应一个全新 agent 会话边界，不要在同一会话里继续下一项任务。',
       '- 只有在任务 verify 命令和 `openprd run . --verify` 通过后，且用户明确要求 commit 时，才用 `openprd loop . --finish --item <task-id> --commit` 收尾。',
       '- 前端界面任务里，Codex desktop 优先用 Computer Use；Codex CLI 和 Claude Code 优先用 Playwright、MCP 浏览器自动化或项目现有 e2e 工具。',
+      '- 用户只是要求生成图片、封面图、配图、海报、插画、图标、贴纸、头像、banner、主视觉/KV、运营图、效果图、视觉稿、mockup 或先看样子时，默认调用 Codex 原生 Image 2 生成图片；对 logo、icon、avatar、badge 等开发素材，如果用户未明确要求 mockup、场景图、设备框、卡片承载、名片/包装展示或参考界面复刻，默认按独立素材输出（standalone asset）处理：使用全画布单主体，不额外添加 UI frame、卡片、设备壳、名片、桌面陈列、手持实拍或其他展示容器。只有当用户明确要求 mockup、场景化效果图、容器化呈现，或参考图本身包含这些结构时，才生成对应容器或场景；除非用户明确指定 HTML/SVG/CSS/Canvas/代码稿，不要生成临时 HTML 再截图。',
+      '- 如果已有参考效果图、图片资产或用户给图并进入实现阶段，阶段性完成后必须生成实现截图，并用 `openprd visual-compare . --reference <效果图> --actual <实现截图>` 输出 JPG 视觉对比图。未查看对比图、或对比图仍有明显差异时，不要声称界面复刻完成。',
       '- `openprd loop . --finish` 会写入 `.openprd/harness/test-reports/<task-id>.md`；把这份结构化测试报告和任务改动一起提交。',
       '- 让 `.openprd/harness/feature-list.json`、`progress.md`、`agent-sessions.jsonl`、`loop-state.json`、`loop-prompts/` 和 `test-reports/` 成为持久状态。',
       '',
@@ -220,7 +295,9 @@ const CANONICAL_SKILLS = [
       '## 历史项目',
       '',
       '- 批量处理旧项目之前，先用 `openprd fleet <root> --dry-run` 审计。',
-      '- 用 `openprd fleet <root> --update-openprd` 只刷新已经包含 `.openprd/` 的项目。',
+      '- 已有历史项目要先回填全局名册时，用 `openprd fleet <root> --sync-registry` 把已初始化的 `.openprd/` 工作区写回 `~/.openprd/registry/workspaces.jsonl`。',
+      '- 用 `openprd fleet <root> --backfill-work-units` 为已有 PRD 版本补 work unit、digest 和稳定评审页。',
+      '- 用 `openprd fleet <root> --update-openprd` 只刷新已经包含 `.openprd/` 的项目，并顺带补齐历史 work unit 绑定。',
       '- 除非用户明确要求 OpenPrd 接管 agent-only 或 plain 项目，否则不要使用 `--setup-missing`。',
       '',
     ].join('\n'),
@@ -244,10 +321,15 @@ const CANONICAL_SKILLS = [
       '',
       '报告实现就绪前，先运行 `openprd standards . --verify`。',
       '对包含源码文件的项目，这个门禁还要求 `docs/basic/` 内容具体可用、文件头说明书存在，以及 `[project]_[folder]_README.md` 文件夹说明完整；如果涉及后端实现，`docs/basic/backend-structure.md` 还必须显式覆盖 CLI 接入面和 API 接入面，或写明不适用原因。',
+      '研发期代码修改完成后、最终回复前，运行 `openprd dev-check . <file...>` 或 `node scripts/openprd-dev-check.mjs . <file...>`；该标准层只检查本轮实际 touched code files 的行数状态，不替代 `standards --verify`。',
+      '当 dev-check 把未知扩展名识别为代码候选，或发现豁免路径、规则配置需要增量时，先用 `openprd grow . --review` 审查；用户确认后再 apply，不要直接改共享配置。',
+      '维护 OpenPrd 本身时，新增或修改任何配置类能力都要检查是否应该成为 grow-aware 配置：高置信可复用、可被用户习惯影响、会随项目环境变化的配置默认纳入 `openprd grow`；不确定时主动询问用户；一次性固定规则才保留为静态配置。',
       '',
       '## 文档影响检查',
       '',
       '- 编辑前先识别本次会变化的文件、文件夹、用户流程、架构边界、依赖和产品行为。',
+      '- 代码修改完成后用 dev-check 回顾行数：`ok` 可正常收尾，`attention` 需要说明局部职责，`warning` 需要判断本轮是否扩大职责；扩大则先拆分/解耦并复查，窄修暂不拆时说明原因和后续拆分建议。',
+      '- 新增配置类能力时同步评审 grow-aware 入口：候选类型、scope、review/apply 行为、拒绝后不重复提示，以及 user-local 与项目共享配置的边界。',
       '- 新增源码文件：如果缺少文件说明书就补上，并确认所在文件夹 README 已存在。',
       '- 修改源码文件：若已有文件说明书，先读取；当文件职责、输入、输出、依赖或维护规则变化时更新它。',
       '- 文件夹内容新增、移动、删除或改作他用：新增或更新文件夹 README，使其反映当前职责和文件布局。',
@@ -298,7 +380,7 @@ const CANONICAL_SKILLS = [
       '- 每次只推进一个有证据支撑的覆盖项。',
       '- 报告运行健康前，用 `openprd discovery . --verify` 做校验。',
       '- 通过 `openprd standards . --verify` 保持基线文档标准同步。',
-      '- 阶段性实现或任务完成后，用 `openprd quality . --verify` 审查 HTML 质量评估报告里的日志、业务护栏、冒烟覆盖、性能和知识缺口。',
+      '- 阶段性实现或任务完成后，用 `openprd quality . --verify` 审查 HTML 质量评估报告里的场景标签、必需 EVO 门禁、日志、业务护栏、冒烟覆盖、性能和知识缺口。',
       '',
       '## 深度规则',
       '',
@@ -311,18 +393,19 @@ const CANONICAL_SKILLS = [
   },
   {
     id: 'openprd-learning-review',
-    description: '为 OpenPrd 工作区生成归档学习包、题材模板、证据清单和 HTML 电子书阅读器。',
+    description: '为 OpenPrd 工作区生成归档学习包、题材模板、证据清单、图文讲解模块和 HTML 电子书阅读器。',
     body: [
       '# OpenPrd Learning Review',
       '',
-      '当用户希望生成复盘学习包、题材模板库、证据清单、检索模块、工作示例或 OpenPrd 工作区里的 HTML 电子书阅读器时，使用这份 skill。',
+      '当用户希望生成复盘学习包、题材模板库、证据清单、图文讲解模块、检索模块、工作示例或 OpenPrd 工作区里的 HTML 电子书阅读器时，使用这份 skill。',
       '',
       '## 产出物',
       '',
       '- `learning-content.json`：版本化内容契约',
       '- `evidence-manifest.json`：source id、digest、摘录、claim 和缺口',
       '- `learning-content.md`：书籍式阅读稿',
-      '- `reader.html`：固定电子书阅读器界面',
+      '- `reader.html`：固定电子书阅读器界面，支持章节级 `visualExplainer` 图卡',
+      '- `assets/`：可选图片素材目录，用于归档 Codex Image 2 生成的图文解释图片',
       '- `learning-package.json` 和 `.openprd/learning/index.json`：归档元数据',
       '',
       '## 工作流程',
@@ -330,8 +413,8 @@ const CANONICAL_SKILLS = [
       '1. 从 `.openprd/` 重建状态，并识别触发源是 loop finish 还是手动请求。',
       '2. 从参考库里选择题材。主题没有特殊要求时，默认使用 `internet-product`。',
       '3. 写正文前先从工作区状态、`docs/basic` 和 loop 报告收集证据。',
-      '4. 分离证据清单、叙事正文和渲染器；所有判断都必须能引用 source id。',
-      '5. 尽可能在每章加入检索模块和工作示例模块。',
+      '4. 分离证据清单、叙事正文和渲染器；所有判断都必须能引用 source id。面向产品或非技术读者时，优先补 `visualExplainer` 图卡。',
+      '5. 尽可能在每章加入检索模块、工作示例模块和必要的图文比喻卡。',
       '6. 把学习包归档到 `.openprd/learning/archive/<packageId>/`，并在合适时打开 `reader.html`。',
       '',
       '## 扩展规则',
@@ -339,7 +422,7 @@ const CANONICAL_SKILLS = [
       '- 新增题材时扩展参考库，不要分叉渲染器。',
       '- 契约必须版本化；`openprd.learning-content.v1` 的演进要通过新版本完成。',
       '- 任何无法追溯到来源的句子都要显式标为推断。',
-      '- 把阅读器保持为稳定的 HTML 电子书界面，包含 TOC、进度、上一章/下一章控制和证据侧栏。',
+      '- 把阅读器保持为稳定的 HTML 电子书界面，包含 TOC、进度、上一章/下一章控制、章节内轻量证据锚点和可选图文解释卡。',
       '',
       '## 参考资料',
       '',
@@ -365,14 +448,24 @@ const CANONICAL_SKILLS = [
       '- `openprd quality . --init`：初始化 `.openprd/quality/config.json` 和 `.openprd/knowledge/`',
       '- `openprd quality . --verify`：在 `.openprd/quality/reports/` 下生成 JSON 和 HTML 质量评估报告',
       '- `openprd quality . --learn --from <report-id-or-json>`：把已修复或已审查的质量问题沉淀为项目级经验 Skill',
+      '- `openprd grow . --review`：审查执行中发现的可复用配置、规则候选或 user-local 偏好；和 `quality --learn` 互补，前者沉淀操作配置，后者沉淀已验证质量经验。',
       '',
       '## 审查契约',
       '',
+      '- 场景画像：先判断当前变更是基础、前端、桌面端、后端、成本、安全、性能、极端数据还是发布交付场景，再确定必需 EVO 门禁。',
       '- 可观测性：确认中心化 logs / traces / errors、共享 trace/request/task/error id、脱敏、保留期和查询示例。',
       '- 业务护栏：涉及免费用户、额度、AI 调用、第三方 API、生成、存储或下载时，确认成本来源、用户级限制、负向验证、监控、报警和止损动作。',
-      '- 评估执行环境：确认冒烟测试、任务到功能覆盖、正常性能基线和极端数据压力场景。',
+      '- 评估执行环境：确认冒烟测试、任务到功能覆盖、正常性能基线和极端数据压力场景；脚本存在只代表能力，不能替代本次运行证据。',
+      '- 视觉评审证据：涉及界面视觉实现且已有参考效果图时，确认 `.openprd/harness/visual-reviews/` 下存在本次 `openprd visual-compare` 输出的 JPG，并且 Agent 已基于合成图复核差异。',
       '- HTML 报告：把 `.openprd/quality/reports/*.html` 当成面向人的评审产物，而不是次级导出。',
       '- 知识沉淀：当某个已验证修复具备重复性、高影响、隐藏性或由 agent 误判引发时，把模式抽象到 `.openprd/knowledge/skills/<skill>/SKILL.md`。',
+      '- 自我成长：当问题来自配置缺口、文件识别、命令习惯或用户偏好时，优先记录为 `.openprd/growth` 候选，经用户确认后固化；不要把个人偏好混进项目共享质量经验。',
+      '',
+      '## 就绪规则',
+      '',
+      '- `openprd run . --verify` 中只要质量报告 `productionReady=false`，就不能宣称整体就绪。',
+      '- UI 任务有参考图但缺少 visual-compare 输出时，不要宣称视觉实现完成；如果对比图仍有明显偏差，先返工而不是把差异留给用户发现。',
+      '- 最终回复必须列出未通过的必需 EVO 门禁；场景可选门禁可以说明为 advisory，但不能混同为已通过。',
       '',
       '## 收紧规则',
       '',
@@ -395,6 +488,7 @@ const CANONICAL_SKILLS = [
       '## 契约语言',
       '',
       '- Diagram contract 面向用户。当 `locale` 为 `zh-CN` 时，所有可见文本都要写成简体中文。',
+      '- 面向用户的 review.html 或 diagram HTML 文案不要使用 `freeze` 这类内部流程词，改写为“需求定稿前”“进入实现前确认”等业务可理解表达。',
       '- 这包括 `title`、`subtitle`、`components[].name`、`components[].subtitle`、`components[].details`、`flows[].label`、`summaryCards[].title`、`summaryCards[].items`、`sidePanels[].title`、`sidePanels[].items` 和 `reviewInstructions`。',
       '- MotiClaw、Electron、TypeScript、CLI、API、JSON、NDJSON、dry-run、Host API、schema、`waiting_approval` 这类必要术语可以保留，但周围句子必须是简体中文。',
       '- 不要在 zh-CN diagram contract 中保留完整英文句子；运行 `openprd diagram --input` 前先把英文偏重文本改成简体中文。',
@@ -425,6 +519,13 @@ const CANONICAL_COMMANDS = [
     ].join('\n'),
   },
   {
+    id: 'grow',
+    title: 'OpenPrd Grow',
+    body: [
+      'Run `openprd grow . --review` after implementation or dev-check. When maintaining OpenPrd itself, treat new configuration-like capabilities as grow-aware by default when confidence is high; ask the user when uncertain. Apply only user-confirmed candidates with `openprd grow . --apply --id <candidate-id>`; reject unsuitable candidates with `openprd grow . --reject --id <candidate-id>`.',
+    ].join('\n'),
+  },
+  {
     id: 'change',
     title: 'OpenPrd Change',
     body: [
@@ -449,7 +550,16 @@ const CANONICAL_COMMANDS = [
     id: 'verify',
     title: 'OpenPrd Verify',
     body: [
-      'Run `openprd run . --verify`. It verifies standards, workspace validation, active change structure, and active discovery state before reporting readiness.',
+      'Run `openprd run . --verify`. It verifies standards, workspace validation, the currently focused change structure (not just the global active change), and active discovery state, then reports `taskReady` separately from `workspaceReady`.',
+    ].join('\n'),
+  },
+  {
+    id: 'visual-compare',
+    title: 'OpenPrd Visual Compare',
+    body: [
+      'When UI work has a reference effect image or user-provided design, capture the implemented UI screenshot, then run `openprd visual-compare . --reference <effect-image> --actual <implementation-screenshot>`.',
+      'The command creates a side-by-side JPG under `.openprd/harness/visual-reviews/` by default, with Simplified Chinese labels: left `效果图`, right `实现截图`.',
+      'Inspect the generated image and keep iterating until there are no obvious visual differences before claiming completion.',
     ].join('\n'),
   },
   {
@@ -457,6 +567,7 @@ const CANONICAL_COMMANDS = [
     title: 'OpenPrd Run',
     body: [
       'Use the hook-stable OpenPrd execution loop. Start with `openprd run . --context`, execute the recommended task/discovery/workflow action, then run `openprd run . --verify` before claiming completion.',
+      'When the user gives a historical session ID, task handle, work unit, or a clear requirement/task description, pass `--message <user-prompt>` so `run --context` resolves that explicit target before considering the global active change. Treat session IDs as tool-neutral; do not require or invent tool-specific ID syntax.',
       '',
       'Intent gate: `openprd run . --context` is advisory. Execute mutating recommendations only when the current user message explicitly asks for development, implementation, task continuation, deep research/benchmarking, replication, or commit. Stay read-only for planning, analysis, review, explanation, and file-impact questions.',
     ].join('\n'),
@@ -503,10 +614,75 @@ const CANONICAL_COMMANDS = [
     id: 'fleet',
     title: 'OpenPrd Fleet',
     body: [
-      'Audit or update historical projects. Start with `openprd fleet <root> --dry-run`; use `--update-openprd` only for projects that already have `.openprd/`, and reserve `--setup-missing` for explicitly selected projects.',
+      'Audit or update historical projects. Start with `openprd fleet <root> --dry-run`; use `--sync-registry` to backfill the global workspace registry, `--backfill-work-units` for historical PRD identity binding, `--update-openprd` only for projects that already have `.openprd/`, and reserve `--setup-missing` for explicitly selected projects.',
     ].join('\n'),
   },
 ];
+
+function renderCommandCatalog() {
+  return [
+    '# OpenPrd Command Catalog',
+    '',
+    '这份清单只负责回答两件事：当前 CLI 有哪些稳定入口，以及什么情况下该用哪条命令。',
+    '',
+    '## 状态与修复',
+    '',
+    '- `openprd run . --context`：读取 hook-stable 建议上下文；它是建议，不是自动执行指令。续做历史任务或按用户描述找对应需求/任务时，可带 `--message <用户原话>` 先解析显式目标。',
+    '- `openprd run . --verify`：校验当前 run 门禁，并把 `taskReady` 与 `workspaceReady` 分开报告。',
+    '- `openprd doctor .`：检查生成引导、hooks、skills、standards 与验证健康度。',
+    '- `openprd update .`：修复生成引导、skills、hooks 与 drift。',
+    '- `openprd next .`：查看下一步 harness 动作。',
+    '',
+    '## 需求与评审',
+    '',
+    '- `openprd clarify .`：生成需求入口自省，并把澄清压缩回对话内确认。',
+    '- `openprd capture . --field <path> --value <text|json>`：把用户确认写回状态。',
+    '- `openprd synthesize .`：生成可评审 PRD 与 `review.html`。',
+    '- `openprd review . --open`：打开当前 PRD review artifact。',
+    '- `openprd review . --mark confirmed --version <id> --digest <sha256> --work-unit <id>`：记录当前稳定评审稿；默认用于人类确认后的记录，若当前 lane 已进入 silent-record policy，也只能对精确匹配的稳定 artifact 记录。',
+    '',
+    '## 设计与实现准备',
+    '',
+    '- `openprd change . --generate --change <id>`：把 PRD 转成 change。',
+    '- `openprd change . --validate --change <id>`：校验 change 结构。',
+    '- `openprd tasks . --change <id>`：查看当前 dependency-ready 任务。',
+    '- `openprd tasks . --change <id> --advance --verify --item <task-id>`：运行 verify 并推进单个任务。',
+    '- `openprd loop . --plan --change <id>`：为长程实现构建单任务列表。',
+    '- `openprd loop . --run --agent codex|claude --dry-run`：准备一个 fresh single-task session。',
+    '',
+    '## Benchmark 与学习包',
+    '',
+    '- `openprd benchmark add <url|repo|file> --notes <text>`：把外部最佳实践先写入 candidate，用于后续 approve/verify。',
+    '- `openprd benchmark list .`：查看当前项目的 approved 与 candidate benchmark source。',
+    '- `openprd benchmark approve <benchmark-id>`：把 candidate 纳入项目级长期 registry。',
+    '- `openprd benchmark verify .`：检查重复来源、失效链接、缺场景和过宽触发词。',
+    '- `openprd learn . --topic <text> --open`：生成当前项目的学习包骨架和 HTML 阅读器。',
+    '- `openprd learn . --content-json <file> --open`：让 Agent 写完 `learning-content.json` 后重新渲染最终图文阅读器。',
+    '',
+    '## 视觉与质量',
+    '',
+    '- `openprd visual-compare . --reference <效果图> --actual <实现截图>`：输出左右对比 JPG。',
+    '- `openprd dev-check . <file...>`：收工回顾 touched code files 的行数状态与下一步动作。',
+    '- `openprd standards . --verify`：校验 `docs/basic/`、文件说明书、文件夹 README 等标准。',
+    '- `openprd quality . --verify`：生成 HTML 质量评估报告并检查 EVO 门禁。',
+    '- `openprd grow . --review`：审查执行中发现的规则/配置候选，再决定是否 apply。',
+    '',
+    '## 深度扫描与历史项目',
+    '',
+    '- `openprd discovery . --resume|--verify`：恢复或校验 discovery 状态。',
+    '- `openprd fleet <root> --dry-run`：批量审计历史项目。',
+    '- `openprd fleet <root> --sync-registry`：把当前 root 下已初始化的 `.openprd/` 工作区回填到全局 registry。',
+    '- `openprd fleet <root> --backfill-work-units`：补历史 PRD work unit 绑定。',
+    '- `openprd fleet <root> --update-openprd`：只刷新已有 `.openprd/` 的项目。',
+    '',
+    '## 使用原则',
+    '',
+    '- 规划、分析、评审、解释影响范围时，保持只读；不要因为命令存在就直接执行写入。',
+    '- 只有用户明确要求实现、继续任务、深度调研、对标复刻或提交时，才进入 `tasks --advance`、`loop --run`、commit、push 等执行动作。',
+    '- 高风险动作前先过 `openprd standards . --verify`、`openprd quality . --verify` 和 `openprd run . --verify`；`openprd doctor .` 主要用于集成漂移、生成引导 drift，或 commit/push/freeze/handoff 前的最终健康检查。',
+    '',
+  ].join('\n');
+}
 
 function cjoin(...parts) {
   return path.join(...parts);
@@ -633,6 +809,9 @@ function upsertManagedBlock(text, id, body) {
   if (pattern.test(text)) {
     return text.replace(pattern, block);
   }
+  if (!String(text || '').trim()) {
+    return block;
+  }
   return `${text.trimEnd()}\n\n${block}`;
 }
 
@@ -701,7 +880,7 @@ async function writeGeneratedFile(filePath, params, options, changes) {
 async function upsertTextBlockFile(filePath, id, blockBody, options, changes) {
   const rel = normalizedRelativePath(options.projectRoot, filePath);
   const current = await readText(filePath).catch(() => '');
-  const next = upsertManagedBlock(current || '# Project Instructions\n', id, blockBody);
+  const next = upsertManagedBlock(current || '', id, blockBody);
   await writeText(filePath, next);
   changes.push({ path: rel, status: current ? 'updated-block' : 'created' });
   recordManagedFile(options, {
@@ -713,51 +892,58 @@ async function upsertTextBlockFile(filePath, id, blockBody, options, changes) {
   });
 }
 
+async function writeProjectCommandCatalog(projectRoot, options, changes) {
+  const version = await packageVersion();
+  await writeGeneratedFile(
+    cjoin(projectRoot, '.openprd', 'harness', 'command-catalog.md'),
+    { adapter: 'project', source: 'command-catalog', version, body: renderCommandCatalog() },
+    options,
+    changes,
+  );
+}
+
 function agentContractBody() {
   return [
     '## OpenPrd Harness',
     '',
-    '本项目由 OpenPrd 管理。Agent 应优先遵循 harness，而不是零散的临时指令。',
+    '本项目由 OpenPrd 管理。Agent 应优先遵循 repo-local skills 和 hooks；`AGENTS.md` 只保留轻量入口合同。',
+    '',
+    '### Scope',
+    '',
+    '- skill 路由放在 `openprd-router`，命令清单放在 command catalog，强约束放在 hooks。',
+    '- `AGENTS.md` 只说明入口、默认行为和高风险门禁，不再承载静态长清单。',
+    '',
+    '### Entry Points',
+    '',
+    '- 先读 `skills/openprd-router/SKILL.md`；在生成的 Codex / Claude 环境里，优先读同名 `openprd-router` skill。',
+    '- 需要具体命令时，优先读 `.openprd/harness/command-catalog.md`，不要继续把命令清单膨胀回 `AGENTS.md`。',
+    '- `$openprd-shared`：共用语言、文档影响、敏感信息、浏览器安全、小程序验证、产品文案与 i18n 规则。',
+    '- `$openprd-harness`：主工作流、`run/loop`、需求入口、review/change/tasks 与执行节奏。',
+    '- `$openprd-benchmark-router`：外部技术、公开 GitHub 仓库、benchmark/对标/最佳实践路由。',
+    '- `$openprd-standards` / `$openprd-quality`：`docs/basic/`、就绪验证、EVO 门禁、知识沉淀。',
+    '- `$openprd-diagram-review` / `$openprd-discovery-loop`：可视评审与长时间只读挖掘。',
     '',
     '### 默认行为',
     '',
-    '1. 在规划或改文件前，先从 `.openprd/` 重建状态。',
-    '2. 选择下一个执行单元前先运行 `openprd run . --context`，但把它当作建议上下文，不要机械照执行。',
-    '3. 跟随任何建议前先判断当前用户意图。遇到规划、分析、架构评审、“怎么改”或“会动哪些文件”这类请求时，保持只读并基于证据回答。',
-    '4. 如果用户提出新的产品、模块或工作流需求，编码前先走需求入口：clarify、记录用户回答、synthesize/review、生成或检查 OpenPrd change、拆分任务，并等待用户明确确认。',
-    '5. 如果用户在确认后要求实现，且工作会影响产品或架构，就要先生成或检查 OpenPrd change，再开始编码。',
-    '6. 实现过程中，对每个新增或修改文件都做一次文档影响检查：缺少 `docs/basic/`、文件说明书或目录 README 就补齐；如果变更影响职责、流程、结构、依赖或产品行为，就同步更新现有文档。涉及后端、脚本、Agent、工具链、服务或数据处理变更时，还要把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、`help`、`doctor`、`dry-run`、`status` 与接口协议、返回结构、身份边界是否受影响，并更新 `docs/basic/backend-structure.md` 或明确写不适用原因。',
-    '7. 在宣称准备就绪前，运行 `openprd standards . --verify`、`openprd quality . --verify` 和 `openprd run . --verify`。',
-    '8. 把 `.openprd/harness/` 视为已安装的 agent 控制状态目录：其中包含 run state、iterations、events、hook state、install manifest 和 drift report。',
-    '9. Codex hooks 默认使用 lite 模式：`UserPromptSubmit` 加一个轻量 `PreToolUse` 写入门禁。只有项目明确需要完整遥测时，才使用 `--hook-profile full`。',
-    '10. 对任何带 `locale: zh-CN` 的 OpenPrd diagram contract，所有可见标签、节点文案、流程标签、卡片、面板和评审说明都必须使用简体中文。只保留必要的专有名词和技术字段名。',
-    '11. 当用户要求最佳实践、benchmark、对标、参考产品、prompt engineering、Agent harness、context engineering、CLI 或 skill 体系优化时，先使用项目生成的 `openprd-benchmark-router`，再按 DeepWiki、Context7 或官方资料规则调研。',
+    '1. 动手前先从 `.openprd/` 重建状态，并先运行 `openprd run . --context`；它是建议上下文，不是自动执行指令。',
+    '2. 规划、分析、架构评审、“怎么改”或“会动哪些文件”类请求保持只读；只有用户明确要求实现、继续任务、深度调研、对标复刻或提交时才进入执行。',
+    '3. 先分流再执行：L0 小修（空格、错别字、按钮文案、简单样式、明确 bugfix）直接处理并事后说明；L1 中等改动先在对话内给 mini-plan 再执行；L2 新产品、模块或工作流需求先走 requirement intake，再 `review/change/tasks`，最后才实现。`review.html` 是稳定评审 artifact，不再默认等于唯一的人类停顿点；默认按 decision-points approval policy 执行，只有当前 lane 仍要求人类决策时才在 final answer 主体里停下请求确认。',
+    '4. 纯图片、封面图、配图、海报、插画、图标、贴纸、mockup 或“先看样子”请求默认直接使用 Codex 原生 Image 2；其中 logo、icon、avatar、badge 等开发素材在用户未明确要求场景化展示时，默认按独立素材输出（standalone asset）生成：全画布单主体，不额外添加卡片、设备框或其他展示容器；只有进入实现阶段且已有参考图时，才使用 `openprd visual-compare`。',
+    '5. 用户给出会话 ID 并要求继续时，按工具无关的历史会话续接；不要要求工具专属 ID，也不要用当前 active change 或相似历史替代指定会话。',
+    '6. 代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 `openprd dev-check . <file...>`；宣称准备就绪前，运行 `openprd standards . --verify`、`openprd quality . --verify` 和 `openprd run . --verify`。',
     '',
-    '### 标准命令',
+    '### Hook-Enforced Gates',
     '',
-    '- `openprd next .` - 选择下一步 harness 动作。',
-    '- `openprd run . --context` - 选择下一个 hook-stable 执行单元。',
-    '- `openprd run . --verify` - 校验当前 run 门禁。',
-    '- `openprd quality . --verify` - 生成覆盖 observability、business guardrails、smoke、performance、极端场景和知识缺口的 HTML 质量评估报告。',
-    '- `openprd quality . --learn --from <report-id-or-json>` - 把已审阅或修复的问题沉淀成项目级经验 skill 知识。',
-    '- `openprd loop . --plan --change <id>` - 构建“一次会话只做一个任务”的 feature list。',
-    '- `openprd loop . --run --agent codex|claude --dry-run` - 准备一个全新的单任务 agent 会话。',
-    '- `openprd loop . --run --agent codex|claude` - 仅在用户明确要求开发、继续推进、深度调研 / benchmark 或复刻时执行。',
-    '- `openprd loop . --finish --item <task-id> --commit` - 完成校验、写入暂存测试报告、标记 done，并且只有当用户明确要求 commit 时才创建任务提交。',
-    '- `openprd standards . --verify` - 校验项目文档标准。',
-    '- `openprd change . --validate --change <id>` - 校验 change 结构。',
-    '- `openprd discovery . --verify` - verify long-running discovery state.',
-    '- `openprd doctor .` - check agent integration health.',
-    '- `openprd update .` - repair generated agent guidance drift.',
-    '- `openprd update . --hook-profile lite|guarded|full` - choose Codex hook weight; default `lite` keeps requirement-intake write gates without full telemetry.',
-    '- `openprd fleet <root> --dry-run` - audit historical projects before batch updates.',
-    '',
-    '`openprd setup` and `openprd update` also enable Codex hooks in the user Codex config when run from the CLI.',
+    '- requirement：需求未完成 `clarify/review/change/tasks` 前阻断实现写入；tasks 就绪后，只有用户原始意图已明确要求实现，或后续明确发出执行指令时才放行。',
+    '- research：公开 GitHub 架构/对标先 DeepWiki；第三方技术用法、配置、限制、版本差异或迁移先查本地证据，不足时再按 `resolve_library_id -> query_docs` 使用 Context7。',
+    '- skill-visualization：修改 skill、`SKILL.md`、`AGENTS.md` 或相关 workflow 前，先输出彩色 Mermaid 方案并等待用户确认。',
+    '- secrets / weapp / browser / copy：分别处理 `secrets-vault`、`weapp-dev-mcp`、窗口归属与 i18n/普通用户文案提醒。',
+    '- 需要细节时，读 router 指向的 skill 和 command catalog，而不是继续扩写 `AGENTS.md`。',
     '',
     '### High-Risk Gate',
     '',
     'Before freeze, handoff, accepted spec apply/archive, commit, push, release, or publish, ensure `openprd standards . --verify`, `openprd quality . --verify`, `openprd run . --verify`, and `openprd doctor .` are healthy.',
-    '',
+    'If the quality report says `productionReady=false`, do not claim readiness; list the missing evidence or gates.',
     'The only baseline documentation path is `docs/basic/`.',
     '',
   ].join('\n');
@@ -828,651 +1014,7 @@ function quoteShell(value) {
 }
 
 function renderCodexHookRunner() {
-  return `import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-
-const eventName = process.argv[2] || 'Unknown';
-let input = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { input += chunk; });
-process.stdin.on('end', () => {
-  let payload = {};
-  try { payload = input.trim() ? JSON.parse(input) : {}; } catch {}
-  const cwd = payload.cwd || process.cwd();
-  const result = handle(eventName, cwd, payload);
-  if (result) {
-    process.stdout.write(JSON.stringify(result));
-  }
-});
-
-function now() {
-  const formatter = new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const parts = Object.fromEntries(formatter.formatToParts(new Date()).map((part) => [part.type, part.value]));
-  return \`\${parts.year}-\${parts.month}-\${parts.day} \${parts.hour}:\${parts.minute}:\${parts.second}\`;
-}
-
-function findProjectRoot(start) {
-  let current = path.resolve(start || process.cwd());
-  for (;;) {
-    if (fs.existsSync(path.join(current, '.openprd'))) {
-      return current;
-    }
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return path.resolve(start || process.cwd());
-    }
-    current = parent;
-  }
-}
-
-function harnessDir(root) {
-  return path.join(root, '.openprd', 'harness');
-}
-
-function ensureHarness(root) {
-  const dir = harnessDir(root);
-  fs.mkdirSync(dir, { recursive: true });
-  const statePath = path.join(dir, 'hook-state.json');
-  if (!fs.existsSync(statePath)) {
-    writeJsonSync(statePath, {
-      version: 1,
-      active: true,
-      lastEventAt: null,
-      lastFingerprint: null,
-      counters: {},
-      recentFingerprints: {},
-      suppressions: { inputLock: false },
-    });
-  }
-  const eventsPath = path.join(dir, 'events.jsonl');
-  if (!fs.existsSync(eventsPath)) {
-    fs.writeFileSync(eventsPath, '');
-  }
-}
-
-function readJsonSync(filePath, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJsonSync(filePath, value) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + '\\n');
-}
-
-function appendEvent(root, event) {
-  ensureHarness(root);
-  fs.appendFileSync(path.join(harnessDir(root), 'events.jsonl'), JSON.stringify({ at: now(), ...event }) + '\\n');
-}
-
-function updateHookState(root, event) {
-  ensureHarness(root);
-  const statePath = path.join(harnessDir(root), 'hook-state.json');
-  const state = readJsonSync(statePath, {
-    version: 1,
-    counters: {},
-    recentFingerprints: {},
-    suppressions: { inputLock: false },
-  });
-  state.lastEventAt = now();
-  state.lastEvent = event.eventName;
-  state.lastFingerprint = event.fingerprint;
-  state.counters[event.eventName] = (state.counters[event.eventName] || 0) + 1;
-  state.recentFingerprints = state.recentFingerprints || {};
-  if (event.fingerprint) {
-    state.recentFingerprints[event.fingerprint] = Date.now();
-  }
-  for (const [fingerprint, seenAt] of Object.entries(state.recentFingerprints)) {
-    if (Date.now() - Number(seenAt) > 300000) {
-      delete state.recentFingerprints[fingerprint];
-    }
-  }
-  writeJsonSync(statePath, state);
-  return state;
-}
-
-function isDuplicate(root, fingerprint, windowMs = 15000) {
-  const state = readJsonSync(path.join(harnessDir(root), 'hook-state.json'), {});
-  const seenAt = state?.recentFingerprints?.[fingerprint];
-  return Boolean(seenAt && Date.now() - Number(seenAt) < windowMs);
-}
-
-function fingerprintFor(eventName, payload, risk) {
-  const tool = payload.tool_name || payload.toolName || payload.name || '';
-  const inputText = JSON.stringify(payload.tool_input || payload.toolInput || payload.input || payload || {}).slice(0, 2000);
-  return crypto.createHash('sha256').update(JSON.stringify({ eventName, tool, inputText, risk: risk.level })).digest('hex').slice(0, 16);
-}
-
-function payloadText(payload) {
-  return JSON.stringify(payload.tool_input || payload.toolInput || payload.input || payload || {});
-}
-
-function promptText(payload) {
-  return String(payload.prompt || payload.user_prompt || payload.message || '');
-}
-
-function preview(text, max = 600) {
-  return String(text || '').replace(/\\s+/g, ' ').trim().slice(0, max);
-}
-
-function requirementGatePath(root) {
-  return path.join(harnessDir(root), 'requirement-gate.json');
-}
-
-function analyzePromptIntent(prompt) {
-  const text = String(prompt || '').trim();
-  const normalized = text.toLowerCase();
-  const internalOpenPrdExecution = /^#\\s*OpenPrd\\s+长程单任务执行会话/m.test(text)
-    || /模式:\\s*loop-run\\b/i.test(text)
-    || /模式:\\s*loop-finish\\b/i.test(text);
-  const productPatterns = [
-    /新增/,
-    /增加/,
-    /新建/,
-    /我希望/,
-    /用户反馈/,
-    /需求/,
-    /功能/,
-    /模块/,
-    /页面/,
-    /入口/,
-    /流程/,
-    /编排/,
-    /一站式/,
-    /体验/,
-    /信息架构/,
-    /团队搭建/,
-    /agent\\s*市场/i,
-    /skill\\s*library/i,
-    /cli\\s*库/i,
-    /workflow/i,
-    /wizard/i,
-  ];
-  const tinyEditPatterns = [
-    /文案.{0,8}(改短|调整|替换)/,
-    /按钮文案/,
-    /typo/i,
-    /copy/i,
-  ];
-  const explicitExecutionPatterns = [
-    /直接(改|做|实现|落地|修)/,
-    /开始(改|做|实现|开发|落地)/,
-    /请(实现|落地|修改|修复)/,
-    /可以(执行|落地|实现|开发)/,
-  ];
-  const confirmationPatterns = [
-    /确认.*(执行|落地|实现|继续|开发)/,
-    /按(这个|刚才|上面|已确认)?.{0,12}(方案|计划|拆解).{0,12}(执行|落地|实现|开发)/,
-  ];
-  const readOnlyPatterns = [
-    /看看/,
-    /规划/,
-    /分析/,
-    /梳理/,
-    /评估/,
-    /怎么改/,
-    /预计动哪些文件/,
-    /review/i,
-    /explain/i,
-  ];
-  const requiresIntake = !internalOpenPrdExecution
-    && productPatterns.some((pattern) => pattern.test(text))
-    && !tinyEditPatterns.some((pattern) => pattern.test(text));
-  const explicitExecution = internalOpenPrdExecution || explicitExecutionPatterns.some((pattern) => pattern.test(text));
-  const confirmation = confirmationPatterns.some((pattern) => pattern.test(text));
-  const readOnly = readOnlyPatterns.some((pattern) => pattern.test(text));
-  return {
-    requiresIntake,
-    explicitExecution,
-    confirmation,
-    readOnly,
-    shouldInject: requiresIntake || explicitExecution || confirmation || readOnly || /openprd/i.test(normalized) || /\\bprd\\b/i.test(normalized),
-  };
-}
-
-function readRequirementGate(root) {
-  return readJsonSync(requirementGatePath(root), null);
-}
-
-function writeRequirementGate(root, value) {
-  writeJsonSync(requirementGatePath(root), value);
-}
-
-function openRequirementGate(root, prompt, intent) {
-  const current = readRequirementGate(root);
-  const gate = {
-    version: 1,
-    active: true,
-    status: 'requires-clarification',
-    openedAt: current?.openedAt || now(),
-    updatedAt: now(),
-    promptPreview: preview(prompt, 500),
-    reason: 'new product/module/workflow requirement',
-    requiredFlow: ['clarify', 'capture', 'review', 'tasks', 'user-confirmation', 'implementation'],
-    intent,
-  };
-  writeRequirementGate(root, gate);
-  return gate;
-}
-
-function confirmRequirementGate(root, prompt) {
-  const current = readRequirementGate(root);
-  if (!current?.active) {
-    return current;
-  }
-  const next = {
-    ...current,
-    active: false,
-    status: 'user-confirmed-for-execution',
-    confirmedAt: now(),
-    confirmationPreview: preview(prompt, 500),
-  };
-  writeRequirementGate(root, next);
-  return next;
-}
-
-function isRequirementGateActive(root) {
-  return Boolean(readRequirementGate(root)?.active);
-}
-
-function isMutationPayload(payload, risk) {
-  const text = payloadText(payload);
-  const tool = String(payload.tool_name || payload.toolName || payload.name || '');
-  return risk.level === 'medium'
-    || risk.level === 'high'
-    || /apply_patch/i.test(tool)
-    || /apply_patch/i.test(text)
-    || /\\*\\*\\* Begin Patch/.test(text);
-}
-
-function isAllowedDuringRequirementGate(payload) {
-  const text = payloadText(payload);
-  const allowedOpenPrd = [
-    /openprd\\s+status\\b/i,
-    /openprd\\s+next\\b/i,
-    /openprd\\s+run\\s+\\.\\s+--context\\b/i,
-    /openprd\\s+clarify\\b/i,
-    /openprd\\s+capture\\b/i,
-    /openprd\\s+classify\\b/i,
-    /openprd\\s+interview\\b/i,
-    /openprd\\s+synthesize\\b/i,
-    /openprd\\s+diagram\\b/i,
-    /openprd\\s+change\\s+.*--generate/i,
-    /openprd\\s+change\\s+.*--validate/i,
-    /openprd\\s+loop\\s+.*--plan/i,
-    /openprd\\s+standards\\s+.*--verify/i,
-    /openprd\\s+doctor\\b/i,
-  ];
-  return allowedOpenPrd.some((pattern) => pattern.test(text));
-}
-
-function runOpenPrd(args, cwd) {
-  const command = process.env.OPENPRD_CLI || 'openprd';
-  const result = spawnSync(command, args, {
-    cwd,
-    encoding: 'utf8',
-    timeout: 15000,
-    env: process.env,
-  });
-  return {
-    ok: result.status === 0,
-    status: result.status,
-    stdout: (result.stdout || '').trim(),
-    stderr: (result.stderr || '').trim(),
-  };
-}
-
-function recordRunHook(cwd, baseEvent, outcome) {
-  const args = [
-    'run',
-    '.',
-    '--record-hook',
-    '--event',
-    baseEvent.eventName,
-    '--risk',
-    baseEvent.risk.level,
-    '--outcome',
-    outcome,
-  ];
-  if (baseEvent.preview) {
-    args.push('--preview', baseEvent.preview.slice(0, 300));
-  }
-  runOpenPrd(args, cwd);
-}
-
-function requirementGateMessage(intent, gate) {
-  if (!intent?.requiresIntake && !gate?.active) {
-    return null;
-  }
-  const status = gate?.active ? 'active' : 'opened';
-  return [
-    'OpenPrd requirement intake gate: ' + status + '.',
-    'This prompt looks like a new product/module/workflow requirement. Do not edit implementation files yet.',
-    'Required order: clarify the requirement, capture user answers, synthesize or review the artifact, decompose tasks, get explicit user confirmation, then implement.',
-    'Recommended next action: run openprd clarify . to inspect missing questions; only open the HTML artifact when it actually contains user-facing questions or a useful review surface.',
-  ].join('\\n');
-}
-
-function confirmationGateMessage(gate) {
-  if (!gate || gate.active) {
-    return null;
-  }
-  return [
-    'OpenPrd requirement intake gate was explicitly confirmed by the user.',
-    'Implementation may proceed only within the confirmed scope, with docs/basic, file manuals, folder README docs, standards verification, and OpenPrd run verification kept up to date. For backend, script, agent, tooling, service, or data-processing changes, keep CLI and API surface review current in docs/basic/backend-structure.md.',
-  ].join('\\n');
-}
-
-function contextMessage(cwd, intent = null, gate = null) {
-  const run = runOpenPrd(['run', '.', '--context'], cwd);
-  const gateMessage = requirementGateMessage(intent, gate) || confirmationGateMessage(gate);
-  if (run.ok) {
-    return [
-      run.stdout,
-      gateMessage,
-      'OpenPrd 上下文只是建议，不是自动执行指令。请先判断用户当前意图。',
-      '新产品、模块或流程需求在改代码前必须先完成需求入口：澄清、评审、任务拆解，并等待用户明确确认。',
-      '如果用户只是要求看看、规划、分析、审查、解释影响或列出文件，请保持只读并基于证据回答；不要运行 OpenPrd loop、任务推进、discovery 推进、commit 或其他写入命令。',
-      '只有当用户当前明确要求开发、实现、修复、继续任务、深度调研、对标复刻或提交时，才运行 openprd loop --run、openprd tasks --advance、openprd discovery --advance、commit/push 等执行命令。',
-      '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、help/doctor/dry-run/status 与接口协议、返回结构、身份边界是否受影响，并更新 docs/basic/backend-structure.md 或明确写不适用原因。',
-      '声明实现就绪前，先运行 openprd standards . --verify 和 openprd run . --verify。',
-    ].filter(Boolean).join('\\n');
-  }
-  const status = runOpenPrd(['status', '.'], cwd);
-  const next = runOpenPrd(['next', '.'], cwd);
-  if (!status.ok && !next.ok) {
-    return '已安装 OpenPrd harness，但本轮无法读取工作区状态。声明就绪前请先运行 openprd doctor .。';
-  }
-  return [
-    'OpenPrd harness 上下文:',
-    status.ok ? status.stdout : '',
-    next.ok ? next.stdout : '',
-    gateMessage,
-    '新产品、模块或流程需求在改代码前必须先完成需求入口：澄清、评审、任务拆解，并等待用户明确确认。',
-    'OpenPrd 下一步只是建议。规划、分析、审查类请求保持只读；只有用户当前明确要求开发、深度调研、对标复刻或继续任务时才执行。',
-    '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面，并同步更新 docs/basic/backend-structure.md 或明确写不适用原因。',
-    '声明就绪前请验证 docs/basic 标准。',
-  ].filter(Boolean).join('\\n');
-}
-
-function shouldInjectOpenPrdContext(payload) {
-  const prompt = promptText(payload);
-  if (!prompt.trim()) {
-    return false;
-  }
-  const intent = analyzePromptIntent(prompt);
-  if (intent.shouldInject) {
-    return true;
-  }
-  const normalized = prompt.toLowerCase();
-  const triggers = [
-    /openprd/i,
-    /open\s*prd/i,
-    /\\bprd\\b/i,
-    /openprd\\s+(run|loop|fleet|doctor|standards|change|discovery|handoff|freeze)/i,
-    /\\b(fleet|standards)\\b/i,
-    /深度调研/,
-    /深度对标/,
-    /持续调研/,
-    /复刻/,
-    /对标/,
-    /文件说明书/,
-    /文件夹说明书/,
-    /基础文档/,
-    /docs\\/basic/i,
-    /standards/i,
-    /handoff/i,
-    /freeze/i,
-    /新增/,
-    /增加/,
-    /新建/,
-    /我希望/,
-    /用户反馈/,
-    /需求/,
-    /功能/,
-    /模块/,
-    /页面/,
-    /入口/,
-    /流程/,
-    /编排/,
-    /一站式/,
-    /体验/,
-  ];
-  return triggers.some((pattern) => pattern.test(normalized));
-}
-
-function classifyRisk(payload) {
-  const text = payloadText(payload);
-  const normalized = text.toLowerCase();
-  const highPatterns = [
-    /git\\s+push/,
-    /git\\s+commit/,
-    /npm\\s+publish/,
-    /pnpm\\s+publish/,
-    /yarn\\s+npm\\s+publish/,
-    /gh\\s+release/,
-    /rm\\s+-rf/,
-    /openprd\\s+freeze\\b/,
-    /openprd\\s+handoff\\b/,
-    /openprd\\s+change\\s+.*--apply/,
-    /openprd\\s+change\\s+.*--archive/,
-  ];
-  const mediumPatterns = [
-    /apply_patch/,
-    /npm\\s+install/,
-    /npm\\s+i\\s/,
-    /pnpm\\s+add/,
-    /yarn\\s+add/,
-    /bun\\s+add/,
-    /openprd\\s+setup\\b/,
-    /openprd\\s+update\\b/,
-    /openprd\\s+standards\\s+.*--init/,
-    /openprd\\s+change\\s+.*--generate/,
-    /openprd\\s+tasks\\s+.*--advance/,
-    /openprd\\s+discovery\\s+.*--advance/,
-    /openprd\\s+(capture|classify|synthesize|diagram)\\b/,
-  ];
-  if (highPatterns.some((pattern) => pattern.test(normalized))) {
-    return { level: 'high', reason: 'release, history, freeze, handoff, destructive, or accepted-change action' };
-  }
-  if (mediumPatterns.some((pattern) => pattern.test(normalized))) {
-    return { level: 'medium', reason: 'workspace mutation or dependency/configuration change' };
-  }
-  return { level: 'low', reason: 'read-only or local exploratory action' };
-}
-
-function extractChangeId(text) {
-  const match = String(text || '').match(/--change\\s+([a-zA-Z0-9._-]+)/);
-  return match ? match[1] : null;
-}
-
-function runGateChecks(cwd, payload, risk) {
-  const checks = [];
-  const run = runOpenPrd(['run', '.', '--verify'], cwd);
-  checks.push({ name: 'run-verify', ok: run.ok, output: run.stdout || run.stderr });
-  const text = payloadText(payload);
-  const changeId = extractChangeId(text);
-  if (changeId && /openprd\\s+change\\s+.*--(apply|archive|validate)/i.test(text)) {
-    const change = runOpenPrd(['change', '.', '--validate', '--change', changeId], cwd);
-    checks.push({ name: 'change-validate', ok: change.ok, output: change.stdout || change.stderr });
-  }
-  return {
-    ok: checks.every((check) => check.ok),
-    checks,
-    summary: checks.map((check) => \`\${check.name}: \${check.ok ? 'ok' : 'failed'}\`).join(', '),
-  };
-}
-
-function hookSuppressed(root) {
-  const state = readJsonSync(path.join(harnessDir(root), 'hook-state.json'), {});
-  const lockPath = path.join(harnessDir(root), 'input-lock.json');
-  const lock = readJsonSync(lockPath, null);
-  return Boolean(state?.suppressions?.inputLock || (lock && lock.active));
-}
-
-function allowHook(additionalContext = null, outputEventName = eventName) {
-  const result = { continue: true };
-  if (additionalContext) {
-    result.hookSpecificOutput = {
-      hookEventName: outputEventName,
-      additionalContext,
-    };
-  }
-  return result;
-}
-
-function blockHook(reason) {
-  return {
-    decision: 'block',
-    reason,
-    systemMessage: reason,
-  };
-}
-
-function handle(eventName, cwd, payload) {
-  const root = findProjectRoot(cwd);
-  ensureHarness(root);
-  const risk = classifyRisk(payload);
-  const fingerprint = fingerprintFor(eventName, payload, risk);
-  const duplicate = isDuplicate(root, fingerprint);
-  const baseEvent = {
-    eventName,
-    risk,
-    fingerprint,
-    duplicate,
-    preview: preview(payloadText(payload)),
-  };
-
-  if (eventName === 'SessionStart') {
-    return allowHook();
-  }
-
-  if (eventName === 'UserPromptSubmit') {
-    if (duplicate) {
-      return allowHook();
-    }
-    const prompt = promptText(payload);
-    const intent = analyzePromptIntent(prompt);
-    let gate = readRequirementGate(root);
-    if (intent.confirmation && gate?.active) {
-      gate = confirmRequirementGate(root, prompt);
-      appendEvent(root, { ...baseEvent, outcome: 'requirement-gate-confirmed' });
-      recordRunHook(root, baseEvent, 'requirement-gate-confirmed');
-      updateHookState(root, baseEvent);
-      return allowHook(contextMessage(root, intent, gate));
-    }
-    if (intent.requiresIntake) {
-      gate = openRequirementGate(root, prompt, intent);
-      const result = allowHook(contextMessage(root, intent, gate));
-      appendEvent(root, { ...baseEvent, outcome: 'requirement-gate-opened' });
-      recordRunHook(root, baseEvent, 'requirement-gate-opened');
-      updateHookState(root, baseEvent);
-      return result;
-    }
-    if (!shouldInjectOpenPrdContext(payload)) {
-      return allowHook();
-    }
-    const result = allowHook(contextMessage(root, intent, gate));
-    appendEvent(root, { ...baseEvent, outcome: 'context-injected' });
-    recordRunHook(root, baseEvent, 'context-injected');
-    updateHookState(root, baseEvent);
-    return result;
-  }
-
-  if (eventName === 'PreToolUse') {
-    if (isRequirementGateActive(root) && isMutationPayload(payload, risk) && !isAllowedDuringRequirementGate(payload)) {
-      const reason = [
-        'OpenPrd blocked a mutating action because a new requirement is still in requirement intake.',
-        'Do not edit implementation files until the user has reviewed the clarify/review artifacts and explicitly confirmed the task breakdown.',
-        'Next allowed actions: run openprd clarify ., capture answers with openprd capture ., synthesize/review, generate or inspect change/tasks, then ask the user to confirm execution. Open the HTML artifact only when it contains user-facing questions or a useful review surface.',
-        'After the user explicitly confirms, retry the implementation within the confirmed scope.',
-      ].join('\\n');
-      appendEvent(root, { ...baseEvent, outcome: 'blocked-requirement-intake' });
-      recordRunHook(root, baseEvent, 'blocked-requirement-intake');
-      updateHookState(root, baseEvent);
-      return blockHook(reason);
-    }
-    if (risk.level === 'high') {
-      const gates = runGateChecks(root, payload, risk);
-      appendEvent(root, { ...baseEvent, gates, outcome: gates.ok ? 'allowed-high-risk' : 'blocked-high-risk' });
-      recordRunHook(root, baseEvent, gates.ok ? 'allowed-high-risk' : 'blocked-high-risk');
-      updateHookState(root, baseEvent);
-      if (!gates.ok) {
-        return blockHook([
-          'OpenPrd blocked a high-risk action because a harness gate failed.',
-          gates.summary,
-          ...gates.checks.filter((check) => !check.ok).map((check) => check.output).filter(Boolean),
-          'Run openprd run . --context and openprd doctor .; repair the failed gate, then retry.',
-        ].filter(Boolean).join('\\n'));
-      }
-      return allowHook(\`OpenPrd high-risk gate passed: \${gates.summary}.\`);
-    }
-    if (risk.level === 'medium') {
-      appendEvent(root, { ...baseEvent, outcome: 'allowed-medium-risk' });
-      recordRunHook(root, baseEvent, 'allowed-medium-risk');
-      updateHookState(root, baseEvent);
-      return allowHook('OpenPrd 检测到写入动作。声明就绪前，请同步维护 docs/basic、文件说明书、文件夹 README，以及相关 OpenPrd change/task 状态；如果涉及后端、脚本、Agent、工具链、服务或数据处理变更，还要把 CLI 与 API 视为同级接入面并更新 docs/basic/backend-structure.md。');
-    }
-    return allowHook();
-  }
-
-  if (eventName === 'PostToolUse') {
-    const text = payloadText(payload);
-    const failed = /command not found|no such file|permission denied|failed|error|exception/i.test(text);
-    if (!failed) {
-      return allowHook();
-    }
-    appendEvent(root, { ...baseEvent, outcome: failed ? 'tool-failure-detected' : 'tool-complete' });
-    recordRunHook(root, baseEvent, failed ? 'tool-failure-detected' : 'tool-complete');
-    updateHookState(root, baseEvent);
-    if (failed && !duplicate) {
-      return allowHook('A tool command appears to have failed. Use openprd doctor ., openprd next ., and the relevant verification command to choose the repair path.');
-    }
-    return allowHook();
-  }
-
-  if (eventName === 'Stop') {
-    appendEvent(root, { ...baseEvent, outcome: 'stop-check' });
-    recordRunHook(root, baseEvent, 'stop-check');
-    updateHookState(root, baseEvent);
-    if (hookSuppressed(root)) {
-      return allowHook();
-    }
-    const run = runOpenPrd(['run', '.', '--context', '--json'], root);
-    if (run.ok) {
-      try {
-        const parsed = JSON.parse(run.stdout);
-        const command = parsed?.recommendation?.command || '';
-        if (command && !/openprd\\s+next\\s+\\./.test(command)) {
-          return {
-            continue: true,
-            systemMessage: \`OpenPrd still has a hook-driven next action:\\n\${parsed.recommendation.title}\\nSuggested command: \${command}\`,
-          };
-        }
-      } catch {}
-    }
-  }
-
-  appendEvent(root, { ...baseEvent, outcome: 'noop' });
-  recordRunHook(root, baseEvent, 'noop');
-  updateHookState(root, baseEvent);
-return allowHook();
-}
-`;
+  return readFileSync(cjoin(PACKAGE_ROOT, 'src', 'codex-hook-runner-template.mjs'), 'utf8').trimEnd();
 }
 
 function ensureFeatureHooks(text) {
@@ -1828,6 +1370,7 @@ export async function setupOpenPrdAgentIntegration(projectRoot, options = {}) {
   };
 
   await ensureHarnessState(projectRoot);
+  await writeProjectCommandCatalog(projectRoot, normalizedOptions, changes);
   await upsertTextBlockFile(cjoin(projectRoot, 'AGENTS.md'), 'AGENTS', agentContractBody(), normalizedOptions, changes);
 
   if (tools.includes('codex')) {
@@ -1840,6 +1383,21 @@ export async function setupOpenPrdAgentIntegration(projectRoot, options = {}) {
     await writeCursorAdapter(projectRoot, normalizedOptions, changes);
   }
   const manifest = await writeInstallManifest(projectRoot, normalizedOptions, changes, tools);
+  const registry = await upsertWorkspaceRegistryEntry(projectRoot, {
+    openprdHome: options.openprdHome,
+    manifest,
+    action: options.action ?? 'setup',
+    tools,
+    hookProfile,
+    recordedAt: manifest.generatedAt,
+  });
+  await appendJsonl(harnessPath(projectRoot, OPENPRD_HARNESS_EVENTS), {
+    at: registry.entry.lastRegisteredAt,
+    event: 'workspace-registry-updated',
+    registryPath: registry.registryPath,
+    status: registry.status,
+    knownTotal: registry.knownTotal,
+  });
 
   const doctor = await doctorOpenPrdAgentIntegration(projectRoot, {
     tools,
@@ -1855,6 +1413,7 @@ export async function setupOpenPrdAgentIntegration(projectRoot, options = {}) {
     hookProfile,
     changes,
     manifest,
+    registry,
     doctor,
   };
 }
@@ -1991,6 +1550,7 @@ export async function doctorOpenPrdAgentIntegration(projectRoot, options = {}) {
   await collectDoctorCheck(projectRoot, checks, OPENPRD_HARNESS_MANIFEST, (file) => fileHas(file, '"managedFiles"'), 'Missing OpenPrd install manifest.');
   await collectDoctorCheck(projectRoot, checks, OPENPRD_HARNESS_HOOK_STATE, (file) => fileHas(file, '"version"'), 'Missing OpenPrd hook state.');
   await collectDoctorCheck(projectRoot, checks, OPENPRD_HARNESS_EVENTS, (file) => exists(file), 'Missing OpenPrd harness events log.');
+  await collectDoctorCheck(projectRoot, checks, '.openprd/harness/command-catalog.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Missing OpenPrd command catalog.');
 
   if (tools.includes('codex')) {
     await collectDoctorCheck(projectRoot, checks, '.codex/config.toml', (file) => fileHas(file, 'codex_hooks = true'), 'Codex hooks feature is not enabled.');
@@ -1998,6 +1558,7 @@ export async function doctorOpenPrdAgentIntegration(projectRoot, options = {}) {
     await collectDoctorCheck(projectRoot, checks, '.codex/hooks/openprd-hook.mjs', (file) => fileHas(file, 'OpenPrd harness 上下文'), 'Codex hook runner is missing.');
     const smoke = await smokeTestCodexHook(projectRoot, { hookProfile });
     checks.push({ path: '.codex/hooks/openprd-hook.mjs:smoke', ok: smoke.ok, message: smoke.message });
+    await collectDoctorCheck(projectRoot, checks, '.codex/skills/openprd-router/SKILL.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Codex OpenPrd router skill is missing.');
     await collectDoctorCheck(projectRoot, checks, '.codex/skills/openprd-harness/SKILL.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Codex OpenPrd harness skill is missing.');
     await collectDoctorCheck(projectRoot, checks, '.codex/skills/openprd-learning-review/SKILL.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Codex OpenPrd learning review skill is missing.');
     if (options.enableUserCodexConfig) {
@@ -2007,6 +1568,7 @@ export async function doctorOpenPrdAgentIntegration(projectRoot, options = {}) {
   }
   if (tools.includes('claude')) {
     await collectDoctorCheck(projectRoot, checks, 'CLAUDE.md', (file) => fileHas(file, 'OPENPRD:CLAUDE:START'), 'Missing OpenPrd managed CLAUDE block.');
+    await collectDoctorCheck(projectRoot, checks, '.claude/skills/openprd-router/SKILL.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Claude OpenPrd router skill is missing.');
     await collectDoctorCheck(projectRoot, checks, '.claude/skills/openprd-harness/SKILL.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Claude OpenPrd harness skill is missing.');
     await collectDoctorCheck(projectRoot, checks, '.claude/skills/openprd-learning-review/SKILL.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Claude OpenPrd learning review skill is missing.');
     await collectDoctorCheck(projectRoot, checks, '.claude/commands/openprd/next.md', (file) => fileHas(file, 'OPENPRD:GENERATED'), 'Claude OpenPrd next command is missing.');

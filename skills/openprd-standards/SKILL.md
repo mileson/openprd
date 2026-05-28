@@ -15,6 +15,12 @@ OpenPrd standards 管三件事：
 - `.openprd/standards/file-manual-template.md` 定义的文件说明书规则
 - `.openprd/standards/folder-readme-template.md` 定义的文件夹 README 规则
 
+研发期还包含一个轻量标准层：`openprd dev-check <path> <file...>` 或 `node scripts/openprd-dev-check.mjs <path> <file...>`，用于 Agent 在代码修改完成后、最终回复前回顾本轮 touched code files 的行数状态和下一步动作建议。
+
+自我成长标准层位于 `.openprd/growth/`：当 dev-check 把未知扩展名识别为代码候选，或执行中发现豁免路径、规则配置、命令习惯、用户偏好需要增量时，先运行 `openprd grow <path> --review`，用户确认后再 `openprd grow <path> --apply --id <candidate-id>`。
+
+维护 OpenPrd 本身时，新增或修改任何配置类能力都要检查是否应该成为 grow-aware 配置：高置信可复用、可被用户习惯影响、会随项目环境变化的配置默认纳入 `openprd grow`；不确定时主动询问用户；一次性固定规则才保留为静态配置。
+
 唯一的基线路径就是 `docs/basic/`。
 
 ## 动手前
@@ -42,6 +48,9 @@ OpenPrd standards 要求以下文档存在：
 ## 执行规则
 
 - 声称某个 change 就绪前，先运行 `openprd standards <path> --verify`
+- 代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 `openprd dev-check <path> <file...>`；700 行以内正常，701-1500 行需说明局部职责，超过 1500 行要判断本轮是否扩大职责，扩大则先重构/拆分/解耦并复查，窄 bugfix 或小修暂不拆时说明原因和后续拆分建议
+- dev-check 或执行过程产生 growth candidate 时，只把它当作待确认建议；共享配置必须 review/apply 后才算固化，个人偏好只进入 user-local 范围
+- 新增配置类能力时同步评审 grow-aware 入口：候选类型、scope、review/apply 行为、拒绝后不重复提示，以及 user-local 与项目共享配置的边界
 - OpenPrd 自动生成的 change tasks 应包含 standards 维护任务
 - 每次新增或修改源码文件，都要做文档影响检查
 - 如果 `docs/basic/`、文件说明书或文件夹 README 缺失，或还停留在模板态，就绪前必须补齐

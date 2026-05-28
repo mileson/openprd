@@ -2,15 +2,17 @@
 
 [简体中文](./README_CN.md) | English
 
-> AI-native PRD workspace and lifecycle CLI for requirement clarification, review gates, diagram confirmation, and handoff.
+> AI-native PRD workspace and lifecycle CLI for requirement clarification, HTML-first review surfaces, diagram confirmation, and handoff.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.19.0-339933.svg)](https://nodejs.org/)
 [![GitHub stars](https://img.shields.io/github/stars/mileson/openprd?style=social)](https://github.com/mileson/openprd)
 
-OpenPrd is a lightweight **PRD harness** for teams and agents that need more than “write a document”. It gives you a local workspace, a clarification-first workflow, explicit review gates, diagram artifacts, and a structured change/spec/task workflow.
+OpenPrd is a lightweight **PRD harness** for teams and agents that need more than “write a document”. It gives you a local workspace, a clarification-first workflow, policy-based review gates, diagram artifacts, and a structured change/spec/task workflow.
 
-![OpenPrd diagram demo](./docs/assets/openprd-diagram-demo.png)
+Instead of hiding key decisions in prompts or terminal logs, OpenPrd keeps people and agents aligned around stable HTML artifacts such as `review.html`, learning readers, and quality reports.
+
+![OpenPrd scenario overview](./docs/assets/openprd-scenario-overview.png)
 
 ## Why OpenPrd
 
@@ -18,27 +20,71 @@ OpenPrd is designed for the gap between:
 
 - vague product ideas that need clarification
 - agent-assisted requirement drafting
-- human confirmation before implementation
+- human confirmation at the right decision points before implementation
 - structured handoff into execution systems
 
 It is especially useful when you want:
 
 - **clarify before drafting** instead of jumping straight to implementation
-- **source-aware capture** so user-confirmed facts stay separate from repo-derived or agent-inferred context
-- **diagram review gates** before freezing a requirement set
+- **source-aware capture** so user-confirmed facts stay separate from repo-derived, agent-inferred, or agent-normalized context
+- **policy-based review gates** that keep stable artifacts without forcing the same stop every time
 - **agent-facing skills** shipped with the tool, not hidden in a local environment
+
+## Usage Scenarios
+
+| Scenario | Use OpenPrd to | Main artifacts |
+|----------|----------------|----------------|
+| New product idea | Clarify the problem, capture confirmed facts, and draft a reviewable PRD before implementation starts. | `clarify`, `capture`, `synthesize`, `review.html` |
+| Existing project intake | Mine current behavior, keep evidence visible, and turn gaps into structured changes. | `discovery`, `standards`, `change`, `tasks` |
+| Visual or product-flow confirmation | Review architecture, product flow, or UI replication before the team treats the work as done. | `diagram`, `visual-compare`, side-by-side JPG reviews |
+| Agent implementation loop | Break accepted work into dependency-ready tasks and run one focused agent session per task. | `loop`, prompts, progress logs, verification reports |
+| Release and handoff readiness | Check standards, regression evidence, cost/abuse guardrails, and handoff status before high-risk actions. | `quality`, `run --verify`, `doctor`, `handoff` |
+
+## HTML-First Collaboration Surfaces
+
+OpenPrd produces stable, shareable HTML surfaces so product owners, engineers,
+and agents can look at the same artifact before work moves forward.
+
+### `review.html`
+
+Use a review-ready PRD surface instead of asking teammates to reconstruct the
+latest requirement state from chat history.
+
+![OpenPrd review HTML](./docs/assets/openprd-review-html.png)
+
+### Learning reader
+
+Turn a finished requirement, fix, or workflow into a readable learning package
+that new collaborators can study without replaying the whole thread.
+
+![OpenPrd learning HTML](./docs/assets/openprd-learning-html.png)
+
+### Quality regression report
+
+Summarize readiness, required gates, evidence coverage, and manual decisions in
+one human-readable quality surface before handoff, release, or publish.
+
+![OpenPrd quality HTML](./docs/assets/openprd-quality-html.png)
+
+### Diagram and visual review artifacts
+
+OpenPrd also ships diagram and visual review outputs for architecture,
+product-flow, and UI replication work.
+
+![OpenPrd diagram demo](./docs/assets/openprd-diagram-demo.png)
 
 ## Features
 
 - **Clarification-first workflow**: `clarify -> capture -> classify -> interview -> synthesize -> diagram -> freeze -> handoff`
 - **Scenario-aware collaboration**: distinguish greenfield cold start, existing-project cold start, and continuing workspaces
-- **Source-aware capture**: mark inputs as `user-confirmed`, `project-derived`, or `agent-inferred`
-- **Visual review artifacts**: generate both architecture and product-flow diagrams
+- **Source-aware capture**: mark inputs as `user-confirmed`, `project-derived`, `agent-inferred`, or `agent-normalized`
+- **Diagram review artifacts**: generate both architecture and product-flow diagrams
+- **UI visual comparison artifacts**: combine reference images and implementation screenshots into side-by-side JPG reviews for visual replication work
 - **Contract-driven diagrams**: render from validated JSON contracts
 - **Review status tracking**: use `pending-confirmation`, `confirmed`, and `needs-revision`
 - **OpenPrd discovery mode**: initialize durable coverage runs for existing projects, reference projects, or unclear requirements
 - **Project standards**: initialize and verify `docs/basic/`, file manual templates, and folder README templates as part of execution quality gates
-- **Quality Eval Reports**: review observability, business cost and abuse guardrails, smoke coverage, task completeness, performance baselines, extreme data, and project knowledge through HTML reports
+- **Quality Regression Reports**: review overall regression status, per-requirement module status, test-block results, observability, business cost and abuse guardrails, smoke coverage, performance baselines, and project knowledge through HTML reports
 - **Project knowledge skills**: turn verified fixes and recurring diagnosis patterns into reusable `.openprd/knowledge/skills/` experience skills
 - **OpenPrd change and task execution**: materialize PRD snapshots into change files, validate them, apply accepted specs, archive changes, and advance structured tasks by dependency order
 - **Long-running agent loop**: turn accepted change tasks into one-task-per-session Codex or Claude execution prompts with verification, progress logs, and optional task commits
@@ -53,6 +99,7 @@ It is especially useful when you want:
 | CLI | Native Node ESM |
 | Config / state | JSON + YAML |
 | Diagram renderer | Self-contained HTML + inline SVG |
+| Image processing | `sharp` for JPG / PNG / WebP visual comparison artifacts |
 | Testing | `node --test` |
 | Agent guidance | Repo-local `skills/` + `AGENTS.md` + Codex / Claude / Cursor generated adapters |
 
@@ -80,13 +127,17 @@ openprd init /path/to/project --template-pack agent
 
 `init` creates `.openprd/`, `docs/basic/`, `AGENTS.md`, and generated Codex / Claude / Cursor guidance. Codex projects also get `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/openprd-hook.mjs`, and user-level Codex `codex_hooks = true`.
 
-Codex hooks default to `lite`: `UserPromptSubmit` plus a lightweight `PreToolUse`
-write gate. Context is injected for prompts that explicitly mention OpenPrd,
+Codex hooks default to `lite`: `UserPromptSubmit`, a lightweight `PreToolUse`
+write gate, and a lightweight `Stop` end-of-turn review. Context is injected for prompts that explicitly mention OpenPrd,
 PRD, deep research/benchmarking, replication, standards, fleet, documentation
 standards, or look like new product/module/workflow requirements. The lite write
 gate only matches direct editing tools so read-only shell exploration stays
-quiet; use `guarded` when shell commands should also pass through the write gate,
+quiet, while `Stop` reviews whether the current turn produced a reusable project
+pattern; use `guarded` when shell commands should also pass through the write gate,
 and `full` only for temporary deep diagnostics.
+Concrete bugfix prompts with diagnostic evidence such as errors, logs, repro
+steps, or root-cause investigation skip requirement intake when the user asks to
+fix directly; confirmation wording also accepts phrases like "confirm the fix".
 
 ### 2. Check the current collaboration state
 
@@ -100,6 +151,8 @@ openprd next /path/to/project
 ```bash
 openprd clarify /path/to/project
 ```
+
+Clarification stays in the conversation as an inline outline or short checklist. The formal HTML review surface is `review.html` after synthesis.
 
 ### 4. Capture answers back into the workspace
 
@@ -118,6 +171,10 @@ Batch capture:
 openprd capture /path/to/project --json-file answers.json
 ```
 
+If `openprd synthesize` reports that the generated `spec.md` would still fail the
+Simplified Chinese preflight, normalize the wording with
+`--source agent-normalized` before recording the current `review.html` artifact.
+
 ### 5. Draft and review
 
 ```bash
@@ -129,6 +186,26 @@ openprd synthesize /path/to/project \
 
 openprd diagram /path/to/project --type architecture --open
 openprd diagram /path/to/project --type product-flow --open
+openprd review /path/to/project --open
+openprd review /path/to/project --mark confirmed --version <id> --digest <sha256> --work-unit <id>
+```
+
+`review.html` is the stable review artifact for the current PRD, but the default
+approval policy is `decision-points`, not “always stop here”. In a normal lane,
+the user reviews that stable artifact first and then the exact copied
+`--version`, `--digest`, and `--work-unit` tuple is recorded. In a
+`silent-record` lane, OpenPrd can record the exact current artifact without an
+extra stop only when the user already made direct execution intent explicit and
+explicitly opted out of additional review confirmation. Do not treat
+implementation approval as permission to mark a different review artifact, and
+do not treat review recording as execution authorization. After the current
+artifact is recorded, generate the OpenPrd change and task breakdown. If the
+user originally asked to implement, execution can continue once tasks are ready;
+otherwise wait for an explicit execution request:
+
+```bash
+openprd change /path/to/project --generate --change <change-id>
+openprd tasks /path/to/project --change <change-id>
 ```
 
 ### 6. Freeze and handoff
@@ -179,17 +256,32 @@ should hand off to the next file so agents can resume in order. A project can us
 a stricter local cap with `.openprd/discovery/config.json` at
 `taskSharding.maxItemsPerFile`.
 
+That 25-item limit is only a sharding cap, not a decomposition target. Prefer task
+titles that describe concrete implementation units, wiring boundaries, entry
+surfaces, integration closures, and regression passes instead of mirroring PRD
+section labels like "primary flow", "requirement", or "acceptance goal".
+
 When a task needs a stable id for long-running execution, keep the metadata small:
 
 ```md
 - [ ] T009.07 Port legacy database import preview
+  - type: implementation
   - deps: T001.14, T007.06
   - done: preview shows counts, conflicts, skipped items, warnings
   - verify: npm run test -- migration
+  - oracle: compare sample import output against the legacy preview and record mismatches
 ```
 
-Use `deps` only when the task depends on earlier task ids. `done` is the completion
-condition, and `verify` is the command or review step that proves it.
+Use `type` to distinguish `implementation`, `verification`, `documentation`, and
+`governance` work. `deps` is only needed when the task depends on earlier task ids.
+`done` is the completion condition, and `verify` is the command or review step
+that proves it. For `implementation`, `verification`, and `documentation` tasks,
+`verify` must exercise the real work, such as `openprd run . --verify`, test
+commands, or an explicit manual review step; do not use `openprd change . --validate`
+as the only proof. Use `oracle` when the task must compare against a reference
+implementation, golden data set, screenshot baseline, or other explicit source
+of truth; `openprd loop --finish` then requires `--notes` or `--evidence` so the
+comparison result is recorded.
 
 `tasks` lists the next dependency-ready task by default. `--advance` marks
 one task complete, and `--verify` runs that task's `verify` command before marking
@@ -227,7 +319,39 @@ the change affects responsibilities, flows, structure, dependencies, or product
 behavior. If no documentation update is needed, agents should say the check was
 performed and why the existing docs still match the code.
 
-## Quality Eval Reports
+## UI Visual Compare
+
+When UI work already has a reference effect image, design image, user-provided
+screenshot, or agent-generated mock, the agent should capture the implemented
+UI and generate a side-by-side review image before claiming visual completion:
+
+```bash
+openprd visual-compare /path/to/project \
+  --reference effect-image.png \
+  --actual implementation-screenshot.jpg
+```
+
+The default output is a compact JPG under
+`.openprd/harness/visual-reviews/`. The left panel is labeled `效果图`; the
+right panel is labeled `实现截图`. Inputs can be common image formats supported
+by `sharp`. The output can be adjusted when needed:
+
+```bash
+openprd visual-compare /path/to/project \
+  --reference effect-image.png \
+  --actual implementation-screenshot.jpg \
+  --out review.webp \
+  --format webp \
+  --quality 82 \
+  --max-panel-width 1180
+```
+
+Agents should inspect the generated image and keep iterating until there are no
+obvious visual differences. The final response for reference-driven UI work
+should include the generated review image path and note whether differences
+remain.
+
+## Quality Regression Reports
 
 `openprd init` also creates a quality contract:
 
@@ -242,26 +366,49 @@ openprd quality /path/to/project --verify
 ```
 
 The command writes both JSON and HTML reports under `.openprd/quality/reports/`.
-The HTML Eval Report is the human review surface for centralized logging and
-traceability, business cost and abuse guardrails, smoke/e2e coverage,
-task-to-feature completeness, normal and extreme performance baselines,
-pressure fixtures, and project knowledge gaps.
+The HTML regression report is the human-readable quality surface: overall
+regression status, per-requirement module status, test-block pass/fail results,
+missing items, and the small set of gaps that need a person to decide whether
+they are in scope for the current delivery. EVO is OpenPrd's internal shorthand
+for the evaluation/verification quality layer; the visible report does not ask
+users to know that acronym. A script or fixture being present only proves
+capability; required gates need current evidence or an explicit waiver.
 
 When a requirement involves free users, quotas, AI calls, third-party APIs,
 generation, storage, downloads, or other metered costs, `quality --verify`
 also checks for cost drivers, user-level limits, negative abuse-path
 verification, usage/cost monitoring, alert thresholds, and stop-loss actions.
 
+`openprd quality --verify` is blocking by default when required test blocks are
+not production-ready. `openprd run --verify` repeats that quality gate so final
+readiness cannot ignore the report. Agents should not claim readiness until
+every required test block is either passing with evidence or explicitly out of
+scope for the scenario.
+
+For UI work with an existing reference image, visual readiness also requires a
+current `openprd visual-compare` artifact under `.openprd/harness/visual-reviews/`.
+If the combined image still shows obvious differences, the task should return to
+implementation instead of treating the gap as ready.
+
 After a fix has been verified and reviewed, promote the abstract pattern into
 project knowledge:
 
 ```bash
+openprd quality /path/to/project --learn --review --from .openprd/harness/turn-state.json
 openprd quality /path/to/project --learn --from <report-id-or-json>
+openprd quality /path/to/project --learn --from ./diagnostics/incident-2026-05-24
 ```
 
-This writes incident, pattern, and experience skill artifacts under
+`--learn --review` first writes a pending knowledge candidate under
+`.openprd/knowledge/candidates/` plus a draft skill under
+`.openprd/knowledge/drafts/`. Once the draft is worth keeping, `--learn --from`
+promotes it into incident, pattern, and experience skill artifacts under
 `.openprd/knowledge/` so future tasks can retrieve the lesson instead of
-rediscovering it.
+rediscovering it. `--from` now accepts either a quality report JSON or an
+extracted diagnostics directory / evidence file that already contains
+`diagnostic-report`, `runtime-events`, `timeline`, or `root-cause-candidates`
+artifacts, so a verified fix can be promoted directly into a reusable
+troubleshooting skill.
 
 ## Agent Setup
 
@@ -274,6 +421,8 @@ openprd doctor /path/to/project
 openprd update /path/to/project
 openprd update /path/to/project --hook-profile lite
 openprd fleet /path/to/projects --dry-run
+openprd fleet /path/to/projects --sync-registry
+openprd fleet /path/to/projects --backfill-work-units
 openprd run /path/to/project --context
 openprd run /path/to/project --verify
 openprd loop /path/to/project --plan --change <change-id>
@@ -291,7 +440,7 @@ or `openprd setup` inside a project.
 - user-level Codex config with `features.codex_hooks = true`
 - `.claude/skills/`, `.claude/commands/openprd/`, and `CLAUDE.md`
 - `.cursor/rules/openprd.mdc` and `.cursor/commands/`
-- `.openprd/harness/install-manifest.json`, `hook-state.json`, `events.jsonl`, and `drift-report.json`
+- `.openprd/harness/install-manifest.json`, `hook-state.json`, `events.jsonl`, `drift-report.json`, and `visual-reviews/`
 
 `doctor` verifies that the generated rules, Codex hooks feature flag, standards,
 and workspace validation are healthy. `update` refreshes the generated adapter
@@ -300,8 +449,9 @@ groups.
 
 The harness is stateful, but hooks are proportional to the chosen profile.
 Default `lite` keeps a lightweight `PreToolUse` write gate for requirement
-intake and limits it to direct editing tools, avoiding read-only shell hook
-noise and PostToolUse/Stop telemetry. `guarded` also gates shell tools, while
+intake and limits it to direct editing tools, while `Stop` performs a lightweight
+end-of-turn knowledge review instead of full telemetry. This avoids read-only shell hook
+noise while still nudging the agent to capture reusable project patterns. `guarded` also gates shell tools, while
 `full` restores SessionStart/PreToolUse/PostToolUse/Stop telemetry for temporary
 diagnostics. High-risk actions such as freeze, handoff, accepted spec
 apply/archive, commit, push, release, or publish are gated by
@@ -320,12 +470,21 @@ than `run --context`: it creates a durable feature list, writes a single-task
 prompt, starts a fresh Codex or Claude session for exactly one task, verifies the
 task, and can commit that task before moving on.
 
+For reference-driven UI tasks, the loop prompt and generated guidance require the
+agent to capture an implementation screenshot, run `openprd visual-compare`, and
+review the side-by-side JPG before finishing the task.
+
 `openprd run --context` may surface loop commands as execution commands, but they
 are not automatic instructions. Agents should run `openprd loop --run`,
 `openprd tasks --advance`, `openprd discovery --advance`, or commit commands only
 when the current user message explicitly asks for development, implementation,
 task continuation, deep research/benchmarking, replication, or commit. Read-only
 planning and review turns should stop at the module/file plan.
+
+Loop is recommended from the substantive implementation task count, not from every
+checkbox. When a change has 10 or more pending/total `implementation` tasks,
+`run --context` recommends an isolated worktree or equivalent environment plus a
+single-task Loop session.
 
 ```bash
 openprd loop . --init
@@ -341,10 +500,17 @@ openprd loop . --finish --item T001.01 --commit --message "Complete T001.01"
 The loop writes its durable state under `.openprd/harness/`:
 
 - `feature-list.json` is the ordered implementation task list.
+- Each loop task carries a human-readable `taskHandle` such as
+  `change-id:T001.01:task-title`, so another conversation can continue the same
+  task without relying on a chat-specific UUID.
 - `progress.md` is the human-readable progress log.
-- `agent-sessions.jsonl` records each prompt/run/finish event.
+- `failed-approaches.md` is the dead-end ledger for mismatches, rejected fixes,
+  and why they failed, so the next session does not retry the same path.
+- `agent-sessions.jsonl` records each prompt/run/finish event, including the
+  task handle and task title for cross-session lookup.
 - `bootstrap.sh` is the startup check each fresh agent session runs.
-- `loop-state.json` stores the current task and last agent session.
+- `loop-state.json` stores the current task id, task handle, task title, and
+  the last agent session metadata.
 - `loop-prompts/` stores generated single-task prompts for audit and reuse.
 
 Use `--dry-run` first when you want OpenPrd to prepare the prompt and exact command
@@ -353,9 +519,16 @@ CLI integrations. Use `--agent-command "<custom command>"` only when you want to
 pipe the OpenPrd prompt into a project-specific wrapper.
 
 For historical projects, use `fleet` instead of hand-writing shell loops. By
-default it scans and reports only. `--update-openprd` refreshes projects that
-already contain `.openprd/`, while agent-only or plain projects stay untouched
-unless explicitly selected with `--setup-missing`.
+default it scans and reports only, while also telling you how many known
+OpenPrd workspaces already exist in the global registry and how many are outside
+the current root. `--sync-registry` backfills initialized `.openprd/`
+workspaces into `~/.openprd/registry/workspaces.jsonl`. `--update-openprd`
+refreshes projects that already contain `.openprd/` and also backfills
+historical PRD work unit bindings. Project standards or validation gaps are
+reported as health items, but they do not block generated guidance updates. Use
+`--backfill-work-units` when you only want to refresh versioned review artifacts
+and identity bindings, while agent-only or plain projects stay untouched unless
+explicitly selected with `--setup-missing`.
 
 ## How to Read `status` and `next`
 

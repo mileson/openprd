@@ -2,6 +2,17 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { cjoin, exists, readJson, readText, writeJson, writeText } from './fs-utils.js';
 import { renderQualityEvalArtifact } from './html-artifacts.js';
+import { renderExperienceSkill, resolveQualityLearningSource } from './quality-learning.js';
+import {
+  deriveKnowledgeNames,
+  ensureKnowledgeWorkspace,
+  KNOWLEDGE_CANDIDATES_DIR,
+  KNOWLEDGE_DRAFTS_DIR,
+  markKnowledgeCandidatePromoted,
+  OPENPRD_HARNESS_TURN_STATE,
+  recordKnowledgeReviewSignal,
+  reviewKnowledgeWorkspace,
+} from './knowledge.js';
 import { timestamp } from './time.js';
 
 const QUALITY_DIR = cjoin('.openprd', 'quality');
@@ -18,12 +29,18 @@ const IGNORE_DIRS = new Set([
   '.claude',
   '.cursor',
   '.openprd',
+  '.tmp',
+  '.wrangler',
   'node_modules',
   'dist',
   'build',
   'coverage',
   '.next',
   '.turbo',
+  'out',
+  'release',
+  'test-results',
+  'tmp',
 ]);
 
 const SOURCE_EXTENSIONS = new Set([
@@ -53,6 +70,30 @@ const IGNORE_FILES = new Set([
   'CLAUDE.md',
 ]);
 
+const QUALITY_GATE_IDS = [
+  'traceability',
+  'redaction',
+  'business-guardrails',
+  'smoke',
+  'feature-coverage',
+  'normal-performance',
+  'extreme-performance',
+  'knowledge',
+];
+
+const EVIDENCE_EXTENSIONS = new Set(['.json', '.md', '.txt', '.log', '.xml', '.html', '.csv']);
+
+const EVIDENCE_TOKENS = {
+  traceability: ['trace_id', 'span_id', 'request_id', 'task_id', 'error_id', 'trace verified', '链路', '追踪'],
+  redaction: ['redaction', 'redact', 'mask', 'masked', 'pii', 'secret', 'token redacted', '脱敏', '敏感字段'],
+  'business-guardrails': ['quota', 'rate limit', 'abuse', 'budget', 'kill switch', 'cost_usd', '额度', '限流', '滥用', '止损'],
+  smoke: ['smoke', 'e2e', 'playwright', 'cypress', 'main flow', 'happy path', '冒烟', '主流程'],
+  'feature-coverage': ['feature coverage', 'acceptance', 'tasks done', 'openprd tasks', '验收', '功能覆盖', '任务完成'],
+  'normal-performance': ['performance', 'perf', 'benchmark', 'latency', 'p95', 'lighthouse', 'k6', '性能', '耗时'],
+  'extreme-performance': ['extreme', 'stress', 'load test', 'large-data', 'pressure', 'k6', '压力', '极端', '大数据'],
+  knowledge: ['quality learn', 'incident', 'pattern', 'skill', '复盘', '经验', '沉淀'],
+};
+
 function qualityPath(projectRoot, relativePath) {
   return cjoin(projectRoot, relativePath);
 }
@@ -66,7 +107,7 @@ function defaultQualityConfig() {
     version: 1,
     schema: 'openprd.quality.v1',
     updatedAt: timestamp(),
-    enforcement: 'advisory',
+    enforcement: 'blocking',
     observability: {
       centralizedLoggingRequired: true,
       requiredSignals: ['logs', 'traces', 'metrics', 'errors'],
@@ -82,6 +123,25 @@ function defaultQualityConfig() {
       featureCoverageRequired: true,
       normalPerformanceRequired: true,
       extremePerformanceRequired: true,
+      currentEvidenceRequired: true,
+      evidenceSources: [
+        '.openprd/harness/test-reports',
+        '.openprd/quality/evidence',
+        'test-results',
+        'tests/reports',
+        'coverage',
+      ],
+      scenarioProfiles: {
+        core: ['smoke', 'feature-coverage'],
+        frontend: ['smoke'],
+        desktop: ['smoke'],
+        backend: ['smoke', 'traceability'],
+        businessCost: ['business-guardrails'],
+        security: ['redaction'],
+        performance: ['normal-performance'],
+        extreme: ['extreme-performance'],
+        release: ['traceability', 'redaction', 'business-guardrails', 'smoke', 'feature-coverage', 'normal-performance', 'extreme-performance', 'knowledge'],
+      },
       reportFormat: 'html',
       baselinePolicy: 'agent-initialized average baseline; user may override; agent ratchet may only tighten thresholds',
       projectBaseline: {
@@ -155,64 +215,72 @@ function defaultQualityConfig() {
       enabled: true,
       skillGenerationRequiredFor: ['repeated-issue', 'high-impact-fix', 'hidden-debug-knowledge', 'agent-misjudgment'],
       skillDir: '.openprd/knowledge/skills',
+      candidateDir: '.openprd/knowledge/candidates',
+      draftDir: '.openprd/knowledge/drafts',
       abstractionRequired: true,
+    },
+  };
+}
+
+function normalizeQualityConfig(config = {}) {
+  const defaults = defaultQualityConfig();
+  return {
+    ...defaults,
+    ...config,
+    observability: {
+      ...defaults.observability,
+      ...(config.observability ?? {}),
+    },
+    evalHarness: {
+      ...defaults.evalHarness,
+      ...(config.evalHarness ?? {}),
+      scenarioProfiles: {
+        ...defaults.evalHarness.scenarioProfiles,
+        ...(config.evalHarness?.scenarioProfiles ?? {}),
+      },
+      projectBaseline: {
+        ...defaults.evalHarness.projectBaseline,
+        ...(config.evalHarness?.projectBaseline ?? {}),
+        normal: {
+          ...defaults.evalHarness.projectBaseline.normal,
+          ...(config.evalHarness?.projectBaseline?.normal ?? {}),
+        },
+        extreme: {
+          ...defaults.evalHarness.projectBaseline.extreme,
+          ...(config.evalHarness?.projectBaseline?.extreme ?? {}),
+        },
+      },
+    },
+    businessGuardrails: {
+      ...defaults.businessGuardrails,
+      ...(config.businessGuardrails ?? {}),
+      requiredEvidence: {
+        ...defaults.businessGuardrails.requiredEvidence,
+        ...(config.businessGuardrails?.requiredEvidence ?? {}),
+      },
+    },
+    knowledge: {
+      ...defaults.knowledge,
+      ...(config.knowledge ?? {}),
     },
   };
 }
 
 async function ensureQualityDirs(projectRoot) {
   await fs.mkdir(qualityPath(projectRoot, QUALITY_REPORTS_DIR), { recursive: true });
-  await fs.mkdir(qualityPath(projectRoot, cjoin(KNOWLEDGE_DIR, 'incidents')), { recursive: true });
-  await fs.mkdir(qualityPath(projectRoot, cjoin(KNOWLEDGE_DIR, 'patterns')), { recursive: true });
-  await fs.mkdir(qualityPath(projectRoot, cjoin(KNOWLEDGE_DIR, 'skills')), { recursive: true });
+  await ensureKnowledgeWorkspace(projectRoot);
 }
 
 async function mergeQualityConfig(projectRoot, options = {}) {
   await ensureQualityDirs(projectRoot);
   const configPath = qualityPath(projectRoot, QUALITY_CONFIG);
   const current = await readJson(configPath).catch(() => null);
-  const next = {
-    ...defaultQualityConfig(),
-    ...(current ?? {}),
-    updatedAt: timestamp(),
-    observability: {
-      ...defaultQualityConfig().observability,
-      ...(current?.observability ?? {}),
-    },
-    evalHarness: {
-      ...defaultQualityConfig().evalHarness,
-      ...(current?.evalHarness ?? {}),
-      projectBaseline: {
-        ...defaultQualityConfig().evalHarness.projectBaseline,
-        ...(current?.evalHarness?.projectBaseline ?? {}),
-        normal: {
-          ...defaultQualityConfig().evalHarness.projectBaseline.normal,
-          ...(current?.evalHarness?.projectBaseline?.normal ?? {}),
-        },
-        extreme: {
-          ...defaultQualityConfig().evalHarness.projectBaseline.extreme,
-          ...(current?.evalHarness?.projectBaseline?.extreme ?? {}),
-        },
-      },
-    },
-    businessGuardrails: {
-      ...defaultQualityConfig().businessGuardrails,
-      ...(current?.businessGuardrails ?? {}),
-      requiredEvidence: {
-        ...defaultQualityConfig().businessGuardrails.requiredEvidence,
-        ...(current?.businessGuardrails?.requiredEvidence ?? {}),
-      },
-    },
-    knowledge: {
-      ...defaultQualityConfig().knowledge,
-      ...(current?.knowledge ?? {}),
-    },
-  };
+  const next = normalizeQualityConfig({ ...(current ?? {}), updatedAt: timestamp() });
   if (options.force || current === null) {
     await writeJson(configPath, next);
     return { config: next, changed: current === null ? 'created' : 'updated' };
   }
-  return { config: current, changed: 'unchanged' };
+  return { config: next, changed: 'unchanged' };
 }
 
 async function walkProject(projectRoot, dir = projectRoot, collected = []) {
@@ -256,6 +324,65 @@ async function readProjectTexts(projectRoot, files) {
   return texts;
 }
 
+async function collectEvidenceFile(projectRoot, source, fullPath, collected) {
+  if (collected.length >= 120) {
+    return;
+  }
+  const stat = await fs.stat(fullPath).catch(() => null);
+  if (!stat || !stat.isFile() || stat.size > 512 * 1024) {
+    return;
+  }
+  const ext = path.extname(fullPath);
+  if (!EVIDENCE_EXTENSIONS.has(ext)) {
+    return;
+  }
+  const text = await readText(fullPath).catch(() => '');
+  collected.push({
+    path: path.relative(projectRoot, fullPath),
+    source,
+    size: stat.size,
+    text: text.slice(0, 120000),
+  });
+}
+
+async function walkEvidenceSource(projectRoot, source, dir, collected) {
+  if (collected.length >= 120) {
+    return;
+  }
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const fullPath = cjoin(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (['.git', 'node_modules', '.next', 'dist', 'build'].includes(entry.name)) {
+        continue;
+      }
+      await walkEvidenceSource(projectRoot, source, fullPath, collected);
+      continue;
+    }
+    await collectEvidenceFile(projectRoot, source, fullPath, collected);
+  }
+}
+
+async function readEvidenceFiles(projectRoot, config) {
+  const sources = Array.isArray(config.evalHarness.evidenceSources)
+    ? config.evalHarness.evidenceSources
+    : defaultQualityConfig().evalHarness.evidenceSources;
+  const collected = [];
+  for (const source of sources) {
+    const fullPath = cjoin(projectRoot, source);
+    const stat = await fs.stat(fullPath).catch(() => null);
+    if (!stat) {
+      continue;
+    }
+    if (stat.isDirectory()) {
+      await walkEvidenceSource(projectRoot, source, fullPath, collected);
+    } else {
+      await collectEvidenceFile(projectRoot, source, fullPath, collected);
+    }
+  }
+  return collected;
+}
+
 function packageSignals(packageJson) {
   const scripts = packageJson?.scripts ?? {};
   const dependencies = {
@@ -270,6 +397,201 @@ function packageSignals(packageJson) {
 function includesAny(text, tokens) {
   const normalized = String(text ?? '').toLowerCase();
   return tokens.some((token) => normalized.includes(token.toLowerCase()));
+}
+
+async function readActiveChangeContext(projectRoot, activeChange) {
+  if (!activeChange) {
+    return { activeChange: null, files: [], text: '' };
+  }
+  const roots = [
+    cjoin('openprd', 'changes', activeChange),
+    cjoin('openspec', 'changes', activeChange),
+  ];
+  const files = [];
+  async function walk(root, dir) {
+    if (files.length >= 80) {
+      return;
+    }
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const fullPath = cjoin(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(root, fullPath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      const ext = path.extname(entry.name);
+      if (!['.md', '.json', '.yaml', '.yml', '.txt'].includes(ext)) {
+        continue;
+      }
+      const stat = await fs.stat(fullPath).catch(() => null);
+      if (!stat || stat.size > 512 * 1024) {
+        continue;
+      }
+      const text = await readText(fullPath).catch(() => '');
+      files.push({
+        path: path.relative(projectRoot, fullPath),
+        text: text.slice(0, 120000),
+      });
+    }
+  }
+  for (const root of roots) {
+    await walk(root, cjoin(projectRoot, root));
+  }
+  return {
+    activeChange,
+    files,
+    text: files.map((file) => `# ${file.path}\n${file.text}`).join('\n'),
+  };
+}
+
+function detectScenarioTags({ activeChangeContext, activeTasks, businessGuardrails }) {
+  const haystack = [
+    activeChangeContext.text,
+    activeChangeContext.files.map((file) => file.path).join('\n'),
+    activeTasks.tasks.map((task) => task.title).join('\n'),
+  ].join('\n');
+  const tags = new Set(['core']);
+  if (includesAny(haystack, ['frontend', 'user interface', 'ui screen', 'ui flow', 'screen', 'component', 'modal', 'button', 'form field', 'stylesheet', '.css', '.tsx', '.jsx', '文案', '界面', '前端', '交互', '页面', '组件', '国际化', 'i18n'])) {
+    tags.add('frontend');
+  }
+  if (includesAny(haystack, ['electron', 'desktop', 'preload', 'main process', 'renderer', 'macos', 'windows', '桌面端', '客户端'])) {
+    tags.add('desktop');
+  }
+  if (includesAny(haystack, ['backend service', 'api endpoint', 'api route', 'http api', 'server route', 'request handler', 'worker', 'database', 'migration', 'queue', '后端接口', '后端服务', '服务端', '数据库', '队列'])) {
+    tags.add('backend');
+  }
+  if (businessGuardrails.riskDetected || includesAny(haystack, ['free tier', 'quota', 'rate limit', 'billing', 'cost', 'token', 'third-party api', 'ai generation', '免费', '额度', '限流', '成本', '用量', '第三方', '模型调用'])) {
+    tags.add('businessCost');
+  }
+  if (includesAny(haystack, ['auth', 'permission', 'privacy', 'secret', 'token', 'credential', 'redaction', 'pii', '安全', '权限', '隐私', '凭证', '脱敏', '敏感'])) {
+    tags.add('security');
+  }
+  if (includesAny(haystack, ['performance', 'latency', 'p95', 'benchmark', 'lighthouse', 'load time', '性能', '耗时', '延迟', '基线'])) {
+    tags.add('performance');
+  }
+  if (includesAny(haystack, ['extreme', 'stress', 'load test', 'large-data', 'batch', 'concurrency', 'pressure', '极端', '压力', '大数据', '批量', '并发'])) {
+    tags.add('extreme');
+  }
+  if (includesAny(haystack, ['release', 'publish', 'deploy', 'production rollout', 'production release', 'go-live', '上线', '发布', '部署', '投产'])) {
+    tags.add('release');
+  }
+  return [...tags];
+}
+
+function buildQualityPolicy({ config, activeChangeContext, activeTasks, businessGuardrails }) {
+  const scenarioTags = detectScenarioTags({ activeChangeContext, activeTasks, businessGuardrails });
+  const profiles = config.evalHarness.scenarioProfiles ?? defaultQualityConfig().evalHarness.scenarioProfiles;
+  const required = new Set();
+  for (const tag of scenarioTags) {
+    for (const gate of profiles[tag] ?? []) {
+      required.add(gate);
+    }
+  }
+  if (businessGuardrails.riskDetected) {
+    required.add('business-guardrails');
+  }
+  if (!config.evalHarness.smokeRequired) {
+    required.delete('smoke');
+  }
+  if (!config.evalHarness.featureCoverageRequired) {
+    required.delete('feature-coverage');
+  }
+  if (!config.evalHarness.normalPerformanceRequired) {
+    required.delete('normal-performance');
+  }
+  if (!config.evalHarness.extremePerformanceRequired) {
+    required.delete('extreme-performance');
+  }
+  if (!config.knowledge.enabled) {
+    required.delete('knowledge');
+  }
+  return {
+    scenarioTags,
+    requiredGates: QUALITY_GATE_IDS.filter((gate) => required.has(gate)),
+    optionalGates: QUALITY_GATE_IDS.filter((gate) => !required.has(gate)),
+    evidenceRequired: config.evalHarness.currentEvidenceRequired !== false,
+  };
+}
+
+function buildEvidenceLedger({ evidenceFiles, activeTasks, observability, businessGuardrails, knowledge }) {
+  const ledger = Object.fromEntries(QUALITY_GATE_IDS.map((gate) => {
+    const tokens = EVIDENCE_TOKENS[gate] ?? [];
+    const matches = evidenceFiles
+      .filter((file) => includesAny(`${file.path}\n${file.text}`, tokens))
+      .slice(0, 12)
+      .map((file) => ({ path: file.path, source: file.source }));
+    return [gate, {
+      present: matches.length > 0,
+      sources: matches,
+      summary: matches.length > 0 ? `${matches.length} 个证据文件` : '未找到本次执行证据',
+    }];
+  }));
+
+  if (activeTasks.total === 0 || activeTasks.pending === 0) {
+    ledger['feature-coverage'] = {
+      ...ledger['feature-coverage'],
+      present: true,
+      sources: [
+        ...ledger['feature-coverage'].sources,
+        { path: activeTasks.activeChange ? `${activeTasks.activeChange}/tasks.md` : 'no-active-change', source: 'openprd-tasks' },
+      ].slice(0, 12),
+      summary: activeTasks.total === 0 ? '当前没有激活任务清单' : `任务清单已完成 ${activeTasks.done}/${activeTasks.total}`,
+    };
+  }
+  if (observability.status === 'pass') {
+    const observabilitySignals = [
+      ...observability.centralizedTools,
+      ...(observability.diagnosticSurfaces ?? []),
+    ];
+    ledger.traceability = {
+      ...ledger.traceability,
+      present: true,
+      sources: [
+        ...ledger.traceability.sources,
+        { path: 'project-observability-signals', source: observabilitySignals.join(', ') || 'observability' },
+      ].slice(0, 12),
+      summary: `检测到 ${observability.correlationFields.length} 个链路关联字段${observability.diagnosticSurfaces?.length ? `；诊断面: ${observability.diagnosticSurfaces.join(', ')}` : ''}`,
+    };
+  }
+  if (!businessGuardrails.riskDetected || businessGuardrails.status === 'pass') {
+    ledger['business-guardrails'] = {
+      ...ledger['business-guardrails'],
+      present: true,
+      sources: [
+        ...ledger['business-guardrails'].sources,
+        { path: businessGuardrails.riskDetected ? 'business-guardrails-evidence' : 'no-cost-risk-detected', source: 'project-scan' },
+      ].slice(0, 12),
+      summary: businessGuardrails.riskDetected ? '成本与滥用护栏证据完整' : '当前场景未检测到成本风险',
+    };
+  }
+  if (knowledge.skills.length > 0) {
+    ledger.knowledge = {
+      ...ledger.knowledge,
+      present: true,
+      sources: [
+        ...ledger.knowledge.sources,
+        ...knowledge.skills.slice(0, 6).map((skill) => ({ path: skill, source: 'openprd-knowledge' })),
+        ...knowledge.candidates.slice(0, 3).map((candidate) => ({ path: candidate, source: 'openprd-knowledge-candidate' })),
+      ].slice(0, 12),
+      summary: knowledge.candidates.length > 0
+        ? `已有 ${knowledge.skills.length} 个项目经验 Skill，另有 ${knowledge.candidates.length} 个待确认 candidate`
+        : `已有 ${knowledge.skills.length} 个项目经验 Skill`,
+    };
+  } else if (knowledge.candidates.length > 0) {
+    ledger.knowledge = {
+      ...ledger.knowledge,
+      present: true,
+      sources: [
+        ...ledger.knowledge.sources,
+        ...knowledge.candidates.slice(0, 6).map((candidate) => ({ path: candidate, source: 'openprd-knowledge-candidate' })),
+      ].slice(0, 12),
+      summary: `已有 ${knowledge.candidates.length} 个待确认 knowledge candidate`,
+    };
+  }
+  return ledger;
 }
 
 function detectObservability({ config, files, texts, packageJson }) {
@@ -293,6 +615,14 @@ function detectObservability({ config, files, texts, packageJson }) {
     'cloudwatch',
     'azure monitor',
   ].filter((token) => includesAny(haystack, [token]));
+  const diagnosticSurfaces = [
+    { id: 'runtime-events', tokens: ['runtime-events', 'appendruntimeevent', 'events.jsonl', 'runtime event'] },
+    { id: 'timeline', tokens: ['timeline', 'event timeline', 'diagnostic timeline'] },
+    { id: 'root-cause-candidates', tokens: ['root-cause-candidates', 'root cause candidate', 'root cause'] },
+    { id: 'diagnostic-report', tokens: ['diagnostic-report', 'framework-runtime-diagnostics', 'exportdiagnostics', 'export diagnostics'] },
+  ]
+    .filter((surface) => includesAny(haystack, surface.tokens))
+    .map((surface) => surface.id);
   const localLoggers = ['pino', 'winston', 'bunyan', 'log4js', 'console.'].filter((token) => includesAny(haystack, [token]));
   const correlationFields = config.observability.requiredCorrelationFields
     .filter((field) => includesAny(haystack, [field, field.replace(/_/g, ''), field.replace(/_id$/, 'Id')]));
@@ -302,10 +632,10 @@ function detectObservability({ config, files, texts, packageJson }) {
     agent: files.some((file) => /(agent|harness|tool|skill|prompt|workflow)/i.test(file.path)),
   };
   const warnings = [];
-  if (centralizedTools.length === 0) {
+  if (centralizedTools.length === 0 && diagnosticSurfaces.length === 0) {
     warnings.push('未检测到中心化日志/追踪/错误系统依赖或配置；需要确认是否由平台层统一提供。');
   }
-  if (localLoggers.length > 0 && centralizedTools.length === 0) {
+  if (localLoggers.length > 0 && centralizedTools.length === 0 && diagnosticSurfaces.length === 0) {
     warnings.push('检测到本地日志调用，但未看到中心化采集出口。');
   }
   const missingCorrelation = config.observability.requiredCorrelationFields.filter((field) => !correlationFields.includes(field));
@@ -313,8 +643,9 @@ function detectObservability({ config, files, texts, packageJson }) {
     warnings.push(`链路关联字段缺失或未显式出现: ${missingCorrelation.join(', ')}。`);
   }
   return {
-    status: centralizedTools.length > 0 && missingCorrelation.length === 0 ? 'pass' : 'needs-attention',
+    status: (centralizedTools.length > 0 || diagnosticSurfaces.length > 0) && missingCorrelation.length === 0 ? 'pass' : 'needs-attention',
     centralizedTools,
+    diagnosticSurfaces,
     localLoggers,
     correlationFields,
     missingCorrelation,
@@ -324,7 +655,8 @@ function detectObservability({ config, files, texts, packageJson }) {
     recommendations: [
       '为前端交互、后端入口、异步任务、Agent 工具调用统一注入 trace/request/task/error 关联字段。',
       '错误日志必须能回查用户会话、任务、请求、下游调用和异常栈，敏感字段默认脱敏。',
-      '每个新增功能在实现阶段都要自评是否需要新增结构化日志或查询样例。',
+      '关键路径默认沉淀 runtime-events、timeline、root-cause-candidates、diagnostic-report 四类诊断证据。',
+      '每个新增功能在实现阶段都要自评是否需要新增结构化日志、查询样例或诊断导出入口。',
     ],
     warnings,
   };
@@ -513,8 +845,18 @@ async function listKnowledgeFiles(projectRoot) {
 
 function detectKnowledge({ config, knowledgeFiles }) {
   const skillDir = config.knowledge.skillDir ?? '.openprd/knowledge/skills';
+  const candidateDir = config.knowledge.candidateDir ?? KNOWLEDGE_CANDIDATES_DIR;
+  const draftDir = config.knowledge.draftDir ?? KNOWLEDGE_DRAFTS_DIR;
   const skills = knowledgeFiles
     .filter((file) => file.path.startsWith(skillDir.replace(/\//g, path.sep)) || file.path.startsWith(skillDir))
+    .filter((file) => file.path.endsWith('SKILL.md'))
+    .map((file) => file.path);
+  const candidates = knowledgeFiles
+    .filter((file) => file.path.startsWith(candidateDir.replace(/\//g, path.sep)) || file.path.startsWith(candidateDir))
+    .filter((file) => file.path.endsWith('candidate.json'))
+    .map((file) => file.path);
+  const drafts = knowledgeFiles
+    .filter((file) => file.path.startsWith(draftDir.replace(/\//g, path.sep)) || file.path.startsWith(draftDir))
     .filter((file) => file.path.endsWith('SKILL.md'))
     .map((file) => file.path);
   const incidents = knowledgeFiles.filter((file) => /\.openprd[\\/]knowledge[\\/]incidents[\\/].+\.json$/.test(file.path));
@@ -522,11 +864,18 @@ function detectKnowledge({ config, knowledgeFiles }) {
   if (config.knowledge.enabled && skills.length === 0) {
     warnings.push('项目级经验 skill 库尚为空；首次问题修复后应沉淀抽象经验。');
   }
+  if (config.knowledge.enabled && candidates.length > 0) {
+    warnings.push(`当前有 ${candidates.length} 个待确认 knowledge candidate；本轮收工前应决定是否 promote 为正式项目经验。`);
+  }
   return {
     status: !config.knowledge.enabled || skills.length > 0 ? 'pass' : 'needs-attention',
     enabled: config.knowledge.enabled,
     skillDir,
+    candidateDir,
+    draftDir,
     skills,
+    candidates,
+    drafts,
     incidents: incidents.map((file) => file.path),
     recommendations: [
       '每次问题修复后记录症状、排查路径、根因模式、修复方式、验证证据和下次触发条件。',
@@ -537,16 +886,95 @@ function detectKnowledge({ config, knowledgeFiles }) {
   };
 }
 
-function buildGates({ observability, evalHarness, businessGuardrails, knowledge }) {
+function buildGate({ id, label, baseStatus, baseWarnings, policy, evidenceLedger }) {
+  const required = policy.requiredGates.includes(id);
+  const evidence = evidenceLedger[id] ?? { present: false, sources: [], summary: '未找到本次执行证据' };
+  let status = baseStatus;
+  const warnings = [...baseWarnings];
+  if (!required && status !== 'pass') {
+    status = 'advisory';
+    warnings.push('当前场景未要求阻断此门禁；若准备发布或该风险进入范围，需要补齐证据。');
+  }
+  if (required && policy.evidenceRequired && status === 'pass' && !evidence.present) {
+    status = 'needs-evidence';
+    warnings.push('当前场景要求此门禁，但未找到本次执行或明确豁免证据。');
+  }
+  return {
+    id,
+    label,
+    status,
+    required,
+    evidence,
+    warnings,
+  };
+}
+
+function buildGates({ observability, evalHarness, businessGuardrails, knowledge, policy, evidenceLedger }) {
   return [
-    { id: 'traceability', label: '日志链路可追踪', status: observability.status, warnings: observability.warnings },
-    { id: 'redaction', label: '日志脱敏策略', status: observability.redactionRequired ? 'needs-evidence' : 'needs-attention', warnings: ['需要在项目文档或平台配置中确认敏感字段脱敏策略。'] },
-    { id: 'business-guardrails', label: '业务成本与滥用护栏', status: businessGuardrails.status, warnings: businessGuardrails.warnings },
-    { id: 'smoke', label: '冒烟测试体系', status: evalHarness.smoke.present ? 'pass' : 'needs-attention', warnings: evalHarness.smoke.present ? [] : ['缺少冒烟/e2e 证据。'] },
-    { id: 'feature-coverage', label: '任务与功能覆盖', status: evalHarness.featureCoverage.activeTasks.pending === 0 ? 'pass' : 'needs-attention', warnings: evalHarness.featureCoverage.activeTasks.pending === 0 ? [] : ['仍有未完成任务或缺少任务覆盖证据。'] },
-    { id: 'normal-performance', label: '正常性能基线', status: evalHarness.performance.present ? 'needs-evidence' : 'needs-attention', warnings: evalHarness.performance.present ? ['检测到性能命令，需要填充本次运行指标。'] : ['缺少性能测试命令。'] },
-    { id: 'extreme-performance', label: '极端场景压力', status: evalHarness.extremeData.present ? 'needs-evidence' : 'needs-attention', warnings: evalHarness.extremeData.present ? ['检测到极端数据，需要填充压力测试运行结果。'] : ['缺少极端数据或压力场景。'] },
-    { id: 'knowledge', label: '经验 Skill 沉淀', status: knowledge.status, warnings: knowledge.warnings },
+    buildGate({
+      id: 'traceability',
+      label: '日志链路可追踪',
+      baseStatus: observability.status,
+      baseWarnings: observability.warnings,
+      policy,
+      evidenceLedger,
+    }),
+    buildGate({
+      id: 'redaction',
+      label: '日志脱敏策略',
+      baseStatus: observability.redactionRequired ? (evidenceLedger.redaction?.present ? 'pass' : 'needs-evidence') : 'pass',
+      baseWarnings: observability.redactionRequired ? ['需要在项目文档、平台配置或本次测试证据中确认敏感字段脱敏策略。'] : [],
+      policy,
+      evidenceLedger,
+    }),
+    buildGate({
+      id: 'business-guardrails',
+      label: '业务成本与滥用护栏',
+      baseStatus: businessGuardrails.status,
+      baseWarnings: businessGuardrails.warnings,
+      policy,
+      evidenceLedger,
+    }),
+    buildGate({
+      id: 'smoke',
+      label: '冒烟测试体系',
+      baseStatus: evalHarness.smoke.present ? 'pass' : 'needs-attention',
+      baseWarnings: evalHarness.smoke.present ? [] : ['缺少冒烟/e2e 体系或本次冒烟验证入口。'],
+      policy,
+      evidenceLedger,
+    }),
+    buildGate({
+      id: 'feature-coverage',
+      label: '任务与功能覆盖',
+      baseStatus: evalHarness.featureCoverage.activeTasks.pending === 0 ? 'pass' : 'needs-attention',
+      baseWarnings: evalHarness.featureCoverage.activeTasks.pending === 0 ? [] : ['仍有未完成任务或缺少任务覆盖证据。'],
+      policy,
+      evidenceLedger,
+    }),
+    buildGate({
+      id: 'normal-performance',
+      label: '正常性能基线',
+      baseStatus: evalHarness.performance.present ? 'pass' : 'needs-attention',
+      baseWarnings: evalHarness.performance.present ? [] : ['缺少性能测试命令或正常性能基线证据。'],
+      policy,
+      evidenceLedger,
+    }),
+    buildGate({
+      id: 'extreme-performance',
+      label: '极端场景压力',
+      baseStatus: evalHarness.extremeData.present ? 'pass' : 'needs-attention',
+      baseWarnings: evalHarness.extremeData.present ? [] : ['缺少极端数据或压力场景。'],
+      policy,
+      evidenceLedger,
+    }),
+    buildGate({
+      id: 'knowledge',
+      label: '经验 Skill 沉淀',
+      baseStatus: knowledge.status,
+      baseWarnings: knowledge.warnings,
+      policy,
+      evidenceLedger,
+    }),
   ];
 }
 
@@ -556,16 +984,21 @@ async function loadPackageJson(projectRoot) {
 
 async function buildQualityReport(projectRoot, config) {
   const id = reportId();
+  const normalizedConfig = normalizeQualityConfig(config);
   const files = await walkProject(projectRoot);
   const texts = await readProjectTexts(projectRoot, files);
   const packageJson = await loadPackageJson(projectRoot);
   const activeTasks = await readActiveTasks(projectRoot);
+  const activeChangeContext = await readActiveChangeContext(projectRoot, activeTasks.activeChange);
+  const evidenceFiles = await readEvidenceFiles(projectRoot, normalizedConfig);
   const knowledgeFiles = await listKnowledgeFiles(projectRoot);
-  const observability = detectObservability({ config, files, texts, packageJson });
-  const evalHarness = detectEvalHarness({ config, files, texts, packageJson, activeTasks });
-  const businessGuardrails = detectBusinessGuardrails({ config, files, texts, packageJson });
-  const knowledge = detectKnowledge({ config, knowledgeFiles });
-  const gates = buildGates({ observability, evalHarness, businessGuardrails, knowledge });
+  const observability = detectObservability({ config: normalizedConfig, files, texts, packageJson });
+  const evalHarness = detectEvalHarness({ config: normalizedConfig, files, texts, packageJson, activeTasks });
+  const businessGuardrails = detectBusinessGuardrails({ config: normalizedConfig, files, texts, packageJson });
+  const knowledge = detectKnowledge({ config: normalizedConfig, knowledgeFiles });
+  const policy = buildQualityPolicy({ config: normalizedConfig, activeChangeContext, activeTasks, businessGuardrails });
+  const evidenceLedger = buildEvidenceLedger({ evidenceFiles, activeTasks, observability, businessGuardrails, knowledge });
+  const gates = buildGates({ observability, evalHarness, businessGuardrails, knowledge, policy, evidenceLedger });
   const blockingStatuses = new Set(['fail']);
   const attentionStatuses = new Set(['needs-attention', 'needs-evidence']);
   const readiness = {
@@ -574,6 +1007,10 @@ async function buildQualityReport(projectRoot, config) {
     enforcement: config.enforcement,
     failingGates: gates.filter((gate) => blockingStatuses.has(gate.status)).map((gate) => gate.id),
     attentionGates: gates.filter((gate) => attentionStatuses.has(gate.status)).map((gate) => gate.id),
+  };
+  evalHarness.executionEvidence = {
+    sources: evidenceFiles.map((file) => ({ path: file.path, source: file.source, size: file.size })).slice(0, 120),
+    ledger: Object.fromEntries(['smoke', 'feature-coverage', 'normal-performance', 'extreme-performance'].map((gate) => [gate, evidenceLedger[gate]])),
   };
   return {
     version: 1,
@@ -589,12 +1026,14 @@ async function buildQualityReport(projectRoot, config) {
       attentionCount: readiness.attentionGates.length,
     },
     readiness,
+    qualityPolicy: policy,
+    evidenceLedger,
     gates,
     observability,
     evalHarness,
     businessGuardrails,
     knowledge,
-    configSnapshot: config,
+    configSnapshot: normalizedConfig,
   };
 }
 
@@ -622,76 +1061,19 @@ async function writeReport(projectRoot, report) {
   return { jsonPath, htmlPath, indexPath };
 }
 
-async function resolveReportPath(projectRoot, from) {
-  if (from) {
-    const direct = path.isAbsolute(from) ? from : cjoin(projectRoot, from);
-    if (await exists(direct)) {
-      return direct;
-    }
-    const asId = qualityPath(projectRoot, cjoin(QUALITY_REPORTS_DIR, `${from}.json`));
-    if (await exists(asId)) {
-      return asId;
-    }
-  }
-  const latest = await readJson(qualityPath(projectRoot, QUALITY_LATEST)).catch(() => null);
-  return latest?.jsonPath ?? null;
-}
-
-function slugify(value, fallback = 'skill') {
-  const slug = String(value ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-  return slug || fallback;
-}
-
-function renderExperienceSkill({ skillName, report }) {
-  const attention = report.readiness.attentionGates.join(', ') || '无';
-  return `---
-name: ${skillName}
-description: 由 OpenPrd 质量审查 ${report.id} 生成的项目级经验 Skill。适用于再次出现类似可观测性、业务护栏、评估执行环境、性能或复发预防缺口的场景。
----
-
-# ${skillName}
-
-## 触发条件
-
-- 某项任务改动了前端、后端、agent 工作流或错误处理行为。
-- 这次变更缺少日志关联、业务成本与滥用护栏、冒烟覆盖、性能证据，或已经出现重复问题模式。
-- 最近一次质量报告的关注门禁包括：${attention}。
-
-## 先看什么
-
-- 先阅读 \`.openprd/quality/reports/\` 下最新的 HTML 质量评估报告。
-- 检查日志能否把前端动作、后端请求、agent 任务、下游调用和 error id 串起来。
-- 检查是否存在业务护栏、冒烟测试、任务覆盖、正常性能和极端数据证据。
-
-## 根因模式
-
-质量回退反复出现，通常是因为实现证据被分散维护：日志缺少共享 id，消耗型成本路径缺少额度和止损，测试只覆盖顺路径，性能阈值没有显式化，已修复问题也没有抽象成可复用的项目知识。
-
-## 修复策略
-
-- 只在确实能改善后续诊断的地方新增或更新结构化日志。
-- 对免费、试用、额度、AI 调用或第三方成本路径补齐限制、负向验证、监控、报警和止损动作。
-- 在扩大测试覆盖前，先补最小可用的 smoke / e2e 路径。
-- 结合项目基线记录正常和极端性能证据。
-- 把重复或高影响修复沉淀成带触发条件和验证步骤的项目 Skill。
-
-## 验证方式
-
-- 运行 \`openprd quality . --verify\` 并打开生成的 HTML 报告。
-- 确认所有关注门禁都有证据、已接受的例外，或明确的后续任务。
-- 重新执行任务级 verify 命令，并把证据路径保留在报告里。
-`;
-}
-
 export async function initQualityWorkspace(projectRoot, options = {}) {
   const { config, changed } = await mergeQualityConfig(projectRoot, { force: Boolean(options.force) });
   const knowledgeIndexPath = qualityPath(projectRoot, KNOWLEDGE_INDEX);
   if (!(await exists(knowledgeIndexPath))) {
-    await writeJson(knowledgeIndexPath, { version: 1, updatedAt: timestamp(), incidents: [], patterns: [], skills: [] });
+    await writeJson(knowledgeIndexPath, {
+      version: 1,
+      updatedAt: timestamp(),
+      incidents: [],
+      patterns: [],
+      skills: [],
+      candidates: [],
+      drafts: [],
+    });
   }
   return {
     ok: true,
@@ -717,11 +1099,33 @@ export async function verifyQualityWorkspace(projectRoot, options = {}) {
       errors: [`${QUALITY_CONFIG} is required. Run: openprd quality . --init`],
     };
   }
-  const config = await readJson(configPath);
+  const config = normalizeQualityConfig(await readJson(configPath));
   await ensureQualityDirs(projectRoot);
   const report = await buildQualityReport(projectRoot, config);
   const paths = await writeReport(projectRoot, report);
-  const blocking = config.enforcement === 'blocking' && !report.readiness.productionReady;
+  const knowledgeSignal = {
+    kind: 'quality-verify',
+    ok: report.readiness.productionReady,
+    productionReady: report.readiness.productionReady,
+    attentionGates: report.readiness.attentionGates,
+    summary: `quality ${report.summary.status}`,
+  };
+  await recordKnowledgeReviewSignal(projectRoot, knowledgeSignal).catch(() => null);
+  const reviewSource = (await exists(qualityPath(projectRoot, OPENPRD_HARNESS_TURN_STATE)))
+    ? OPENPRD_HARNESS_TURN_STATE
+    : paths.jsonPath;
+  const knowledgeReview = await reviewKnowledgeWorkspace(projectRoot, {
+    from: reviewSource,
+    signal: knowledgeSignal,
+    requiredCorrelationFields: config.observability.requiredCorrelationFields,
+  }).catch((error) => ({
+    ok: false,
+    action: 'quality-knowledge-review',
+    skipped: false,
+    errors: [error instanceof Error ? error.message : String(error)],
+  }));
+  const strict = options.strict === true;
+  const blocking = (strict || config.enforcement === 'blocking') && !report.readiness.productionReady;
   return {
     ok: !blocking,
     action: 'quality-verify',
@@ -730,25 +1134,31 @@ export async function verifyQualityWorkspace(projectRoot, options = {}) {
     reportPath: paths.jsonPath,
     htmlPath: paths.htmlPath,
     indexPath: paths.indexPath,
-    errors: blocking ? ['Quality enforcement is blocking and one or more gates need attention.'] : [],
+    knowledgeReview,
+    errors: blocking ? ['Quality readiness is not production-ready; one or more required gates need evidence or attention.'] : [],
   };
 }
 
 export async function learnQualityWorkspace(projectRoot, options = {}) {
   await ensureQualityDirs(projectRoot);
-  const sourcePath = await resolveReportPath(projectRoot, options.from);
-  if (!sourcePath) {
+  const configPath = qualityPath(projectRoot, QUALITY_CONFIG);
+  const config = normalizeQualityConfig(await readJson(configPath).catch(() => defaultQualityConfig()));
+  const latest = await readJson(qualityPath(projectRoot, QUALITY_LATEST)).catch(() => null);
+  const resolved = await resolveQualityLearningSource(projectRoot, {
+    from: options.from,
+    latestReportPath: latest?.jsonPath ?? null,
+    requiredCorrelationFields: config.observability.requiredCorrelationFields,
+  });
+  if (!resolved.ok) {
     return {
       ok: false,
       action: 'quality-learn',
       projectRoot,
-      errors: ['No quality report found. Run: openprd quality . --verify'],
+      errors: [resolved.error],
     };
   }
-  const report = await readJson(sourcePath);
-  const incidentId = `incident-${report.id}`;
-  const patternId = `quality-${slugify(report.summary?.status ?? report.id)}`;
-  const skillName = `openprd-experience-${slugify(patternId)}`;
+  const source = resolved.source;
+  const { incidentId, patternId, skillName } = deriveKnowledgeNames(source);
   const incidentPath = qualityPath(projectRoot, cjoin(KNOWLEDGE_DIR, 'incidents', `${incidentId}.json`));
   const patternPath = qualityPath(projectRoot, cjoin(KNOWLEDGE_DIR, 'patterns', `${patternId}.json`));
   const skillDir = qualityPath(projectRoot, cjoin(KNOWLEDGE_DIR, 'skills', skillName));
@@ -756,45 +1166,72 @@ export async function learnQualityWorkspace(projectRoot, options = {}) {
   await writeJson(incidentPath, {
     version: 1,
     incidentId,
-    sourceReportId: report.id,
-    sourceReportPath: sourcePath,
+    sourceKind: source.kind,
+    sourceRef: source.sourceId,
+    sourcePath: source.sourcePath,
+    sourcePaths: source.sourcePaths,
     capturedAt: timestamp(),
-    status: report.summary?.status ?? 'unknown',
-    attentionGates: report.readiness?.attentionGates ?? [],
+    title: source.title,
+    status: source.status,
+    symptoms: source.symptoms,
+    attentionGates: source.attentionGates,
+    correlationFields: source.correlationFields,
+    extraContextFields: source.extraContextFields,
+    missingCorrelationFields: source.missingCorrelationFields,
+    eventNames: source.eventNames,
+    evidenceSources: source.evidenceSources,
+    rootCauseCandidates: source.rootCauseCandidates,
+    queryExamples: source.queryExamples,
     verification: {
       fixed: false,
       evidence: [],
+      recommendedSteps: source.verificationSteps,
     },
   });
   await writeJson(patternPath, {
     version: 1,
     patternId,
-    sourceReportId: report.id,
-    abstractPattern: '质量缺口反复出现，通常是因为可观测性、评估证据、性能基线和已修复经验被分散维护，没有进入同一套评审机制。',
-    triggers: report.readiness?.attentionGates ?? [],
-    prevention: [
-      '阶段性开发后运行质量验证。',
-      '声明就绪前先审阅 HTML 质量评估报告。',
-      '把重复或高影响修复沉淀为项目经验 Skill。',
-    ],
+    sourceKind: source.kind,
+    sourceRef: source.sourceId,
+    abstractPattern: source.abstractPattern,
+    triggers: source.triggers,
+    requiredCorrelationFields: source.correlationFields,
+    missingCorrelationFields: source.missingCorrelationFields,
+    preferredEvidenceOrder: source.evidenceSources.map((item) => item.kind),
+    keyEvents: source.eventNames,
+    rootCauseLabels: source.rootCauseCandidates.map((item) => item.title),
+    prevention: source.prevention,
+    verificationSteps: source.verificationSteps,
     updatedAt: timestamp(),
   });
-  await writeText(skillPath, renderExperienceSkill({ skillName, report }));
+  await writeText(skillPath, renderExperienceSkill({ skillName, source }));
   const indexPath = qualityPath(projectRoot, KNOWLEDGE_INDEX);
-  const index = await readJson(indexPath).catch(() => ({ version: 1, incidents: [], patterns: [], skills: [] }));
+  const index = await readJson(indexPath).catch(() => ({ version: 1, incidents: [], patterns: [], skills: [], candidates: [], drafts: [] }));
   const upsert = (items, key, value) => [value, ...(Array.isArray(items) ? items.filter((item) => item[key] !== value[key]) : [])].slice(0, 200);
   await writeJson(indexPath, {
     version: 1,
     updatedAt: timestamp(),
-    incidents: upsert(index.incidents, 'incidentId', { incidentId, path: incidentPath, sourceReportId: report.id }),
-    patterns: upsert(index.patterns, 'patternId', { patternId, path: patternPath, sourceReportId: report.id }),
-    skills: upsert(index.skills, 'skillName', { skillName, path: skillPath, sourceReportId: report.id }),
+    incidents: upsert(index.incidents, 'incidentId', { incidentId, path: incidentPath, sourceKind: source.kind, sourceRef: source.sourceId }),
+    patterns: upsert(index.patterns, 'patternId', { patternId, path: patternPath, sourceKind: source.kind, sourceRef: source.sourceId }),
+    skills: upsert(index.skills, 'skillName', { skillName, path: skillPath, sourceKind: source.kind, sourceRef: source.sourceId }),
+    candidates: Array.isArray(index.candidates) ? index.candidates : [],
+    drafts: Array.isArray(index.drafts) ? index.drafts : [],
   });
+  await markKnowledgeCandidatePromoted(projectRoot, {
+    sourcePath: source.sourcePath,
+    sourcePaths: source.sourcePaths,
+    skillPath,
+    incidentPath,
+    patternPath,
+  }).catch(() => null);
   return {
     ok: true,
     action: 'quality-learn',
     projectRoot,
-    sourceReportPath: sourcePath,
+    sourceKind: source.kind,
+    sourcePath: source.sourcePath,
+    sourcePaths: source.sourcePaths,
+    sourceReportPath: source.kind === 'quality-report' ? source.sourcePath : null,
     incidentId,
     patternId,
     skillName,
@@ -810,6 +1247,13 @@ export async function learnQualityWorkspace(projectRoot, options = {}) {
 export async function qualityWorkspace(projectRoot, options = {}) {
   if (options.init) {
     return initQualityWorkspace(projectRoot, options);
+  }
+  if (options.learn && options.review) {
+    const config = normalizeQualityConfig(await readJson(qualityPath(projectRoot, QUALITY_CONFIG)).catch(() => defaultQualityConfig()));
+    return reviewKnowledgeWorkspace(projectRoot, {
+      from: options.from,
+      requiredCorrelationFields: config.observability.requiredCorrelationFields,
+    });
   }
   if (options.learn) {
     return learnQualityWorkspace(projectRoot, options);

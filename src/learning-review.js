@@ -88,7 +88,7 @@ const STYLE_PROMPT_PACKS = {
       'teaching-brief': {
         id: 'teaching-brief',
         label: '教学型拆解',
-        concept: '把一次复盘写成能教会读者做产品与架构判断的短书：先讲问题和价值，再讲关键设计、取舍、原理、迁移方式与适用边界。',
+        concept: '把一次复盘写成能教会读者做产品与架构判断的短书：先讲问题和价值，再讲关键设计、取舍、原理、迁移方式与适用边界；必要时补一眼看懂的比喻卡和图文解释。',
         titlePatterns: [
           '《{topic}》设计判断课',
           '《{topic}》产品与架构学习手记',
@@ -106,6 +106,7 @@ const STYLE_PROMPT_PACKS = {
           '你是 OpenPrd 复盘学习包的教学型写作 Agent。',
           '你的目标是帮助读者学会产品设计思路、架构思路、关键原理和判断方法，而不是罗列技术点或文件清单。',
           '正文优先回答五件事：解决什么问题、为什么这样设计、这样设计换来了什么、付出了什么、何时适用或不适用。',
+          '如果目标读者偏产品、运营或非技术读者，优先补充“一眼看懂”的 visualExplainer，用具体场景和生活化比喻降低理解门槛。',
           '只有当技术细节能够支撑设计动机、关键取舍、失败模式或验证结论时，才引入对应技术点。',
           '事实层必须来自证据清单；表达层可以更像教学型短书，但不能虚构。'
         ].join('\n'),
@@ -122,13 +123,15 @@ const STYLE_PROMPT_PACKS = {
         ].join('\n'),
         chapterPrompt: [
           '输入: agent-context、source excerpts、claims、gaps、related task metadata。',
-          '输出: 自行设计章节标题、摘要、正文、retrievalBlocks 和 workedExamples。',
+          '输出: 自行设计章节标题、摘要、正文、retrievalBlocks、workedExamples，以及在合适时补充 visualExplainer。',
           '要求: 每章都要先说明这一章教会读者什么，再解释设计动机、关键取舍、验证方式和可迁移原则。',
+          '如果本章适合给产品或非技术读者阅读，visualExplainer 应补充一个具体场景、一个生活化比喻，以及 2-4 条看图重点。',
           '如果引用技术细节，必须顺带说明它背后的设计原因、代价或适用边界。'
         ].join('\n'),
         proseRewritePrompt: [
           '把材料改写成“理解问题 -> 理解设计 -> 理解取舍 -> 学会迁移”的阅读路径。',
           '优先使用“为什么这样设计 / 这种设计换来了什么 / 代价是什么 / 以后什么时候复用”这类句式。',
+          '在不牺牲事实的前提下，可以把抽象机制翻成贴近日常决策的场景化比喻，帮助产品或非技术读者先形成直觉。',
           '不要按文件名、模块名、技术名词逐项介绍，除非这些内容正好支撑一个设计判断。',
           '每段至少保留一个明确事实锚点，但不要让事实锚点取代读者该学会的原则。'
         ].join('\n'),
@@ -141,7 +144,8 @@ const STYLE_PROMPT_PACKS = {
           '检查 1: 读者读完后，带走的是判断框架、设计原理和取舍方法，而不是技术点列表。',
           '检查 2: 是否回答了“为什么这样设计、换来了什么、付出了什么、何时适用/不适用”。',
           '检查 3: 是否仍能从每章回到 evidenceIds，而不是凭感觉写结论。',
-          '检查 4: 是否避免把内容写成文件导览、实现清单或技术说明书。'
+          '检查 4: 是否避免把内容写成文件导览、实现清单或技术说明书。',
+          '检查 5: 如果用了 visualExplainer，它是否真正帮助非技术读者理解，而不是只换一种说法重复正文。'
         ].join('\n'),
       },
     },
@@ -784,7 +788,7 @@ function buildStylePromptEngineering(stylePromptPack) {
     prompts: stylePromptPack.prompts,
     loop: [
       'Agent 先读取 agent-context 和 evidence-manifest。',
-      'Agent 使用 title/outline/chapter/proseRewrite prompts 自行写出标题、大纲和正文。',
+      'Agent 使用 title/outline/chapter/proseRewrite prompts 自行写出标题、大纲、正文和需要的 visualExplainer。',
       'Agent 使用 evidenceBinding prompt 保留 evidenceIds、路径和不可改写字段。',
       'Agent 使用 qualityReview prompt 做风格一致性与事实不漂移检查。',
       '通过后把内容写入 learning-content.json，再渲染 reader.html。',
@@ -805,6 +809,7 @@ function buildStyleTransferReport(stylePromptPack, chapters) {
       'chapter semanticTitle',
       'chapter summary',
       'chapter paragraphs',
+      'chapter visualExplainer',
       'reader chrome',
     ],
     preservedSurfaces: [
@@ -819,6 +824,7 @@ function buildStyleTransferReport(stylePromptPack, chapters) {
       '风格迁移后仍保留每章 evidenceIds。',
       '目录最多三层，适合展开和收起。',
       '正文保留 `.openprd/`、docs/basic、loop、reader.html 或证据清单等事实锚点。',
+      'visualExplainer 只能帮助理解，不能替代证据链或虚构不存在的截图/场景。',
       '右侧证据面板不再参与阅读主界面，证据改为归档和章节内轻量锚点。',
     ],
     chapterCount: chapters.length,
@@ -828,6 +834,7 @@ function buildStyleTransferReport(stylePromptPack, chapters) {
 function packagePathPayload(packagePaths) {
   return {
     readerHtml: packagePaths.readerHtml,
+    assetsDir: packagePaths.assetsDir,
     packageJson: packagePaths.packageJson,
     contentJson: packagePaths.contentJson,
     contentMarkdown: packagePaths.contentMarkdown,
@@ -881,9 +888,14 @@ function buildOutputContractSpec() {
     ],
     chapterShape: {
       required: ['id', 'label', 'semanticTitle', 'summary', 'paragraphs', 'evidenceIds'],
-      optional: ['retrievalBlocks', 'workedExamples'],
+      optional: ['retrievalBlocks', 'workedExamples', 'visualExplainer'],
       retrievalBlockShape: ['prompt', 'hint', 'answer'],
       workedExampleShape: ['title', 'scenario', 'steps', 'principle'],
+      visualExplainerShape: {
+        required: ['title', 'analogy', 'scene', 'whyItMatters', 'takeaways'],
+        optional: ['image'],
+        imageShape: ['path', 'alt', 'caption', 'prompt'],
+      },
     },
     rules: [
       '不要让 CLI 生成标题、大纲或正文；这些字段必须由 Agent 根据证据写出。',
@@ -892,6 +904,8 @@ function buildOutputContractSpec() {
       '可以写推断，但要在表达上说明它来自多个证据的综合判断。',
       '优先写清用户价值、设计动机、关键取舍、适用边界和可迁移原则，不要把正文写成技术说明书、文件导览或实现清单。',
       '只有当技术细节能支撑设计原理、取舍、失败模式或验证结论时，才引入对应技术点。',
+      '面向产品、运营或非技术读者时，优先给主要章节补 `visualExplainer`：用具体场景、生活化比喻和 2-4 条看图重点帮助理解。',
+      '`visualExplainer.image.path` 可以写成相对 `assetsDir` 的路径；图片只用于帮助理解，不能替代 evidenceIds 或伪装成事实截图。',
     ],
   };
 }
@@ -949,9 +963,10 @@ function renderAgentPromptMarkdown(agentContext) {
     '',
     '请你亲自完成复盘学习正文。CLI 只准备了证据、约束、路径和 HTML 阅读器外壳。',
     '',
-    '所有读者可见的标题、副标题、目录项、章节标题、段落、检索练习、工作示例和下一步都由你负责撰写。',
+    '所有读者可见的标题、副标题、目录项、章节标题、段落、检索练习、工作示例、visualExplainer 和下一步都由你负责撰写。',
     '',
     '默认读者期待学会的是: 这件事为什么值得做、为什么这样设计、关键取舍是什么、哪些原则以后还能复用。',
+    '如果读者偏产品、运营或非技术角色，优先补充“一眼看懂”的比喻卡，让他们先理解机制，再回到证据。',
     '不要把正文写成技术说明书、文件清单、模块导览或实现流水账。',
     '只有当技术细节能支撑设计原理、权衡、失败模式或验证结论时，才写技术细节。',
     '',
@@ -961,6 +976,7 @@ function renderAgentPromptMarkdown(agentContext) {
     `- 证据清单: ${agentContext.paths.evidenceManifest}`,
     `- 输出内容 JSON: ${agentContext.paths.contentJson}`,
     `- 阅读器 HTML: ${agentContext.paths.readerHtml}`,
+    `- 图片素材目录: ${agentContext.paths.assetsDir}`,
     '',
     '## 证据来源',
     '',
@@ -1032,6 +1048,31 @@ function normalizeStringList(value, fieldName, errors, { required = false } = {}
   return list;
 }
 
+function normalizeVisualExplainer(value, fieldName, errors) {
+  if (value == null) return null;
+  if (!value || typeof value !== 'object') {
+    errors.push(`${fieldName} 必须是对象`);
+    return null;
+  }
+  for (const childField of ['title', 'analogy', 'scene', 'whyItMatters']) {
+    if (!String(value?.[childField] ?? '').trim()) {
+      errors.push(`${fieldName}.${childField} 必填`);
+    }
+  }
+  normalizeStringList(value?.takeaways, `${fieldName}.takeaways`, errors, { required: true });
+  if (value.image != null) {
+    if (!value.image || typeof value.image !== 'object') {
+      errors.push(`${fieldName}.image 必须是对象`);
+    } else {
+      const hasPath = String(value.image.path ?? '').trim().length > 0;
+      if (hasPath && !String(value.image.alt ?? '').trim()) {
+        errors.push(`${fieldName}.image.alt 必填`);
+      }
+    }
+  }
+  return value;
+}
+
 const INTERNET_PRODUCT_DIRECTION_SIGNALS = {
   value: ['问题', '价值', '目标', '用户', '场景', '需求', '机会'],
   design: ['设计', '方案', '架构', '结构', '流程', '机制', '路径', '入口', '判断'],
@@ -1045,6 +1086,12 @@ function collectLearningNarrativeFragments(raw) {
     chapter?.semanticTitle,
     chapter?.summary,
     ...(chapter?.paragraphs ?? []),
+    chapter?.visualExplainer?.title,
+    chapter?.visualExplainer?.analogy,
+    chapter?.visualExplainer?.scene,
+    chapter?.visualExplainer?.whyItMatters,
+    ...(chapter?.visualExplainer?.takeaways ?? []),
+    chapter?.visualExplainer?.image?.caption,
     ...(chapter?.retrievalBlocks ?? []).flatMap((block) => [block?.prompt, block?.hint, block?.answer]),
     ...(chapter?.workedExamples ?? []).flatMap((example) => [example?.title, example?.scenario, ...(example?.steps ?? []), example?.principle]),
   ]);
@@ -1121,6 +1168,7 @@ function validateAgentAuthoredContent(raw, evidenceManifest, genreId = null) {
       if (!String(example?.scenario ?? '').trim()) errors.push(`${label}.workedExamples[${exampleIndex}].scenario 必填`);
       normalizeStringList(example?.steps, `${label}.workedExamples[${exampleIndex}].steps`, errors, { required: true });
     }
+    normalizeVisualExplainer(chapter?.visualExplainer, `${label}.visualExplainer`, errors);
   }
   if (genreId === 'internet-product') validateInternetProductDirection(raw, errors);
   if (errors.length > 0) {
@@ -1191,6 +1239,7 @@ function renderLearningMarkdown({ content, evidenceManifest }) {
       `- Agent 上下文: ${content.agentContextPath}`,
       `- 证据清单: ${content.evidenceManifestPath}`,
       `- 内容 JSON: ${content.packagePaths?.contentJson ?? ''}`,
+      `- 图片素材目录: ${content.packagePaths?.assetsDir ?? ''}`,
       '',
       '## 证据清单',
       '',
@@ -1228,6 +1277,7 @@ function renderLearningMarkdown({ content, evidenceManifest }) {
     '## 读法',
     '',
     '- 先看目录，再看章节标题。',
+    '- 如果章节里有“一眼看懂”图卡，先用它建立直觉，再读正文和证据。',
     '- 章节内先读叙述，再做检索练习，最后看工作示例。',
     '- 所有重要判断都可以回到证据清单。',
     '',
@@ -1271,6 +1321,7 @@ function renderLearningMarkdown({ content, evidenceManifest }) {
     '',
     '```text',
     `.openprd/learning/archive/${content.packageId}/`,
+    '  assets/',
     '  learning-package.json',
     '  learning-content.json',
     '  learning-content.md',
@@ -1285,6 +1336,27 @@ function renderLearningMarkdown({ content, evidenceManifest }) {
     lines.push('');
     lines.push(chapter.summary);
     lines.push('');
+    if (chapter.visualExplainer) {
+      lines.push('### 一眼看懂');
+      lines.push('');
+      lines.push(`- 标题: ${chapter.visualExplainer.title}`);
+      lines.push(`- 比喻: ${chapter.visualExplainer.analogy}`);
+      lines.push(`- 场景: ${chapter.visualExplainer.scene}`);
+      lines.push(`- 作用: ${chapter.visualExplainer.whyItMatters}`);
+      if ((chapter.visualExplainer.takeaways ?? []).length > 0) {
+        lines.push('- 看图重点:');
+        for (const takeaway of chapter.visualExplainer.takeaways ?? []) {
+          lines.push(`  - ${takeaway}`);
+        }
+      }
+      if (chapter.visualExplainer.image?.path) {
+        lines.push(`- 图片: ${chapter.visualExplainer.image.path}`);
+      }
+      if (chapter.visualExplainer.image?.caption) {
+        lines.push(`- 图注: ${chapter.visualExplainer.image.caption}`);
+      }
+      lines.push('');
+    }
     for (const paragraph of chapter.paragraphs ?? []) {
       lines.push(paragraph);
       lines.push('');
@@ -1410,6 +1482,7 @@ async function generateLearningReviewWorkspace(projectRoot, options = {}) {
   const packageId = options.packageId ?? `lr-${compactTimestamp()}-${slugify(topic || genre.id, genre.id)}`;
   const packagePaths = learningPackagePaths(ws, packageId);
   await fs.mkdir(packagePaths.dir, { recursive: true });
+  await fs.mkdir(packagePaths.assetsDir, { recursive: true });
 
   const related = {
     changeId: options.changeId ?? null,

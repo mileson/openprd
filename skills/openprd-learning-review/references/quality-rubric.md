@@ -10,12 +10,14 @@ Use this rubric to decide whether a learning package is good enough to ship.
 - The package includes retrieval blocks and worked examples.
 - Retrieval questions stay in the body, not as separate TOC leaf items.
 - The content contract is versioned.
+- If a `visualExplainer` is present, it must stay faithful to evidence and must not invent unsupported screenshots, states, or outcomes.
 
 ## Should Pass
 
 - The genre choice matches the user's request.
 - The opening paragraph explains why the package exists.
 - The chapters are easy to scan.
+- Product-facing or non-technical packages use `visualExplainer` blocks when they meaningfully reduce comprehension cost.
 - Chapter-level source anchors help the reader jump back to sources without crowding the page.
 - The next-actions section says how to reuse the pattern.
 

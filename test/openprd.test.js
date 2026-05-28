@@ -4,11 +4,17 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import sharp from 'sharp';
 
-import { addBenchmarkWorkspace, advanceOpenSpecTaskWorkspace, applyOpenPrdChangeWorkspace, approveBenchmarkWorkspace, archiveOpenPrdChangeWorkspace, captureWorkspace, checkStandardsWorkspace, clarifyWorkspace, classifyWorkspace, diagramWorkspace, diffWorkspace, doctorWorkspace, finishLoopWorkspace, fleetWorkspace, freezeWorkspace, generateLearningReviewWorkspace, generateOpenSpecChangeWorkspace, handoffWorkspace, historyWorkspace, initLoopWorkspace, initQualityWorkspace, initWorkspace, interviewWorkspace, learnQualityWorkspace, listAcceptedSpecsWorkspace, listBenchmarkWorkspace, listOpenPrdChangesWorkspace, listOpenSpecTaskWorkspace, main, nextLoopWorkspace, nextWorkspace, openspecDiscoveryWorkspace, planLoopWorkspace, playgroundWorkspace, promptLoopWorkspace, runLoopWorkspace, runWorkspace, setLearningReviewModeWorkspace, setupAgentIntegrationWorkspace, statusLoopWorkspace, synthesizeWorkspace, updateAgentIntegrationWorkspace, validateOpenSpecChangeWorkspace, validateWorkspace, verifyBenchmarkWorkspace, verifyLoopWorkspace, verifyQualityWorkspace } from '../src/openprd.js';
+import { buildReviewExportPayload, renderReviewArtifact } from '../src/html-artifacts.js';
+import { addBenchmarkWorkspace, advanceOpenSpecTaskWorkspace, applyGrowthCandidateWorkspace, applyOpenPrdChangeWorkspace, approveBenchmarkWorkspace, archiveOpenPrdChangeWorkspace, captureWorkspace, checkDevelopmentStandardsWorkspace, checkStandardsWorkspace, clarifyWorkspace, classifyExternalReferenceWorkspace, classifyWorkspace, diagramWorkspace, diffWorkspace, doctorWorkspace, finishLoopWorkspace, fleetWorkspace, freezeWorkspace, generateLearningReviewWorkspace, generateOpenSpecChangeWorkspace, handoffWorkspace, historyWorkspace, initLoopWorkspace, initQualityWorkspace, initWorkspace, interviewWorkspace, learnQualityWorkspace, listAcceptedSpecsWorkspace, listBenchmarkWorkspace, listOpenPrdChangesWorkspace, listOpenSpecTaskWorkspace, main, nextLoopWorkspace, nextWorkspace, openspecDiscoveryWorkspace, planLoopWorkspace, playgroundWorkspace, promptLoopWorkspace, reviewGrowthWorkspace, reviewWorkspace, runLoopWorkspace, runWorkspace, setLearningReviewModeWorkspace, setupAgentIntegrationWorkspace, statusLoopWorkspace, synthesizeWorkspace, updateAgentIntegrationWorkspace, validateOpenSpecChangeWorkspace, validateWorkspace, verifyBenchmarkWorkspace, verifyLoopWorkspace, verifyQualityWorkspace, visualCompareWorkspace } from '../src/openprd.js';
+import { createRunWorkspace } from '../src/run-harness.js';
 
 const OPENPRD_LITE_WRITE_TOOL_MATCHER = '^(apply_patch|Write|Edit)$';
 const OPENPRD_GUARDED_WRITE_TOOL_MATCHER = '^(Bash|apply_patch|Write|Edit)$';
+const TEST_OPENPRD_HOME = path.join(os.tmpdir(), 'openprd-test-home');
+
+process.env.OPENPRD_HOME = TEST_OPENPRD_HOME;
 
 function hasTomlFeatureKey(text, key) {
   const lines = text.split(/\r?\n/);
@@ -34,6 +40,59 @@ async function makeTempProject() {
 
 async function pathExists(filePath) {
   return fs.stat(filePath).then(() => true, () => false);
+}
+
+async function readJsonl(filePath) {
+  const text = await fs.readFile(filePath, 'utf8');
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+async function writeAnswersFile(project, filename, payload) {
+  const filePath = path.join(project, filename);
+  await fs.writeFile(filePath, JSON.stringify(payload, null, 2));
+  return filePath;
+}
+
+async function writeMinimalChange(project, changeId, {
+  title,
+  requirementTitle = title,
+  taskId = 'T001.01',
+  taskTitle = title,
+  verifyCommand = 'node -e "process.exit(0)"',
+} = {}) {
+  const changeDir = path.join(project, 'openprd', 'changes', changeId);
+  const capability = changeId.split('-').slice(0, 2).join('-') || changeId;
+  await fs.mkdir(path.join(changeDir, 'specs', capability), { recursive: true });
+  await fs.writeFile(path.join(changeDir, 'proposal.md'), [
+    `# ${title}`,
+    '',
+    '## Why',
+    `${title} needs an isolated routing target.`,
+    '',
+    '## What Changes',
+    `- ${title}`,
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(changeDir, 'specs', capability, 'spec.md'), [
+    `# ${capability} spec`,
+    '',
+    '## ADDED Requirements',
+    '',
+    `### Requirement: ${requirementTitle}`,
+    `${title} must remain addressable by routing.`,
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(changeDir, 'tasks.md'), [
+    `- [ ] ${taskId} ${taskTitle}`,
+    `  - done: ${taskTitle} is complete`,
+    `  - verify: ${verifyCommand}`,
+    '',
+  ].join('\n'));
+  return changeDir;
 }
 
 test('init creates a workspace and validate passes', async () => {
@@ -66,6 +125,10 @@ test('init creates a workspace and validate passes', async () => {
   assert.equal(standards.ok, true);
   assert.equal(standards.docsRoot, path.join('docs', 'basic'));
   assert.equal(standards.requiredDocs.length, 6);
+  assert.ok(standards.checks.some((check) => check.includes('Development standards: code files ok <= 700 lines')));
+  const standardsConfig = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'standards', 'config.json'), 'utf8'));
+  assert.equal(standardsConfig.developmentStandards.codeFileLines.okMax, 700);
+  assert.equal(standardsConfig.developmentStandards.codeFileLines.attentionMax, 1500);
   assert.ok(await fs.stat(path.join(project, 'docs', 'basic', 'file-structure.md')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'standards', 'file-manual-template.md')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'quality', 'config.json')).then(() => true));
@@ -88,6 +151,11 @@ test('init creates a workspace and validate passes', async () => {
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'install-manifest.json')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'hook-state.json')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'events.jsonl')).then(() => true));
+  const registryEvents = await readJsonl(path.join(TEST_OPENPRD_HOME, 'registry', 'workspaces.jsonl'));
+  const registryEntry = registryEvents.find((entry) => entry.workspaceRoot === project);
+  assert.ok(registryEntry);
+  assert.equal(registryEntry.openprdVersion != null, true);
+  assert.deepEqual(registryEntry.tools, ['codex', 'claude', 'cursor']);
   assert.equal((await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-harness', 'SKILL.md'), 'utf8')).startsWith('---\n'), true);
   assert.equal((await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-benchmark-router', 'SKILL.md'), 'utf8')).startsWith('---\n'), true);
   assert.equal((await fs.readFile(path.join(project, '.cursor', 'rules', 'openprd.mdc'), 'utf8')).startsWith('---\n'), true);
@@ -103,6 +171,9 @@ test('init creates a workspace and validate passes', async () => {
   assert.ok(await fs.stat(path.join(project, '.codex', 'prompts', 'openprd-loop.md')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.claude', 'commands', 'openprd', 'loop.md')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.cursor', 'commands', 'openprd-loop.md')).then(() => true));
+  assert.ok(await fs.stat(path.join(project, '.codex', 'prompts', 'openprd-visual-compare.md')).then(() => true));
+  assert.ok(await fs.stat(path.join(project, '.claude', 'commands', 'openprd', 'visual-compare.md')).then(() => true));
+  assert.ok(await fs.stat(path.join(project, '.cursor', 'commands', 'openprd-visual-compare.md')).then(() => true));
   const hookRunner = await fs.readFile(path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'utf8');
   assert.equal(hookRunner.startsWith('/* OPENPRD:GENERATED'), true);
   assert.equal(hookRunner.includes('#!/usr/bin/env node'), false);
@@ -121,15 +192,16 @@ test('init creates a workspace and validate passes', async () => {
   assert.ok(logs.some((line) => line.includes('OpenPrd standards: 通过')));
 });
 
-test('clarify writes a html artifact and synthesize writes a review artifact', async () => {
+test('clarify stays inline and synthesize writes a review artifact', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'agent' });
 
   const clarify = await clarifyWorkspace(project, {});
-  assert.ok(clarify.clarifyArtifact.endsWith('clarify.html'));
-  const clarifyHtml = await fs.readFile(clarify.clarifyArtifact, 'utf8');
-  assert.ok(clarifyHtml.includes('OpenPrd / 需求澄清面板'));
-  assert.ok(clarifyHtml.includes('给 Agent 的回写数据'));
+  assert.ok(clarify.clarifyPresentation.mode.startsWith('inline'));
+  assert.equal(clarify.clarifyArtifact, null);
+  assert.equal(clarify.clarifyArtifactBundle, null);
+  assert.equal(await pathExists(path.join(project, '.openprd', 'engagements', 'active', 'clarify.html')), false);
+  assert.ok(clarify.inlineClarification.lines.some((line) => line.includes('我理解的目标')));
 
   await classifyWorkspace(project, 'agent');
   await captureWorkspace(project, {
@@ -175,7 +247,7 @@ test('clarify writes a html artifact and synthesize writes a review artifact', a
   });
   await captureWorkspace(project, {
     field: 'requirements.functional',
-    value: '生成澄清面板, 生成评审面板, 生成回归报告',
+    value: '生成澄清提纲, 生成评审面板, 生成回归报告',
     source: 'user-confirmed',
   });
   await captureWorkspace(project, {
@@ -207,17 +279,470 @@ test('clarify writes a html artifact and synthesize writes a review artifact', a
     productType: 'agent',
   });
   assert.ok(synthesized.reviewArtifact.endsWith('review.html'));
-  const reviewHtml = await fs.readFile(synthesized.reviewArtifact, 'utf8');
+  assert.match(synthesized.workUnitId, /^wu-\d{14}-[a-f0-9]{8}$/);
+  assert.ok(synthesized.reviewPath.endsWith(path.join('.openprd', 'reviews', 'v0001.html')));
+  assert.ok(synthesized.stableReviewArtifact.endsWith(path.join('.openprd', 'reviews', 'v0001.html')));
+  assert.ok(synthesized.reviewEntryPath.endsWith(path.join('engagements', 'active', 'review.html')));
+  assert.equal(synthesized.workUnit.latestVersionId, 'v0001');
+  assert.equal(synthesized.workUnit.latestVersionDigest, synthesized.snapshot.digest);
+  const reviewEntryHtml = await fs.readFile(synthesized.reviewArtifact, 'utf8');
+  assert.ok(reviewEntryHtml.includes('自动跳转'));
+  assert.ok(reviewEntryHtml.includes('../..\/reviews\/v0001.html') || reviewEntryHtml.includes('../../reviews/v0001.html'));
+  const reviewHtml = await fs.readFile(synthesized.reviewPath, 'utf8');
   assert.ok(reviewHtml.includes('OpenPrd / 评审面板'));
-  assert.ok(reviewHtml.includes('一键导回 PRD Review 决策'));
+  assert.ok(reviewHtml.includes('需求概览'));
+  assert.ok(reviewHtml.includes('需求关系图') || reviewHtml.includes('需求流程图'));
+  assert.ok(reviewHtml.includes('评审决定'));
+  assert.ok(reviewHtml.includes('review-bottom-bar'));
+  assert.ok(reviewHtml.includes('review-bottom-action revise'));
+  assert.ok(reviewHtml.includes('review-bottom-action confirm'));
+  assert.ok(reviewHtml.includes('需要调整'));
+  assert.ok(reviewHtml.includes('认可方案'));
+  assert.ok(reviewHtml.includes('重点摘要'));
+  assert.ok(reviewHtml.includes('主流程小图'));
+  assert.ok(reviewHtml.includes('用户旅程'));
+  assert.ok(reviewHtml.includes('恢复路径'));
+  assert.ok(reviewHtml.includes('review-detail-summary'));
+  assert.ok(reviewHtml.includes('review-detail-body'));
+  assert.ok(reviewHtml.includes('OpenPrD Review: 认可方案'));
+  assert.ok(reviewHtml.includes('openprd review . --mark confirmed'));
+  assert.ok(reviewHtml.includes(`--version &#39;${synthesized.snapshot.versionId}&#39;`));
+  assert.ok(reviewHtml.includes(`--digest &#39;${synthesized.snapshot.digest}&#39;`));
+  assert.ok(reviewHtml.includes(`--work-unit &#39;${synthesized.workUnitId}&#39;`));
+  assert.ok(reviewHtml.includes('openprd review . --mark needs-revision'));
+  assert.ok(reviewHtml.includes('--notes &#39;说明需要调整的点&#39;'));
+  assert.ok(reviewHtml.includes('position: fixed;'));
+  assert.ok(reviewHtml.includes('bottom: 0;'));
+  assert.ok(reviewHtml.includes('border-radius: 12px;'));
+  assert.ok(reviewHtml.includes('background: #fff1f2;'));
+  assert.ok(reviewHtml.includes('background: #ecfdf3;'));
+  assert.equal(reviewHtml.includes('继续补充信息'), false);
+  assert.equal(reviewHtml.includes('给 Agent 的结构化数据'), false);
+  assert.equal(reviewHtml.includes('review-structured-data'), false);
+  assert.equal(await fs.access(path.join(project, '.openprd', 'artifacts', 'active', 'v0001-review', 'artifact.html')).then(() => true).catch(() => false), false);
+  assert.equal(reviewHtml.includes('review-decision'), false);
+  assert.equal(reviewHtml.includes('review-footer'), false);
+  assert.equal(reviewHtml.includes('建议顺序'), false);
+  const reviewChips = Array.from(
+    reviewHtml.matchAll(/<span class="review-chip(?: empty)?">([^<]*)<\/span>/g),
+    ([, text]) => text
+  );
+  assert.ok(reviewChips.length > 0);
+  assert.equal(reviewChips.some((text) => /…|\.\.\./.test(text)), false);
+  assert.ok(reviewChips.every((text) => Array.from(text).length <= 15));
+  const panelSubtitles = Array.from(
+    reviewHtml.matchAll(/<header class="review-panel-head">[\s\S]*?<p>([^<]*)<\/p>/g),
+    ([, text]) => text
+  );
+  assert.equal(panelSubtitles.length, 4);
+  assert.equal(panelSubtitles.some((text) => /[。.]$/.test(text)), false);
+  assert.ok(reviewHtml.includes('white-space: nowrap;'));
+  assert.equal(reviewHtml.includes('Freeze 前确认'), false);
+  assert.equal(reviewHtml.includes('review-meta-row'), false);
+  assert.equal(reviewHtml.includes('review-stat-grid'), false);
+  assert.equal(reviewHtml.includes('text-overflow'), false);
+  assert.equal(reviewHtml.includes('先用一张图确认这次 PRD 的主线'), false);
+  assert.equal(/freeze/i.test(reviewHtml), false);
+  assert.ok(reviewHtml.includes('进入实现前确认'));
+  assert.ok(reviewHtml.includes('需求定稿前'));
+
+  const versionIndexBeforeReviewRefresh = JSON.parse(
+    await fs.readFile(path.join(project, '.openprd', 'state', 'version-index.json'), 'utf8')
+  ).length;
+  await fs.writeFile(synthesized.reviewArtifact, '<html><body>legacy review artifact</body></html>');
+  const refreshedReview = await reviewWorkspace(project, {});
+  assert.equal(refreshedReview.ok, true);
+  assert.equal(refreshedReview.marked, false);
+  const refreshedReviewHtml = await fs.readFile(synthesized.reviewArtifact, 'utf8');
+  assert.ok(refreshedReviewHtml.includes('自动跳转'));
+  assert.equal(refreshedReviewHtml.includes('legacy review artifact'), false);
+  const refreshedCanonicalReviewHtml = await fs.readFile(synthesized.reviewPath, 'utf8');
+  assert.ok(refreshedCanonicalReviewHtml.includes('认可方案'));
+  const versionIndexAfterReviewRefresh = JSON.parse(
+    await fs.readFile(path.join(project, '.openprd', 'state', 'version-index.json'), 'utf8')
+  ).length;
+  assert.equal(versionIndexAfterReviewRefresh, versionIndexBeforeReviewRefresh);
+
+  const wrongDigestReview = await reviewWorkspace(project, {
+    mark: 'confirmed',
+    version: synthesized.snapshot.versionId,
+    digest: 'wrong-digest',
+    workUnit: synthesized.workUnitId,
+  });
+  assert.equal(wrongDigestReview.ok, false);
+  assert.match(wrongDigestReview.errors[0], /Digest mismatch/);
+
+  const wrongWorkUnitReview = await reviewWorkspace(project, {
+    mark: 'confirmed',
+    version: synthesized.snapshot.versionId,
+    digest: synthesized.snapshot.digest,
+    workUnit: 'other-work-unit',
+  });
+  assert.equal(wrongWorkUnitReview.ok, false);
+  assert.match(wrongWorkUnitReview.errors[0], /Work unit mismatch/);
+
+  const confirmedReview = await reviewWorkspace(project, {
+    mark: 'confirmed',
+    version: synthesized.snapshot.versionId,
+    digest: synthesized.snapshot.digest,
+    workUnit: synthesized.workUnitId,
+  });
+  assert.equal(confirmedReview.ok, true);
+  assert.equal(confirmedReview.status, 'confirmed');
+  assert.equal(confirmedReview.workUnit.status, 'confirmed');
+});
+
+test('capture after synthesized PRD invalidates stale review pointers', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'agent' });
+
+  const synthesized = await synthesizeWorkspace(project, {
+    title: '历史飞书需求',
+    owner: 'OpenPrd',
+    problemStatement: '用户需要看到飞书安装进度。',
+    whyNow: '安装等待过程容易误判为卡死。',
+    goals: ['展示安装进度'],
+    productType: 'agent',
+  });
+  assert.equal(synthesized.snapshot.versionId, 'v0001');
+  let current = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'state', 'current.json'), 'utf8'));
+  assert.equal(current.latestVersionId, 'v0001');
+  assert.equal(current.versionId, 'v0001');
+  assert.equal(current.versionNumber, 1);
+  assert.equal(current.workUnitId, synthesized.workUnitId);
+  assert.equal(current.digest, synthesized.snapshot.digest);
+  assert.deepEqual(current.sections, synthesized.snapshot.sections);
+  assert.equal(current.content, synthesized.snapshot.content);
+
+  await captureWorkspace(project, {
+    field: 'meta.title',
+    value: 'AI 生产线命名空格调整',
+    source: 'user-confirmed',
+  });
+
+  current = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'state', 'current.json'), 'utf8'));
+  assert.equal(current.title, 'AI 生产线命名空格调整');
+  assert.equal('latestVersionId' in current, false);
+  assert.equal('latestVersionDigest' in current, false);
+  assert.equal('activeWorkUnitId' in current, false);
+  assert.equal('versionId' in current, false);
+  assert.equal('versionNumber' in current, false);
+  assert.equal('workUnitId' in current, false);
+  assert.equal('sections' in current, false);
+  assert.equal('content' in current, false);
+  assert.equal('digest' in current, false);
+  assert.equal(current.previousLatestVersionId, 'v0001');
+  assert.equal(current.reviewStatus.status, 'needs-revision');
+  assert.equal(current.reviewStatus.stale, true);
+  assert.equal(current.reviewStatus.versionId, null);
+  assert.equal(current.reviewStatus.staleVersionId, 'v0001');
+  assert.equal(current.reviewStatus.staleWorkUnitId, synthesized.workUnitId);
+  assert.deepEqual(current.reviewStatus.staleFields, ['meta.title']);
+
+  const resynthesized = await synthesizeWorkspace(project, {
+    title: 'AI 生产线命名空格调整',
+    owner: 'OpenPrd',
+    problemStatement: 'AI 生产线入口命名需要保留空格。',
+    whyNow: '用户已经确认要调整中文入口命名。',
+    goals: ['保留准确命名'],
+    productType: 'agent',
+  });
+  current = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'state', 'current.json'), 'utf8'));
+  assert.equal(resynthesized.snapshot.versionId, 'v0002');
+  assert.equal(current.latestVersionId, 'v0002');
+  assert.equal(current.versionId, 'v0002');
+  assert.equal(current.workUnitId, resynthesized.workUnitId);
+  assert.equal(current.sections.meta.version, 'v0002');
+  assert.equal(current.content, resynthesized.snapshot.content);
+  assert.equal(current.content.includes('历史飞书需求'), false);
+});
+
+test('synthesize preflight blocks review creation when generated spec violates language policy', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'agent' });
+
+  await assert.rejects(
+    () => synthesizeWorkspace(project, {
+      title: 'open pipeline 命名调整',
+      owner: 'OpenPrd',
+      problemStatement: '用户需要统一 open pipeline 命名。',
+      whyNow: '当前 open pipeline 命名在多个入口里不一致。',
+      primaryFlows: ['用户打开 open pipeline 入口'],
+      goals: ['统一入口命名'],
+      productType: 'agent',
+    }),
+    /spec\.md 仍会触发简体中文预检/
+  );
+
+  assert.equal(await pathExists(path.join(project, '.openprd', 'engagements', 'active', 'review.html')), false);
+  assert.equal(await pathExists(path.join(project, '.openprd', 'state', 'version-index.json')), false);
+});
+
+test('agent-normalized capture keeps confirmed review available for freeze', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+
+  const synthesized = await synthesizeWorkspace(project, {
+    title: '注册流程优化',
+    owner: 'PM',
+    problemStatement: '用户在注册流程中频繁流失',
+    whyNow: '当前激活率偏低',
+    evidence: ['近期调研反馈注册步骤过长'],
+    primaryUsers: ['忙碌的创作者'],
+    stakeholders: ['增长团队'],
+    goals: ['提升激活率'],
+    successMetrics: ['激活率超过 40%'],
+    acceptanceGoals: ['用户可在 2 分钟内完成注册'],
+    inScope: ['注册流程'],
+    outOfScope: ['计费体系'],
+    primaryFlows: ['用户完成注册'],
+    edgeCases: ['第三方登录失败'],
+    failureModes: ['邮箱校验失败'],
+    functional: ['创建账号'],
+    nonFunctional: ['关键接口 p95 小于 2 秒'],
+    businessRules: ['需要邀请码'],
+    technical: ['复用当前认证服务'],
+    compliance: ['满足隐私合规要求'],
+    dependencies: ['认证接口'],
+    assumptions: ['用户具备可用邮箱'],
+    risks: ['注册流失继续升高'],
+    openQuestions: ['是否需要单点登录'],
+    handoffOwner: 'PM',
+    nextStep: '需求定稿后进入 freeze',
+    targetSystem: 'OpenPrd',
+    productType: 'consumer',
+    persona: '忙碌的创作者',
+    segment: '自助用户',
+    journey: '激活',
+    activationMetric: '注册完成率',
+    retentionMetric: '次日回访率',
+  });
+  const diagram = await diagramWorkspace(project, { open: false, type: 'product-flow' });
+  await diagramWorkspace(project, { open: false, type: 'product-flow', mark: 'confirmed' });
+  assert.equal(diagram.type, 'product-flow');
+  const confirmedReview = await reviewWorkspace(project, {
+    mark: 'confirmed',
+    version: synthesized.snapshot.versionId,
+    digest: synthesized.snapshot.digest,
+    workUnit: synthesized.workUnitId,
+  });
+  assert.equal(confirmedReview.ok, true);
+
+  await captureWorkspace(project, {
+    field: 'meta.title',
+    value: '注册流程优化说明',
+    source: 'agent-normalized',
+  });
+
+  let current = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'state', 'current.json'), 'utf8'));
+  assert.equal(current.title, '注册流程优化说明');
+  assert.equal(current.latestVersionId, 'v0001');
+  assert.equal(current.reviewStatus.status, 'confirmed');
+  assert.equal(current.reviewStatus.versionId, 'v0001');
+  assert.equal(current.reviewStatus.stale, undefined);
+  assert.equal('previousLatestVersionId' in current, false);
+
+  const frozen = await freezeWorkspace(project);
+  assert.equal(frozen.ok, true);
+
+  current = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'state', 'current.json'), 'utf8'));
+  assert.equal(current.status, 'frozen');
+  assert.equal(current.latestVersionId, 'v0001');
+});
+
+test('active requirement gate blocks synthesize from partial overrides without fresh capture', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'agent' });
+
+  await fs.mkdir(path.join(project, '.openprd', 'harness'), { recursive: true });
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'requirement-gate.json'), JSON.stringify({
+    version: 1,
+    active: true,
+    status: 'requires-clarification',
+    openedAt: '2026-05-25 10:00:00',
+    updatedAt: '2026-05-25 10:00:00',
+    promptPreview: '新需求还在澄清阶段',
+  }, null, 2));
+
+  await assert.rejects(
+    synthesizeWorkspace(project, {
+      title: 'Hermes bundled 基线升级与安装阶段细化',
+      problemStatement: '安装阶段需要拆细并去掉 Camoufox 隐式下载。',
+      whyNow: '用户正在复测安装链路。',
+      productType: 'agent',
+    }),
+    /partial override 不能替代 fresh capture/,
+  );
+
+  const versionFiles = await fs.readdir(path.join(project, '.openprd', 'state', 'versions'));
+  assert.equal(versionFiles.length, 0);
+});
+
+test('review relationship map stays compact with pill tags and left aligned copy', () => {
+  const longProblem = '用户需要先看清核心问题，再决定是否进入实现，并且希望图里不要靠模板裁剪破坏语义';
+  const reviewHtml = renderReviewArtifact({
+    snapshot: {
+      versionId: 'v0001',
+      title: '关系图紧凑样例',
+      sections: {
+        problem: { problemStatement: longProblem },
+        goals: { goals: ['让用户快速理解本次需求目标，并能判断是不是值得继续推进'] },
+        scope: { inScope: ['只调整评审页图谱展示，不改变评审状态命令'] },
+        scenarios: { primaryFlows: ['用户打开评审页并扫读关系图'] },
+        risks: { risks: ['图谱信息太密会降低评审意愿'] },
+      },
+    },
+  });
+  assert.ok(reviewHtml.includes('需求关系图'));
+  assert.ok(reviewHtml.includes('viewBox="0 0 960 336"'));
+  assert.ok(reviewHtml.includes('review-map-tag-pill'));
+  assert.ok(reviewHtml.includes('width="244" height="86"'));
+  assert.ok(reviewHtml.includes('text-anchor="start"'));
+  assert.equal(reviewHtml.includes('viewBox="0 0 960 480"'), false);
+  const mindMapSvg = reviewHtml.match(/<svg viewBox="0 0 960 336"[\s\S]*?<\/svg>/)?.[0] ?? '';
+  assert.ok(mindMapSvg.includes('review-map-center-group'));
+  assert.ok(mindMapSvg.indexOf('review-map-link') < mindMapSvg.indexOf('review-map-node node-1'));
+  assert.ok(mindMapSvg.indexOf('review-map-node node-4') < mindMapSvg.indexOf('review-map-center-group'));
+  const reviewMapTags = Array.from(
+    reviewHtml.matchAll(/<text class="review-map-tag[^"]*"[^>]*>([^<]*)<\/text>/g),
+    ([, text]) => text
+  );
+  assert.ok(reviewMapTags.length > 0);
+  assert.ok(reviewMapTags.every((text) => Array.from(text).length <= 15));
+  const reviewMapLabels = Array.from(
+    reviewHtml.matchAll(/<text class="review-map-label[^"]*"[^>]*>([\s\S]*?)<\/text>/g),
+    ([, text]) => text.replace(/<[^>]+>/g, '')
+  );
+  assert.ok(reviewMapLabels.length > 0);
+  assert.ok(reviewMapLabels.some((text) => Array.from(text).length > 30));
+  const exportPayload = buildReviewExportPayload({
+    versionId: 'v0001',
+    title: '关系图紧凑样例',
+    sections: {
+      problem: { problemStatement: longProblem },
+      goals: { goals: ['让用户快速理解本次需求目标，并能判断是不是值得继续推进'] },
+      scope: { inScope: ['只调整评审页图谱展示，不改变评审状态命令'] },
+      scenarios: { primaryFlows: ['用户打开评审页并扫读关系图'] },
+      risks: { risks: ['图谱信息太密会降低评审意愿'] },
+    },
+  });
+  assert.ok(exportPayload.presentationContract.rules.some((rule) => rule.id === 'review-map-card-text' && rule.maxChars === 30));
+  assert.ok(exportPayload.presentationContract.rules.some((rule) => rule.id === 'review-panel-detail-format' && rule.format === '- **摘要内容**：明细一句话'));
+  assert.ok(exportPayload.presentationFeedback.some((item) => item.ruleId === 'review-map-card-text' && item.currentChars > item.maxChars));
+  assert.ok(exportPayload.presentationFeedback.some((item) => item.ruleId === 'review-panel-detail-format' && item.expectedFormat === '- **摘要内容**：明细一句话'));
+
+  const flowHtml = renderReviewArtifact({
+    snapshot: {
+      versionId: 'v0002',
+      title: '流程图紧凑样例',
+      sections: {
+        scenarios: {
+          primaryFlows: [
+            '用户打开评审页面后先扫读当前需求关系图和核心卡片内容并判断是否继续推进',
+            '用户确认主流程是否覆盖关键动作、异常情况和恢复路径',
+            '用户判断是否需要补充业务限制、成本边界或开放问题',
+          ],
+        },
+      },
+    },
+  });
+  assert.ok(flowHtml.includes('需求流程图'));
+  const flowMapLabels = Array.from(
+    flowHtml.matchAll(/<text class="review-map-label[^"]*"[^>]*>([\s\S]*?)<\/text>/g),
+    ([, text]) => text.replace(/<[^>]+>/g, '')
+  );
+  assert.ok(flowMapLabels.length > 0);
+  assert.ok(flowMapLabels.some((text) => Array.from(text).length > 30));
+  const flowExportPayload = buildReviewExportPayload({
+    versionId: 'v0002',
+    title: '流程图紧凑样例',
+    sections: {
+      scenarios: {
+        primaryFlows: [
+          '用户打开评审页面后先扫读当前需求关系图和核心卡片内容并判断是否继续推进',
+          '用户确认主流程是否覆盖关键动作、异常情况和恢复路径',
+          '用户判断是否需要补充业务限制、成本边界或开放问题',
+        ],
+      },
+    },
+  });
+  assert.ok(flowExportPayload.presentationFeedback.some((item) => item.area === '需求流程图' && item.ruleId === 'review-map-card-text'));
+
+  const presentedSnapshot = {
+    versionId: 'v0003',
+    title: '展示文案样例',
+    reviewPresentation: {
+      mapNodes: {
+        problem: { title: '问题定义', text: '分类位置影响查找' },
+        goal: { title: '目标', text: '先搜索再选分类' },
+        scope: { title: '范围', text: '只调整评审展示' },
+        flow: { title: '流程', text: '打开页面后扫关系图' },
+        risk: { title: '风险', text: '超限时反馈重写' },
+      },
+    },
+    sections: {
+      problem: { problemStatement: longProblem },
+      goals: { goals: ['让用户快速理解本次需求目标，并能判断是不是值得继续推进'] },
+      scope: { inScope: ['只调整评审页图谱展示，不改变评审状态命令'] },
+      scenarios: { primaryFlows: ['用户打开评审页并扫读关系图'] },
+      risks: { risks: ['图谱信息太密会降低评审意愿'] },
+    },
+  };
+  const presentedHtml = renderReviewArtifact({ snapshot: presentedSnapshot });
+  const presentedSvg = presentedHtml.match(/<svg viewBox="0 0 960 336"[\s\S]*?<\/svg>/)?.[0] ?? '';
+  const presentedMapLabels = Array.from(
+    presentedSvg.matchAll(/<text class="review-map-label[^"]*"[^>]*>([\s\S]*?)<\/text>/g),
+    ([, text]) => text.replace(/<[^>]+>/g, '')
+  );
+  assert.equal(presentedMapLabels.length, 5);
+  assert.ok(presentedMapLabels.every((text) => Array.from(text).length <= 30));
+  const presentedExportPayload = buildReviewExportPayload(presentedSnapshot);
+  assert.equal(
+    presentedExportPayload.presentationFeedback.some((item) => item.ruleId === 'review-map-card-text'),
+    false
+  );
+
+  const presentedFlowSnapshot = {
+    versionId: 'v0004',
+    title: '流程展示文案样例',
+    reviewPresentation: {
+      flowNodes: [
+        { text: '打开评审页先扫图' },
+        { text: '确认主流程覆盖' },
+        { text: '补充风险和边界' },
+      ],
+    },
+    sections: {
+      scenarios: {
+        primaryFlows: [
+          '用户打开评审页面后先扫读当前需求关系图和核心卡片内容并判断是否继续推进',
+          '用户确认主流程是否覆盖关键动作、异常情况和恢复路径',
+          '用户判断是否需要补充业务限制、成本边界或开放问题',
+        ],
+      },
+    },
+  };
+  const presentedFlowHtml = renderReviewArtifact({ snapshot: presentedFlowSnapshot });
+  const presentedFlowLabels = Array.from(
+    presentedFlowHtml.matchAll(/<text class="review-map-label[^"]*"[^>]*>([\s\S]*?)<\/text>/g),
+    ([, text]) => text.replace(/<[^>]+>/g, '')
+  );
+  assert.equal(presentedFlowLabels.length, 3);
+  assert.ok(presentedFlowLabels.every((text) => Array.from(text).length <= 30));
+  const presentedFlowExportPayload = buildReviewExportPayload(presentedFlowSnapshot);
+  assert.equal(
+    presentedFlowExportPayload.presentationFeedback.some((item) => item.area === '需求流程图' && item.ruleId === 'review-map-card-text'),
+    false
+  );
 });
 
 test('benchmark add/list/approve/verify and update generated benchmark guidance', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'agent' });
+  const initialBenchmarks = await listBenchmarkWorkspace(project);
 
   const addResult = await addBenchmarkWorkspace(project, {
-    source: 'https://github.com/larksuite/cli',
+    source: 'https://github.com/openprd-lab/cli-observability-patterns',
     notes: '参考 doctor、dry-run 和命令可发现性设计',
   });
   assert.equal(addResult.ok, true);
@@ -227,10 +752,28 @@ test('benchmark add/list/approve/verify and update generated benchmark guidance'
   assert.ok(addResult.source.scenarios.includes('developer-experience'));
   assert.ok(addResult.source.triggerWhen.some((item) => item.includes('doctor')));
 
+  const iconAddResult = await addBenchmarkWorkspace(project, {
+    source: 'https://icon-benchmarks.example.invalid/phosphor-react-icons',
+    notes: 'UI 图标站参考，Phosphor Icons / React Icons 风格',
+  });
+  assert.equal(iconAddResult.ok, true);
+  assert.ok(iconAddResult.source.scenarios.includes('icon-resources'));
+  assert.ok(iconAddResult.source.triggerWhen.some((item) => item.includes('图标')));
+
+  const reviewLaneAdd = await addBenchmarkWorkspace(project, {
+    source: 'https://review-benchmarks.example.invalid/ai-code-review-harness',
+    notes: 'AI code review / PR review harness，独立审查、reviewer agreement、误报过滤、merge recommendation',
+  });
+  assert.equal(reviewLaneAdd.ok, true);
+  assert.ok(reviewLaneAdd.source.scenarios.includes('pr-review-harness'));
+  assert.ok(reviewLaneAdd.source.triggerWhen.some((item) => item.includes('merge 前高风险复核')));
+
   const listedAfterAdd = await listBenchmarkWorkspace(project);
-  assert.equal(listedAfterAdd.counts.approved, 0);
-  assert.equal(listedAfterAdd.counts.candidates, 1);
-  assert.equal(listedAfterAdd.candidates[0].id, addResult.source.id);
+  assert.equal(listedAfterAdd.counts.approved, initialBenchmarks.counts.approved);
+  assert.equal(listedAfterAdd.counts.candidates, initialBenchmarks.counts.candidates + 3);
+  assert.ok(listedAfterAdd.candidates.some((item) => item.id === addResult.source.id));
+  assert.ok(listedAfterAdd.candidates.some((item) => item.id === iconAddResult.source.id));
+  assert.ok(listedAfterAdd.candidates.some((item) => item.id === reviewLaneAdd.source.id));
 
   const approveResult = await approveBenchmarkWorkspace(project, { id: addResult.source.id });
   assert.equal(approveResult.ok, true);
@@ -248,7 +791,11 @@ test('benchmark add/list/approve/verify and update generated benchmark guidance'
   const generatedBenchmarkSkill = await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-benchmark-router', 'SKILL.md'), 'utf8');
   assert.ok(generatedBenchmarkSkill.includes('## Project Benchmark Registry'));
   assert.ok(generatedBenchmarkSkill.includes(addResult.source.id));
-  assert.ok(generatedBenchmarkSkill.includes('larksuite/cli'));
+  assert.ok(generatedBenchmarkSkill.includes(addResult.source.repo));
+  assert.ok(generatedBenchmarkSkill.includes('AI code review / PR review harness'));
+  assert.ok(generatedBenchmarkSkill.includes('merge recommendation'));
+  assert.ok(generatedBenchmarkSkill.includes('Phosphor Icons'));
+  assert.ok(generatedBenchmarkSkill.includes('React Icons'));
 });
 
 test('benchmark verify catches duplicates, unreachable sources and overbroad triggers', async () => {
@@ -399,6 +946,7 @@ test('learning review toggles mode and generates archived reader package', async
 
   for (const filePath of [
     generated.packagePaths.readerHtml,
+    generated.packagePaths.assetsDir,
     generated.packagePaths.packageJson,
     generated.packagePaths.contentJson,
     generated.packagePaths.contentMarkdown,
@@ -431,10 +979,15 @@ test('learning review toggles mode and generates archived reader package', async
   const agentContext = JSON.parse(await fs.readFile(generated.packagePaths.agentContext, 'utf8'));
   assert.equal(agentContext.schema, 'openprd.learning-agent-context.v1');
   assert.equal(agentContext.outputContract.agentOwnedFields.includes('title'), true);
+  assert.equal(agentContext.paths.assetsDir.endsWith('/assets'), true);
   const agentPrompt = await fs.readFile(generated.packagePaths.agentPrompt, 'utf8');
   assert.ok(agentPrompt.includes('请你亲自完成复盘学习正文'));
+  assert.ok(agentPrompt.includes('visualExplainer'));
+  assert.ok(agentPrompt.includes('图片素材目录'));
 
   const authoredPath = path.join(project, 'authored-learning-content.json');
+  const visualAssetPath = path.join(project, 'visual-explainer.svg');
+  await fs.writeFile(visualAssetPath, '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#e5f1ee"/><text x="24" y="104" font-size="22" fill="#13736b">visual explainer</text></svg>\n');
   await fs.writeFile(authoredPath, `${JSON.stringify({
     schema: 'openprd.learning-content.v1',
     title: 'Agent 写出的任务复盘',
@@ -456,6 +1009,18 @@ test('learning review toggles mode and generates archived reader package', async
         label: '任务证据',
         semanticTitle: '从状态文件确认完成',
         summary: '复盘先回到可验证状态。',
+        visualExplainer: {
+          title: '像开店前先做联合质检',
+          analogy: '不是马上开门营业，而是先让不同角色各自找问题。',
+          scene: '产品先看用户旅程，工程再看实现风险，最后负责人再决定要不要上线。',
+          whyItMatters: '读者可以先理解决策顺序，再回到具体证据。',
+          takeaways: ['先独立看', '后统一判', '再决定上不上'],
+          image: {
+            path: visualAssetPath,
+            alt: '联合质检的学习包示意图',
+            caption: '图片只用于帮助理解，不替代证据。',
+          },
+        },
         paragraphs: ['Agent 先读取 current-state，再把任务结论写成可回溯的正文。'],
         retrievalBlocks: [
           {
@@ -491,7 +1056,15 @@ test('learning review toggles mode and generates archived reader package', async
   assert.equal(authored.packageMeta.needsAgentDraft, false);
   const authoredHtml = await fs.readFile(authored.packagePaths.readerHtml, 'utf8');
   assert.ok(authoredHtml.includes('Agent 写出的任务复盘'));
+  assert.ok(authoredHtml.includes('一眼看懂'));
+  assert.ok(authoredHtml.includes('像开店前先做联合质检'));
+  assert.ok(authoredHtml.includes('图片只用于帮助理解，不替代证据。'));
+  assert.ok(authoredHtml.includes('联合质检的学习包示意图'));
   assert.ok(authoredHtml.includes('Agent 先读取 current-state'));
+  assert.ok(authoredHtml.includes('content: "▸"'));
+  assert.ok(authoredHtml.includes('evidence-summary-title'));
+  assert.ok(authoredHtml.includes('1 个来源'));
+  assert.equal(authoredHtml.includes('张图卡'), false);
 
   const current = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'state', 'current.json'), 'utf8'));
   assert.equal(current.learningReview.lastPackageId, authored.packageId);
@@ -520,13 +1093,16 @@ test('internet-product learning review steers Agent toward design principles ins
   assert.equal(content.stylePromptPack.id, 'internet-product.teaching-brief');
   assert.equal(content.stylePromptEngineering.prompts.system.includes('产品设计思路'), true);
   assert.equal(content.stylePromptEngineering.prompts.proseRewrite.includes('不要按文件名、模块名、技术名词逐项介绍'), true);
+  assert.equal(content.stylePromptEngineering.prompts.chapter.includes('visualExplainer'), true);
 
   const agentContext = JSON.parse(await fs.readFile(generated.packagePaths.agentContext, 'utf8'));
   assert.equal(agentContext.outputContract.rules.some((rule) => rule.includes('技术说明书')), true);
+  assert.equal(agentContext.outputContract.chapterShape.optional.includes('visualExplainer'), true);
 
   const agentPrompt = await fs.readFile(generated.packagePaths.agentPrompt, 'utf8');
   assert.equal(agentPrompt.includes('不要把正文写成技术说明书'), true);
   assert.equal(agentPrompt.includes('为什么这样设计'), true);
+  assert.equal(agentPrompt.includes('比喻卡'), true);
 });
 
 test('internet-product authored learning content rejects technical-manual narration', async () => {
@@ -596,6 +1172,14 @@ test('quality verify writes html eval report and learn creates experience skill'
   await fs.writeFile(path.join(project, 'src', 'api', 'handler.js'), 'export function handler(req) { console.log({ trace_id: req.trace_id, span_id: req.span_id, request_id: req.request_id, task_id: req.task_id, user_session_id: req.user_session_id, error_id: req.error_id }); }\n');
   await fs.mkdir(path.join(project, 'test', 'fixtures'), { recursive: true });
   await fs.writeFile(path.join(project, 'test', 'fixtures', 'extreme.json'), '{"items":[1,2,3]}\n');
+  await fs.mkdir(path.join(project, '.openprd', 'harness', 'test-reports'), { recursive: true });
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'test-reports', 'evo-smoke.md'), [
+    '# EVO smoke report',
+    '',
+    '- smoke: passed main flow',
+    '- feature coverage: no active change',
+    '',
+  ].join('\n'));
 
   const initQuality = await initQualityWorkspace(project);
   assert.equal(initQuality.ok, true);
@@ -610,18 +1194,380 @@ test('quality verify writes html eval report and learn creates experience skill'
   assert.equal(quality.report.evalHarness.smoke.present, true);
   assert.equal(quality.report.evalHarness.performance.present, true);
   assert.equal(quality.report.evalHarness.extremeData.present, true);
+  assert.deepEqual(quality.report.qualityPolicy.requiredGates, ['smoke', 'feature-coverage']);
+  assert.equal(quality.report.readiness.productionReady, true);
   const html = await fs.readFile(quality.htmlPath, 'utf8');
-  assert.ok(html.includes('OpenPrd / 质量评估报告'));
+  assert.ok(html.includes('回归结论概览'));
+  assert.ok(html.includes('回归流程图'));
+  assert.ok(html.includes('冒烟测试'));
+  assert.ok(html.includes('风险复核'));
+  assert.ok(html.includes('测试覆盖图'));
+  assert.ok(html.includes('本期必测结果'));
+  assert.ok(html.includes('需要处理 / 需确认'));
+  assert.ok(html.includes('验证材料'));
+  assert.ok(html.includes('执行环境与覆盖'));
+  assert.ok(html.includes('需求模块'));
+  assert.ok(html.includes('更多细节'));
+  assert.ok(html.includes('需要补测'));
+  assert.ok(html.includes('认可回归'));
+  assert.ok(html.includes('给 Agent 的质量报告框架'));
+  assert.ok(html.includes('证据链'));
   assert.ok(html.includes('业务成本与滥用护栏'));
-  assert.ok(html.includes('项目级知识库经验层'));
+  assert.ok(html.includes('经验沉淀'));
+  assert.ok(html.includes('附录：结构化 JSON、基线和扫描细节'));
 
   const learned = await learnQualityWorkspace(project, { from: quality.reportPath });
   assert.equal(learned.ok, true);
   assert.ok(learned.files.skill.endsWith('SKILL.md'));
   const skill = await fs.readFile(learned.files.skill, 'utf8');
   assert.ok(skill.includes('## 触发条件'));
+  assert.ok(skill.includes('## 关联字段'));
+  assert.ok(skill.includes('## 先看哪些证据'));
   const index = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'knowledge', 'index.json'), 'utf8'));
   assert.equal(index.skills[0].skillName, learned.skillName);
+});
+
+test('quality learn can digest diagnostic bundles and observability recognizes diagnostic surfaces', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'agent' });
+  await fs.writeFile(path.join(project, 'package.json'), `${JSON.stringify({
+    type: 'module',
+    scripts: {
+      test: 'node --test',
+      'test:smoke': 'node --test smoke.test.js',
+      'perf:k6': 'k6 run perf.js',
+    },
+    dependencies: {
+      pino: '^9.0.0',
+    },
+  }, null, 2)}\n`);
+  await fs.mkdir(path.join(project, 'src', 'runtime'), { recursive: true });
+  await fs.writeFile(path.join(project, 'src', 'runtime', 'diagnostics.js'), [
+    'export function appendRuntimeEvent(event) {',
+    '  return {',
+    '    event: event.event,',
+    '    trace_id: event.trace_id,',
+    '    span_id: event.span_id,',
+    '    request_id: event.request_id,',
+    '    task_id: event.task_id,',
+    '    user_session_id: event.user_session_id,',
+    '    error_id: event.error_id,',
+    '  };',
+    '}',
+    '',
+    'export function exportDiagnostics(snapshot) {',
+    '  return {',
+    '    runtimeEvents: snapshot.runtimeEvents,',
+    '    timeline: snapshot.timeline,',
+    '    rootCauseCandidates: snapshot.rootCauseCandidates,',
+    '    diagnosticReport: snapshot.diagnosticReport,',
+    '  };',
+    '}',
+    '',
+  ].join('\n'));
+  await fs.mkdir(path.join(project, 'test', 'fixtures'), { recursive: true });
+  await fs.writeFile(path.join(project, 'test', 'fixtures', 'extreme.json'), '{"items":[1,2,3]}\n');
+  await fs.mkdir(path.join(project, '.openprd', 'harness', 'test-reports'), { recursive: true });
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'test-reports', 'bundle-smoke.md'), [
+    '# Bundle smoke report',
+    '',
+    '- smoke: passed channel delivery flow',
+    '- feature coverage: no active change',
+    '',
+  ].join('\n'));
+
+  const quality = await verifyQualityWorkspace(project);
+  assert.equal(quality.ok, true);
+  assert.equal(quality.report.observability.status, 'pass');
+  assert.ok(quality.report.observability.diagnosticSurfaces.includes('runtime-events'));
+  assert.ok(quality.report.observability.diagnosticSurfaces.includes('diagnostic-report'));
+
+  const diagnosticsDir = path.join(project, 'diagnostics', 'incident-channel-delivery');
+  await fs.mkdir(path.join(diagnosticsDir, 'runtime-events'), { recursive: true });
+  await fs.mkdir(path.join(diagnosticsDir, 'timeline'), { recursive: true });
+  await fs.writeFile(path.join(diagnosticsDir, 'diagnostic-report.json'), `${JSON.stringify({
+    schema: 'project.diagnostic-report.v1',
+    title: 'Channel delivery failed after login reuse',
+    status: 'needs-attention',
+    summary: {
+      headline: 'delivery flow stalled after session reuse',
+      status: 'needs-attention',
+    },
+    problem: 'Message delivery stops after the channel session expires.',
+    rootCauseCandidates: [
+      {
+        title: 'Channel session expired',
+        evidence: ['runtime-events captured channel.auth.expired before delivery retry'],
+        nextSteps: ['refresh the channel session', 'retry the delivery path'],
+      },
+    ],
+  }, null, 2)}\n`);
+  await fs.writeFile(path.join(diagnosticsDir, 'root-cause-candidates.json'), `${JSON.stringify([
+    {
+      title: 'Channel session expired',
+      category: 'auth',
+      evidence: ['timeline shows auth expired before channel.delivery.failed'],
+      nextSteps: ['refresh the channel session', 'verify retry logs stay correlated'],
+    },
+  ], null, 2)}\n`);
+  await fs.writeFile(path.join(diagnosticsDir, 'runtime-events', 'events.jsonl'), [
+    JSON.stringify({
+      event: 'channel.delivery.start',
+      trace_id: 'trace-1',
+      span_id: 'span-1',
+      request_id: 'req-1',
+      task_id: 'task-1',
+      user_session_id: 'user-1',
+      error_id: 'err-1',
+    }),
+    JSON.stringify({
+      event: 'channel.auth.expired',
+      trace_id: 'trace-1',
+      span_id: 'span-2',
+      request_id: 'req-1',
+      task_id: 'task-1',
+      user_session_id: 'user-1',
+      error_id: 'err-1',
+    }),
+    JSON.stringify({
+      event: 'channel.delivery.failed',
+      trace_id: 'trace-1',
+      span_id: 'span-3',
+      request_id: 'req-1',
+      task_id: 'task-1',
+      user_session_id: 'user-1',
+      error_id: 'err-1',
+    }),
+  ].join('\n') + '\n');
+  await fs.writeFile(path.join(diagnosticsDir, 'timeline', 'timeline.json'), `${JSON.stringify([
+    { event: 'channel.delivery.start', ts: '2026-05-24T10:00:00.000Z' },
+    { event: 'channel.auth.expired', ts: '2026-05-24T10:00:01.000Z' },
+    { event: 'channel.delivery.failed', ts: '2026-05-24T10:00:02.000Z' },
+  ], null, 2)}\n`);
+
+  const learned = await learnQualityWorkspace(project, { from: diagnosticsDir });
+  assert.equal(learned.ok, true);
+  assert.equal(learned.sourceKind, 'diagnostic-bundle');
+
+  const incident = JSON.parse(await fs.readFile(learned.files.incident, 'utf8'));
+  assert.equal(incident.sourceKind, 'diagnostic-bundle');
+  assert.ok(incident.correlationFields.includes('trace_id'));
+  assert.ok(incident.correlationFields.includes('request_id'));
+  assert.deepEqual(incident.missingCorrelationFields, []);
+  assert.ok(incident.eventNames.includes('channel.delivery.failed'));
+  assert.ok(incident.rootCauseCandidates.some((item) => item.title === 'Channel session expired'));
+
+  const pattern = JSON.parse(await fs.readFile(learned.files.pattern, 'utf8'));
+  assert.ok(pattern.preferredEvidenceOrder.includes('runtime-events'));
+  assert.ok(pattern.rootCauseLabels.includes('Channel session expired'));
+
+  const skill = await fs.readFile(learned.files.skill, 'utf8');
+  assert.ok(skill.includes('## 关联字段'));
+  assert.ok(skill.includes('runtime-events'));
+  assert.ok(skill.includes('channel.delivery.failed'));
+
+  const index = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'knowledge', 'index.json'), 'utf8'));
+  assert.equal(index.skills[0].sourceKind, 'diagnostic-bundle');
+});
+
+test('quality ignores generated tmp and build trees when sampling traceability sources', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await fs.writeFile(path.join(project, '.openprd', 'state', 'changes.json'), `${JSON.stringify({
+    version: 1,
+    activeChange: null,
+    changes: {},
+  }, null, 2)}\n`);
+  await fs.writeFile(path.join(project, '.openprd', 'discovery', 'config.json'), `${JSON.stringify({
+    activeChange: null,
+    taskSharding: {
+      maxItemsPerFile: 25,
+      handoffRequired: true,
+      firstFile: 'tasks.md',
+      nextFilePattern: 'tasks-###.md',
+    },
+    taskMetadata: {
+      stableIdPattern: 'T###.##',
+      required: ['done', 'verify'],
+      optional: ['deps', 'type'],
+      dependencyOrder: 'dependencies must appear before dependents',
+    },
+  }, null, 2)}\n`);
+  await fs.writeFile(path.join(project, 'package.json'), `${JSON.stringify({
+    type: 'module',
+    scripts: {
+      'test:smoke': 'node --test smoke.test.js',
+      'perf:k6': 'k6 run perf.js',
+    },
+    dependencies: {
+      '@opentelemetry/api': '^1.0.0',
+    },
+  }, null, 2)}\n`);
+  await fs.mkdir(path.join(project, 'docs', 'basic'), { recursive: true });
+  await fs.writeFile(path.join(project, 'docs', 'basic', 'backend-structure.md'), [
+    '# Backend structure',
+    '',
+    '- observability correlation fields: trace_id, span_id, request_id, task_id, user_session_id, error_id.',
+    '',
+  ].join('\n'));
+  await fs.mkdir(path.join(project, 'test', 'fixtures'), { recursive: true });
+  await fs.writeFile(path.join(project, 'test', 'fixtures', 'extreme.json'), '{"items":[1,2,3]}\n');
+  await fs.mkdir(path.join(project, '.openprd', 'harness', 'test-reports'), { recursive: true });
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'test-reports', 'smoke.md'), [
+    '# smoke evidence',
+    '',
+    '- smoke: passed main flow.',
+    '- feature coverage: no active change.',
+    '',
+  ].join('\n'));
+  await fs.mkdir(path.join(project, '.tmp', 'generated'), { recursive: true });
+  for (let index = 0; index < 650; index += 1) {
+    await fs.writeFile(
+      path.join(project, '.tmp', 'generated', `sample-${String(index).padStart(4, '0')}.md`),
+      `# generated ${index}\n\nplaceholder artifact\n`,
+    );
+  }
+
+  const quality = await verifyQualityWorkspace(project);
+  assert.equal(quality.ok, true);
+  assert.equal(quality.report.observability.status, 'pass');
+  assert.deepEqual(quality.report.observability.missingCorrelation, []);
+  assert.equal(quality.report.readiness.productionReady, true);
+});
+
+test('quality requires current smoke evidence and run verify separates task readiness from workspace debt', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await fs.writeFile(path.join(project, '.openprd', 'state', 'changes.json'), `${JSON.stringify({
+    version: 1,
+    activeChange: null,
+    changes: {},
+  }, null, 2)}\n`);
+  await fs.writeFile(path.join(project, '.openprd', 'discovery', 'config.json'), `${JSON.stringify({
+    activeChange: null,
+    taskSharding: {
+      maxItemsPerFile: 25,
+      handoffRequired: true,
+      firstFile: 'tasks.md',
+      nextFilePattern: 'tasks-###.md',
+    },
+    taskMetadata: {
+      stableIdPattern: 'T###.##',
+      required: ['done', 'verify'],
+      optional: ['deps', 'type'],
+      dependencyOrder: 'dependencies must appear before dependents',
+    },
+  }, null, 2)}\n`);
+  await fs.writeFile(path.join(project, 'package.json'), `${JSON.stringify({
+    type: 'module',
+    scripts: {
+      'test:smoke': 'node --test smoke.test.js',
+    },
+  }, null, 2)}\n`);
+
+  const quality = await verifyQualityWorkspace(project);
+  const smokeGate = quality.report.gates.find((gate) => gate.id === 'smoke');
+  assert.equal(quality.ok, false);
+  assert.equal(quality.report.readiness.productionReady, false);
+  assert.equal(smokeGate.required, true);
+  assert.equal(smokeGate.status, 'needs-evidence');
+
+  const verified = await runWorkspace(project, { verify: true });
+  const qualityCheck = verified.checks.find((check) => check.name === 'quality');
+  assert.equal(verified.ok, true);
+  assert.equal(verified.readiness.taskReady, true);
+  assert.equal(verified.readiness.workspaceReady, false);
+  assert.equal(qualityCheck.ok, false);
+  assert.equal(qualityCheck.productionReady, false);
+  assert.equal(verified.errors.length, 0);
+  assert.ok(verified.warnings.some((warning) => warning.includes('production-ready')));
+  assert.ok(qualityCheck.errors.some((error) => error.includes('production-ready')));
+});
+
+test('high-risk hook blocks on workspace debt without reframing it as task failure', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await fs.writeFile(path.join(project, '.openprd', 'state', 'changes.json'), `${JSON.stringify({
+    version: 1,
+    activeChange: null,
+    changes: {},
+  }, null, 2)}\n`);
+  await fs.writeFile(path.join(project, '.openprd', 'discovery', 'config.json'), `${JSON.stringify({
+    activeChange: null,
+    taskSharding: {
+      maxItemsPerFile: 25,
+      handoffRequired: true,
+      firstFile: 'tasks.md',
+      nextFilePattern: 'tasks-###.md',
+    },
+    taskMetadata: {
+      stableIdPattern: 'T###.##',
+      required: ['done', 'verify'],
+      optional: ['deps', 'type'],
+      dependencyOrder: 'dependencies must appear before dependents',
+    },
+  }, null, 2)}\n`);
+  await fs.writeFile(path.join(project, 'package.json'), `${JSON.stringify({
+    type: 'module',
+    scripts: {
+      'test:smoke': 'node --test smoke.test.js',
+    },
+  }, null, 2)}\n`);
+
+  const hookResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'PreToolUse'], {
+    cwd: project,
+    input: JSON.stringify({
+      cwd: project,
+      tool_input: {
+        cmd: 'git commit -m "test"',
+      },
+    }),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OPENPRD_CLI: path.resolve('bin/openprd.js'),
+    },
+  });
+  assert.equal(hookResult.status, 0);
+  const hookPayload = JSON.parse(hookResult.stdout);
+  assert.equal(hookPayload.decision, 'block');
+  assert.ok(hookPayload.reason.includes('workspace is not fully ready'));
+  assert.ok(hookPayload.reason.includes('Quality report is not production-ready'));
+  assert.ok(hookPayload.reason.includes('resolve the workspace-level debt'));
+});
+
+test('quality does not treat OpenPRD freeze and handoff wording as a release gate', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await fs.writeFile(path.join(project, 'package.json'), `${JSON.stringify({
+    scripts: {
+      'test:smoke': 'node --test test/smoke.test.js',
+    },
+  }, null, 2)}\n`);
+  await fs.mkdir(path.join(project, 'openprd', 'changes', 'habit-check-cli'), { recursive: true });
+  await fs.writeFile(path.join(project, 'openprd', 'changes', 'habit-check-cli', 'tasks.md'), [
+    '# Tasks',
+    '',
+    '- [x] freeze 后生成任务拆解',
+    '- [x] handoff 前确认 smoke evidence',
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(project, '.openprd', 'state', 'changes.json'), `${JSON.stringify({
+    activeChange: 'habit-check-cli',
+  }, null, 2)}\n`);
+  await fs.mkdir(path.join(project, '.openprd', 'quality', 'evidence'), { recursive: true });
+  await fs.writeFile(path.join(project, '.openprd', 'quality', 'evidence', 'smoke.md'), [
+    '# smoke evidence',
+    '',
+    '- smoke passed: main flow and invalid JSON path.',
+    '- feature coverage: openprd tasks done.',
+    '',
+  ].join('\n'));
+
+  const quality = await verifyQualityWorkspace(project);
+  assert.equal(quality.report.qualityPolicy.scenarioTags.includes('release'), false);
+  assert.deepEqual(quality.report.qualityPolicy.requiredGates, ['smoke', 'feature-coverage']);
+  assert.equal(quality.report.readiness.productionReady, true);
 });
 
 test('quality flags missing business guardrails for free metered AI usage', async () => {
@@ -727,6 +1673,216 @@ test('standards require concrete docs plus file and folder manuals for source fi
   assert.ok(passed.checks.some((check) => check.includes('文件夹说明书: 1/1。')));
 });
 
+test('dev-check reports code file line status and next actions', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await fs.mkdir(path.join(project, 'src'), { recursive: true });
+  await fs.mkdir(path.join(project, 'generated'), { recursive: true });
+  await fs.writeFile(path.join(project, 'src', 'small.js'), `${Array.from({ length: 700 }, (_, index) => `export const small${index} = ${index};`).join('\n')}\n`);
+  await fs.writeFile(path.join(project, 'src', 'medium.js'), `${Array.from({ length: 701 }, (_, index) => `export const medium${index} = ${index};`).join('\n')}\n`);
+  await fs.writeFile(path.join(project, 'src', 'large.js'), `${Array.from({ length: 1501 }, (_, index) => `export const large${index} = ${index};`).join('\n')}\n`);
+  await fs.writeFile(path.join(project, 'generated', 'bundle.js'), `${Array.from({ length: 2000 }, () => 'console.log("generated");').join('\n')}\n`);
+  await fs.writeFile(path.join(project, 'README.md'), '# Readme\n');
+
+  const result = await checkDevelopmentStandardsWorkspace(project, {
+    files: ['src/small.js', 'src/medium.js', 'src/large.js', 'generated/bundle.js', 'README.md'],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.thresholds.okMax, 700);
+  assert.equal(result.thresholds.attentionMax, 1500);
+  assert.equal(result.files.find((file) => file.path === 'src/small.js').status, 'ok');
+  assert.equal(result.files.find((file) => file.path === 'src/medium.js').status, 'attention');
+  assert.match(result.files.find((file) => file.path === 'src/medium.js').nextAction, /局部职责/);
+  assert.equal(result.files.find((file) => file.path === 'src/large.js').status, 'warning');
+  assert.match(result.files.find((file) => file.path === 'src/large.js').nextAction, /拆分/);
+  assert.equal(result.files.find((file) => file.path === 'generated/bundle.js').status, 'exempt');
+  assert.equal(result.files.find((file) => file.path === 'README.md').status, 'not-code');
+
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    assert.equal(await main(['dev-check', project, 'src/large.js', '--json']), 0);
+  } finally {
+    console.log = originalLog;
+  }
+  const cliResult = JSON.parse(logs.join('\n'));
+  assert.equal(cliResult.files[0].status, 'warning');
+
+  const cwdLogs = [];
+  const originalCwd = process.cwd();
+  console.log = (...args) => cwdLogs.push(args.join(' '));
+  try {
+    process.chdir(project);
+    assert.equal(await main(['dev-check', 'src/small.js', 'src/medium.js', '--json']), 0);
+  } finally {
+    process.chdir(originalCwd);
+    console.log = originalLog;
+  }
+  const cwdCliResult = JSON.parse(cwdLogs.join('\n'));
+  assert.equal(await fs.realpath(cwdCliResult.projectRoot), await fs.realpath(project));
+  assert.deepEqual(cwdCliResult.files.map((file) => file.path), ['src/small.js', 'src/medium.js']);
+});
+
+test('visual-compare writes side-by-side review images', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  const reference = path.join(project, 'reference.png');
+  const actual = path.join(project, 'actual.jpg');
+
+  await sharp({
+    create: {
+      width: 180,
+      height: 120,
+      channels: 3,
+      background: '#d4af37',
+    },
+  }).png().toFile(reference);
+  await sharp({
+    create: {
+      width: 240,
+      height: 140,
+      channels: 3,
+      background: '#2f80ed',
+    },
+  }).jpeg({ quality: 90 }).toFile(actual);
+
+  const result = await visualCompareWorkspace(project, {
+    reference,
+    actual,
+    maxPanelWidth: 100,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.format, 'jpg');
+  assert.equal(result.quality, 85);
+  assert.equal(result.labels.reference, '效果图');
+  assert.equal(result.labels.actual, '实现截图');
+  assert.equal(result.outputPath.includes(path.join('.openprd', 'harness', 'visual-reviews')), true);
+  assert.equal(result.outputPath.endsWith('.jpg'), true);
+  const jpgMetadata = await sharp(result.outputPath).metadata();
+  assert.equal(jpgMetadata.format, 'jpeg');
+  assert.ok(jpgMetadata.width > jpgMetadata.height);
+
+  const pngOut = path.join(project, '.openprd', 'harness', 'visual-reviews', 'manual.png');
+  const pngResult = await visualCompareWorkspace(project, {
+    reference,
+    actual,
+    out: pngOut,
+    format: 'png',
+    maxPanelWidth: 100,
+  });
+  assert.equal(pngResult.outputPath, pngOut);
+  assert.equal(pngResult.quality, null);
+  assert.equal((await sharp(pngResult.outputPath).metadata()).format, 'png');
+
+  const relativeOutResult = await visualCompareWorkspace(project, {
+    reference,
+    actual,
+    out: path.join('.openprd', 'harness', 'visual-reviews', 'relative.webp'),
+    maxPanelWidth: 100,
+  });
+  assert.equal(relativeOutResult.outputPath, path.join(project, '.openprd', 'harness', 'visual-reviews', 'relative.webp'));
+  assert.equal(relativeOutResult.format, 'webp');
+  assert.equal((await sharp(relativeOutResult.outputPath).metadata()).format, 'webp');
+
+  const cliOut = path.join(project, '.openprd', 'harness', 'visual-reviews', 'cli.jpg');
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    assert.equal(await main([
+      'visual-compare',
+      project,
+      '--reference',
+      reference,
+      '--actual',
+      actual,
+      '--out',
+      cliOut,
+      '--quality',
+      '82',
+      '--max-panel-width',
+      '100',
+      '--json',
+    ]), 0);
+  } finally {
+    console.log = originalLog;
+  }
+  const cliResult = JSON.parse(logs.join('\n'));
+  assert.equal(cliResult.outputPath, cliOut);
+  assert.equal(cliResult.quality, 82);
+  assert.equal((await sharp(cliOut).metadata()).format, 'jpeg');
+});
+
+test('dev-check records growth candidate for unknown code extensions', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await fs.mkdir(path.join(project, 'src'), { recursive: true });
+  await fs.writeFile(path.join(project, 'src', 'component.astro'), [
+    '---',
+    'const title = "Hello";',
+    '---',
+    '<script>',
+    'export const hydrate = true;',
+    '</script>',
+    '<h1>{title}</h1>',
+    '',
+  ].join('\n'));
+
+  const result = await checkDevelopmentStandardsWorkspace(project, {
+    files: ['src/component.astro'],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.files[0].status, 'ok');
+  assert.equal(result.files[0].fileKind, 'candidate-code');
+  assert.equal(result.files[0].growthCandidate.id, 'code-extension-astro');
+  assert.match(result.files[0].nextAction, /openprd grow/);
+
+  const review = await reviewGrowthWorkspace(project);
+  assert.equal(review.summary.pending, 1);
+  assert.equal(review.pending[0].id, 'code-extension-astro');
+
+  const reviewLogs = [];
+  const originalLog = console.log;
+  console.log = (...args) => reviewLogs.push(args.join(' '));
+  try {
+    assert.equal(await main(['grow', project, '--review']), 0);
+  } finally {
+    console.log = originalLog;
+  }
+  const reviewText = reviewLogs.join('\n');
+  assert.match(reviewText, /状态: 待确认/);
+  assert.match(reviewText, /作用范围: 项目共享规则/);
+  assert.match(reviewText, /置信度: \d+%/);
+  assert.match(reviewText, /采纳影响: 会把匹配 \.astro 的文件纳入代码文件规则/);
+  assert.match(reviewText, /证据:/);
+  assert.match(reviewText, /src\/component\.astro.*原因:/);
+  assert.match(reviewText, /\.openprd\/standards\/config\.json -> developmentStandards\.codeFileLines\.codeFileExtensions append "\.astro"/);
+  assert.match(reviewText, /采纳命令: openprd grow \. --apply --id code-extension-astro/);
+  assert.match(reviewText, /拒绝命令: openprd grow \. --reject --id code-extension-astro/);
+
+  const applyResult = await applyGrowthCandidateWorkspace(project, { id: 'code-extension-astro' });
+  assert.equal(applyResult.ok, true);
+  const standardsConfig = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'standards', 'config.json'), 'utf8'));
+  assert.deepEqual(standardsConfig.developmentStandards.codeFileLines.codeFileExtensions, ['.astro']);
+
+  const recognized = await checkDevelopmentStandardsWorkspace(project, {
+    files: ['src/component.astro'],
+  });
+  assert.equal(recognized.files[0].fileKind, 'code');
+  assert.equal(recognized.files[0].growthCandidate, null);
+
+  const logs = [];
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    assert.equal(await main(['grow', project, '--review', '--json']), 0);
+  } finally {
+    console.log = originalLog;
+  }
+  const cliResult = JSON.parse(logs.join('\n'));
+  assert.equal(cliResult.summary.applied, 1);
+});
+
 test('standards ignore non-owned generated and marketplace source trees', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'consumer' });
@@ -799,6 +1955,87 @@ test('standards ignore non-owned generated and marketplace source trees', async 
   assert.ok(report.manualReport.ignorePatterns.includes('**/marketplace-sources/**'));
 });
 
+test('standards can classify nested reference repositories as external source', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await fs.mkdir(path.join(project, 'src'), { recursive: true });
+
+  for (const doc of [
+    ['file-structure.md', '# 项目文件结构\n\n## 项目定位\n\n测试项目。\n\n## 核心目录\n\n- `src/`: 示例源码。\n- `research/`: 外部参考源码，只作为调研证据。\n\n## 文件组织规则\n\n- 源码放在 `src/`。\n\n## 维护规则\n\n- 修改源码后更新说明书。\n'],
+    ['app-flow.md', '# 产品流程说明\n\n## 核心流程\n\n用户运行示例。\n\n## 用户路径\n\n- 打开项目并执行命令。\n\n## 状态变化\n\n- 示例从未运行到已运行。\n\n## 维护规则\n\n- 流程变化后更新本文档。\n'],
+    ['prd.md', '# 产品逻辑说明\n\n## 问题与目标\n\n提供最小示例。\n\n## 用户故事\n\n- 用户可以运行示例。\n\n## 功能范围\n\n- 示例入口。\n\n## 验收标准\n\n- 命令可执行。\n\n## 维护规则\n\n- 需求变化后更新本文档。\n'],
+    ['frontend-guidelines.md', '# 前端开发规范\n\n## 适用范围\n\n无前端界面。\n\n## 界面结构\n\n- 当前没有页面。\n\n## 交互规范\n\n- 当前没有交互。\n\n## 维护规则\n\n- 新增界面后更新本文档。\n'],
+    ['backend-structure.md', '# 后端架构设计\n\n## 适用范围\n\n示例脚本。\n\n## 服务边界\n\n- `src/app.js` 提供入口。\n\n## CLI 接入面\n\n- 当前通过 `node src/app.js` 运行，不提供独立 CLI 子命令。\n\n## API 接入面\n\n- 当前不提供 HTTP 或 RPC API。\n\n## 数据流\n\n- 无外部数据。\n\n## 维护规则\n\n- 模块或 CLI/API 接入面变化后更新本文档。\n'],
+    ['tech-stack.md', '# 项目技术栈\n\n## 运行环境\n\n- Node.js。\n\n## 核心依赖\n\n- 无运行时依赖。\n\n## 工具链\n\n- `node --check`。\n\n## 维护规则\n\n- 依赖变化后更新本文档。\n'],
+  ]) {
+    await fs.writeFile(path.join(project, 'docs', 'basic', doc[0]), doc[1]);
+  }
+
+  await fs.writeFile(path.join(project, 'src', 'app.js'), [
+    '/*',
+    '## 核心功能',
+    '提供示例入口。',
+    '## 输入',
+    '无。',
+    '## 输出',
+    '导出 app 常量。',
+    '## 定位',
+    '位于源码入口。',
+    '## 依赖',
+    '无。',
+    '## 维护规则',
+    '修改行为后更新说明书。',
+    '*/',
+    'export const app = true;',
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(project, 'src', `${path.basename(project)}_src_README.md`), [
+    '# src 文件夹说明书',
+    '',
+    '## 核心功能',
+    '承载示例源码。',
+    '',
+    '## 输入',
+    '开发者编辑源码。',
+    '',
+    '## 输出',
+    '对外提供示例入口。',
+    '',
+    '## 定位',
+    '项目源码目录。',
+    '',
+    '## 依赖',
+    '无。',
+    '',
+    '## 维护规则',
+    '- 新增源码后更新本文档。',
+    '',
+  ].join('\n'));
+
+  await fs.mkdir(path.join(project, 'research', 'cat-bedtime', '.git'), { recursive: true });
+  for (const fileName of ['one.py', 'two.py', 'three.py', 'four.py', 'five.py']) {
+    await fs.writeFile(path.join(project, 'research', 'cat-bedtime', fileName), 'print("reference")\n');
+  }
+
+  const missing = await checkStandardsWorkspace(project);
+  assert.equal(missing.ok, true);
+  assert.deepEqual(missing.manualReport.sourceFiles, ['src/app.js']);
+  assert.deepEqual(missing.manualReport.provisionalExternalReferencePaths, ['research/cat-bedtime']);
+  assert.equal(missing.manualReport.externalReferenceCandidates[0].path, 'research/cat-bedtime');
+  assert.equal(missing.manualReport.externalReferenceCandidates[0].reason, 'nested-git');
+  assert.ok(missing.checks.some((check) => check.includes('外部参考候选: 1 个已暂按候选跳过逐文件说明书')));
+
+  const classified = await classifyExternalReferenceWorkspace(project, { externalReference: 'research/cat-bedtime' });
+  assert.equal(classified.ok, true);
+  assert.equal(classified.path, 'research/cat-bedtime');
+
+  const passed = await checkStandardsWorkspace(project);
+  assert.equal(passed.ok, true);
+  assert.deepEqual(passed.manualReport.sourceFiles, ['src/app.js']);
+  assert.deepEqual(passed.manualReport.externalReferencePaths, ['research/cat-bedtime']);
+  assert.ok(passed.checks.some((check) => check.includes('外部参考源码: 1 个已跳过逐文件说明书。')));
+});
+
 test('setup enables Codex hooks while preserving user hook groups', async () => {
   const project = await makeTempProject();
   const codexHome = path.join(project, 'codex-home');
@@ -843,6 +2080,7 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.equal(hasTomlFeatureKey(config, 'hooks'), false);
     assert.ok(config.includes('[[hooks.UserPromptSubmit]]'));
     assert.ok(config.includes('[[hooks.PreToolUse]]'));
+    assert.ok(config.includes('[[hooks.Stop]]'));
     assert.ok(config.includes(`matcher = "${OPENPRD_LITE_WRITE_TOOL_MATCHER}"`));
     assert.equal(config.includes('matcher = "*"'), false);
     assert.equal(config.includes('[[hooks.PostToolUse]]'), false);
@@ -851,22 +2089,51 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.equal(hasTomlFeatureKey(userConfig, 'hooks'), false);
     const manifest = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'install-manifest.json'), 'utf8'));
     assert.equal(manifest.hooks.profile, 'lite');
-    assert.deepEqual(manifest.hooks.events, ['UserPromptSubmit', 'PreToolUse']);
+    assert.deepEqual(manifest.hooks.events, ['UserPromptSubmit', 'PreToolUse', 'Stop']);
     assert.ok(manifest.managedFiles.some((file) => file.path === '.codex/hooks/openprd-hook.mjs'));
+    assert.ok(manifest.managedFiles.some((file) => file.path === '.openprd/harness/command-catalog.md'));
     const generatedAgents = await fs.readFile(path.join(project, 'AGENTS.md'), 'utf8');
-    assert.ok(generatedAgents.includes('文档影响检查'));
-    assert.ok(generatedAgents.includes('缺少 `docs/basic/`、文件说明书或目录 README 就补齐'));
-    assert.ok(generatedAgents.includes('CLI 与 API 视为同级接入面'));
-    assert.ok(generatedAgents.includes('openprd-benchmark-router'));
-    assert.ok(generatedAgents.includes('DeepWiki、Context7 或官方资料'));
+    assert.ok(generatedAgents.includes('openprd dev-check . <file...>'));
+    assert.ok(generatedAgents.includes('repo-local skills 和 hooks'));
+    assert.ok(generatedAgents.includes('skills/openprd-router/SKILL.md'));
+    assert.ok(generatedAgents.includes('.openprd/harness/command-catalog.md'));
+    assert.ok(generatedAgents.includes('### Entry Points'));
+    assert.ok(generatedAgents.includes('### Hook-Enforced Gates'));
+    assert.ok(generatedAgents.includes('secrets-vault'));
+    assert.ok(generatedAgents.includes('weapp-dev-mcp'));
+    assert.ok(generatedAgents.includes('resolve_library_id -> query_docs'));
+    assert.ok(generatedAgents.includes('Codex 原生 Image 2'));
+    assert.ok(generatedAgents.includes('独立素材输出（standalone asset）'));
+    assert.equal(generatedAgents.includes('## Skill Routing'), false);
+    assert.equal(generatedAgents.includes('## Tool Reality'), false);
+    assert.equal(generatedAgents.includes('## Working Principles'), false);
+    assert.equal(generatedAgents.includes('### 标准命令'), false);
+    assert.equal(generatedAgents.includes('超过 1500 行要判断本轮是否扩大职责'), false);
+    assert.equal(generatedAgents.includes('个性化偏好只进入 user-local 范围'), false);
     assert.equal(generatedAgents.includes('## 大量只读扫描调度'), false);
     assert.equal(generatedAgents.includes('spark-code-researcher'), false);
+    const generatedRouterSkill = await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-router', 'SKILL.md'), 'utf8');
+    assert.ok(generatedRouterSkill.includes('.openprd/harness/command-catalog.md'));
+    assert.ok(generatedRouterSkill.includes('$openprd-shared'));
+    assert.ok(generatedRouterSkill.includes('$openprd-harness'));
+    assert.ok(generatedRouterSkill.includes('$openprd-benchmark-router'));
+    const generatedCommandCatalog = await fs.readFile(path.join(project, '.openprd', 'harness', 'command-catalog.md'), 'utf8');
+    assert.ok(generatedCommandCatalog.includes('openprd clarify .'));
+    assert.ok(generatedCommandCatalog.includes('openprd review . --open'));
+    assert.ok(generatedCommandCatalog.includes('openprd loop . --run --agent codex|claude --dry-run'));
+    assert.ok(generatedCommandCatalog.includes('openprd visual-compare . --reference <效果图> --actual <实现截图>'));
+    assert.ok(generatedCommandCatalog.includes('openprd quality . --verify'));
     const generatedBenchmarkSkill = await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-benchmark-router', 'SKILL.md'), 'utf8');
     assert.ok(generatedBenchmarkSkill.includes('## Source Map'));
     assert.ok(generatedBenchmarkSkill.includes('Superpowers'));
     assert.ok(generatedBenchmarkSkill.includes('Context7'));
     assert.ok(generatedBenchmarkSkill.includes('不强行对标'));
     assert.ok(generatedBenchmarkSkill.includes('1-3 个最相关来源'));
+    assert.ok(generatedBenchmarkSkill.includes('resolve_library_id'));
+    assert.ok(generatedBenchmarkSkill.includes('query_docs'));
+    assert.ok(generatedBenchmarkSkill.includes('read_wiki_structure'));
+    assert.ok(generatedBenchmarkSkill.includes('ask_question'));
+    assert.ok(generatedBenchmarkSkill.includes('已确认什么、还缺什么'));
     assert.ok(generatedBenchmarkSkill.includes('## Evaluation Lenses'));
     const generatedDiscoverySkill = await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-discovery-loop', 'SKILL.md'), 'utf8');
     assert.ok(generatedDiscoverySkill.includes('## 大量只读扫描调度'));
@@ -874,10 +2141,46 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.ok(generatedDiscoverySkill.includes('spark-code-researcher'));
     const generatedStandardsSkill = await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-standards', 'SKILL.md'), 'utf8');
     assert.ok(generatedStandardsSkill.includes('## 文档影响检查'));
+    assert.ok(generatedStandardsSkill.includes('openprd dev-check . <file...>'));
+    assert.ok(generatedStandardsSkill.includes('研发期代码修改完成后、最终回复前'));
+    assert.ok(generatedStandardsSkill.includes('openprd grow . --review'));
+    assert.ok(generatedStandardsSkill.includes('grow-aware'));
     assert.ok(generatedStandardsSkill.includes('若已有文件说明书'));
     assert.ok(generatedStandardsSkill.includes('CLI 接入面和 API 接入面'));
     const generatedQualitySkill = await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-quality', 'SKILL.md'), 'utf8');
     assert.ok(generatedQualitySkill.includes('HTML 质量评估报告'));
+    assert.ok(generatedQualitySkill.includes('必需 EVO 门禁'));
+    assert.ok(generatedQualitySkill.includes('openprd grow . --review'));
+    assert.ok(generatedQualitySkill.includes('视觉评审证据'));
+    assert.ok(generatedQualitySkill.includes('visual-compare'));
+    const generatedSharedSkill = await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-shared', 'SKILL.md'), 'utf8');
+    assert.ok(generatedSharedSkill.includes('默认按性价比选方案'));
+    assert.ok(generatedSharedSkill.includes('AGENTS.md` 只保留轻量合同'));
+    assert.ok(generatedSharedSkill.includes('secrets-vault'));
+    assert.ok(generatedSharedSkill.includes('weapp-dev-mcp'));
+    assert.ok(generatedSharedSkill.includes('Localizable'));
+    assert.ok(generatedSharedSkill.includes('彩色 Mermaid'));
+    const generatedHarnessSkill = await fs.readFile(path.join(project, '.codex', 'skills', 'openprd-harness', 'SKILL.md'), 'utf8');
+    assert.ok(generatedHarnessSkill.includes('AGENTS.md` 只保留轻量合同'));
+    assert.ok(generatedHarnessSkill.includes('外部证据不足就直接改第三方集成'));
+    assert.ok(generatedSharedSkill.includes('第三方 API、模型、云服务或付费工具'));
+    assert.ok(generatedSharedSkill.includes('多个对象、方案、文件、场景、风险、验证项、素材或任务'));
+    assert.ok(generatedSharedSkill.includes('方案对比、状态盘点、问题排查、风险审查、多对象 QA'));
+    assert.ok(generatedSharedSkill.includes('高置信应可成长'));
+    assert.ok(generatedSharedSkill.includes('openprd update .'));
+    assert.ok(generatedSharedSkill.includes('左侧标注“效果图”'));
+    assert.ok(generatedHarnessSkill.includes('代码修改完成后、最终回复前'));
+    assert.ok(generatedHarnessSkill.includes('growth candidate'));
+    assert.ok(generatedHarnessSkill.includes('主动询问用户是否做成可成长配置'));
+    assert.ok(generatedHarnessSkill.includes('业务和产品语言'));
+    assert.ok(generatedHarnessSkill.includes('性价比最优'));
+    assert.ok(generatedHarnessSkill.includes('主动使用 Markdown 表格'));
+    assert.ok(generatedHarnessSkill.includes('.openprd/harness/visual-reviews/'));
+    assert.ok(generatedHarnessSkill.includes('实现截图'));
+    const generatedVisualCommand = await fs.readFile(path.join(project, '.codex', 'prompts', 'openprd-visual-compare.md'), 'utf8');
+    assert.ok(generatedVisualCommand.includes('side-by-side JPG'));
+    assert.ok(generatedVisualCommand.includes('效果图'));
+    assert.ok(generatedVisualCommand.includes('实现截图'));
 
     const logs = [];
     const originalLog = console.log;
@@ -888,6 +2191,41 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
       console.log = originalLog;
     }
     assert.ok(JSON.parse(logs.join('\n')).ok);
+
+    await fs.writeFile(path.join(project, 'package.json'), `${JSON.stringify({
+      type: 'module',
+      scripts: {
+        'test:smoke': 'node --test smoke.test.js',
+      },
+    }, null, 2)}\n`);
+    await fs.writeFile(path.join(project, '.openprd', 'state', 'changes.json'), `${JSON.stringify({
+      version: 1,
+      activeChange: null,
+      changes: {},
+    }, null, 2)}\n`);
+    await fs.writeFile(path.join(project, '.openprd', 'discovery', 'config.json'), `${JSON.stringify({
+      activeChange: null,
+      taskSharding: {
+        maxItemsPerFile: 25,
+        handoffRequired: true,
+        firstFile: 'tasks.md',
+        nextFilePattern: 'tasks-###.md',
+      },
+      taskMetadata: {
+        stableIdPattern: 'T###.##',
+        required: ['done', 'verify'],
+        optional: ['deps', 'type'],
+        dependencyOrder: 'dependencies must appear before dependents',
+      },
+    }, null, 2)}\n`);
+    await fs.mkdir(path.join(project, '.openprd', 'harness', 'test-reports'), { recursive: true });
+    await fs.writeFile(path.join(project, '.openprd', 'harness', 'test-reports', 'setup-smoke.md'), [
+      '# EVO setup report',
+      '',
+      '- smoke: passed setup hook flow',
+      '- feature coverage: no active change',
+      '',
+    ].join('\n'));
 
     const hookResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'PreToolUse'], {
       cwd: project,
@@ -948,127 +2286,6 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.equal(successPostResult.status, 0);
     assert.deepEqual(JSON.parse(successPostResult.stdout), { continue: true });
 
-    const plainPromptResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'UserPromptSubmit'], {
-      cwd: project,
-      input: JSON.stringify({
-        cwd: project,
-        prompt: '把这个按钮文案改短一点',
-      }),
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        OPENPRD_CLI: path.resolve('bin/openprd.js'),
-      },
-    });
-    assert.equal(plainPromptResult.status, 0);
-    assert.deepEqual(JSON.parse(plainPromptResult.stdout), { continue: true });
-
-    const requirementPromptResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'UserPromptSubmit'], {
-      cwd: project,
-      input: JSON.stringify({
-        cwd: project,
-        prompt: '请直接实现：在【Agent管理】模块下，我希望增加一个【团队搭建】放到【Agent 工区】菜单下面，这个模块主要是将 Agent市场、技能库和 CLI库按流程串联起来，一站式完成配置。',
-      }),
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        OPENPRD_CLI: path.resolve('bin/openprd.js'),
-      },
-    });
-    assert.equal(requirementPromptResult.status, 0);
-    const requirementPromptPayload = JSON.parse(requirementPromptResult.stdout);
-    assert.equal(requirementPromptPayload.continue, true);
-    assert.ok(requirementPromptPayload.hookSpecificOutput.additionalContext.includes('requirement intake gate'));
-    assert.ok(requirementPromptPayload.hookSpecificOutput.additionalContext.includes('openprd clarify .'));
-    assert.equal(requirementPromptPayload.hookSpecificOutput.additionalContext.includes('openprd clarify . --open'), false);
-    const requirementGate = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'requirement-gate.json'), 'utf8'));
-    assert.equal(requirementGate.active, true);
-    assert.equal(requirementGate.status, 'requires-clarification');
-
-    const blockedPatchResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'PreToolUse'], {
-      cwd: project,
-      input: JSON.stringify({
-        cwd: project,
-        tool_name: 'apply_patch',
-        tool_input: '*** Begin Patch\\n*** Update File: src/app.ts\\n@@\\n+// premature implementation\\n*** End Patch',
-      }),
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        OPENPRD_CLI: path.resolve('bin/openprd.js'),
-      },
-    });
-    assert.equal(blockedPatchResult.status, 0);
-    const blockedPatchPayload = JSON.parse(blockedPatchResult.stdout);
-    assert.equal(blockedPatchPayload.decision, 'block');
-    assert.ok(blockedPatchPayload.reason.includes('requirement intake'));
-
-    const confirmedPromptResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'UserPromptSubmit'], {
-      cwd: project,
-      input: JSON.stringify({
-        cwd: project,
-        prompt: '确认，按刚才方案和任务拆解落地执行。',
-      }),
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        OPENPRD_CLI: path.resolve('bin/openprd.js'),
-      },
-    });
-    assert.equal(confirmedPromptResult.status, 0);
-    const confirmedPromptPayload = JSON.parse(confirmedPromptResult.stdout);
-    assert.ok(confirmedPromptPayload.hookSpecificOutput.additionalContext.includes('explicitly confirmed'));
-    const confirmedGate = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'requirement-gate.json'), 'utf8'));
-    assert.equal(confirmedGate.active, false);
-    assert.equal(confirmedGate.status, 'user-confirmed-for-execution');
-
-    const loopRunPromptResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'UserPromptSubmit'], {
-      cwd: project,
-      input: JSON.stringify({
-        cwd: project,
-        prompt: [
-          '# OpenPrd 长程单任务执行会话',
-          'Agent: codex',
-          '模式: loop-run',
-          `项目: ${project}`,
-          '变更: team-builder',
-          '任务: T001.01 实现团队搭建页面流程',
-          '',
-          '## Harness 契约',
-          '你正在运行一个隔离的 OpenPrd loop 单任务会话。',
-        ].join('\n'),
-      }),
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        OPENPRD_CLI: path.resolve('bin/openprd.js'),
-      },
-    });
-    assert.equal(loopRunPromptResult.status, 0);
-    const loopRunPromptPayload = JSON.parse(loopRunPromptResult.stdout);
-    assert.equal(loopRunPromptPayload.continue, true);
-    assert.equal(loopRunPromptPayload.hookSpecificOutput.additionalContext.includes('requirement intake gate: opened'), false);
-    const loopRunEvents = await fs.readFile(path.join(project, '.openprd', 'harness', 'events.jsonl'), 'utf8');
-    assert.equal(loopRunEvents.split('\n').some((line) => line.includes('模式: loop-run') && line.includes('requirement-gate-opened')), false);
-
-    const allowedPatchResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'PreToolUse'], {
-      cwd: project,
-      input: JSON.stringify({
-        cwd: project,
-        tool_name: 'apply_patch',
-        tool_input: '*** Begin Patch\\n*** Update File: src/app.ts\\n@@\\n+// confirmed implementation\\n*** End Patch',
-      }),
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        OPENPRD_CLI: path.resolve('bin/openprd.js'),
-      },
-    });
-    assert.equal(allowedPatchResult.status, 0);
-    const allowedPatchPayload = JSON.parse(allowedPatchResult.stdout);
-    assert.equal(allowedPatchPayload.decision, undefined);
-    assert.equal(allowedPatchPayload.continue, true);
-
     const sessionStartResult = spawnSync(process.execPath, [path.join(project, '.codex', 'hooks', 'openprd-hook.mjs'), 'SessionStart'], {
       cwd: project,
       input: JSON.stringify({
@@ -1117,6 +2334,16 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     const drifted = await doctorWorkspace(project, { tools: 'codex', enableUserCodexConfig: true, codexHome });
     assert.equal(drifted.ok, false);
     assert.ok(drifted.agentIntegration.drift.errors.some((error) => error.includes('checksum-drift')));
+    const updated = await updateAgentIntegrationWorkspace(project, {
+      tools: 'codex',
+      templatePack: 'agent',
+      enableUserCodexConfig: true,
+      codexHome,
+    });
+    assert.equal(updated.ok, true);
+    const repaired = await doctorWorkspace(project, { tools: 'codex', enableUserCodexConfig: true, codexHome });
+    assert.equal(repaired.ok, true);
+    assert.equal(repaired.agentIntegration.drift.ok, true);
   } finally {
     if (previousCodexHome === undefined) {
       delete process.env.OPENPRD_CODEX_HOME;
@@ -1124,6 +2351,20 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
       process.env.OPENPRD_CODEX_HOME = previousCodexHome;
     }
   }
+});
+
+
+test('clarify treats legacy artifact mode as an inline checklist', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'agent' });
+
+  const clarify = await clarifyWorkspace(project, { mode: 'artifact', open: true });
+  assert.equal(clarify.clarifyPresentation.mode, 'inline-with-checklist');
+  assert.equal(clarify.clarifyArtifact, null);
+  assert.equal(clarify.clarifyArtifactBundle, null);
+  assert.equal(clarify.opened, false);
+  assert.equal(await pathExists(path.join(project, '.openprd', 'engagements', 'active', 'clarify.html')), false);
+  assert.ok(clarify.inlineClarification.lines.some((line) => line.includes('我理解的目标')));
 });
 
 test('doctor fails when Codex hook emits legacy output schema', async () => {
@@ -1195,12 +2436,13 @@ test('setup can opt into guarded Codex hook profile', async () => {
   const config = await fs.readFile(path.join(project, '.codex', 'config.toml'), 'utf8');
   assert.ok(config.includes('[[hooks.UserPromptSubmit]]'));
   assert.ok(config.includes('[[hooks.PreToolUse]]'));
+  assert.ok(config.includes('[[hooks.Stop]]'));
   assert.ok(config.includes(`matcher = "${OPENPRD_GUARDED_WRITE_TOOL_MATCHER}"`));
   assert.equal(config.includes('[[hooks.PostToolUse]]'), false);
 
   const manifest = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'install-manifest.json'), 'utf8'));
   assert.equal(manifest.hooks.profile, 'guarded');
-  assert.deepEqual(manifest.hooks.events, ['UserPromptSubmit', 'PreToolUse']);
+  assert.deepEqual(manifest.hooks.events, ['UserPromptSubmit', 'PreToolUse', 'Stop']);
 
   const doctor = await doctorWorkspace(project, { tools: 'codex', enableUserCodexConfig: true, codexHome });
   assert.equal(doctor.agentIntegration.hookProfile, 'guarded');
@@ -1222,9 +2464,10 @@ test('run exposes hook-stable context and records hook iterations', async () => 
     inScope: ['Run context'],
     outOfScope: ['External schedulers'],
     primaryFlows: ['Agent reads run context'],
-    functional: ['Expose next task'],
+    functional: Array.from({ length: 10 }, (_, index) => `Expose next task slice ${index + 1}`),
     productType: 'consumer',
   });
+  await reviewWorkspace(project, { mark: 'confirmed' });
   await generateOpenSpecChangeWorkspace(project, { change: 'run-loop' });
 
   const context = await runWorkspace(project, { context: true });
@@ -1238,6 +2481,19 @@ test('run exposes hook-stable context and records hook iterations', async () => 
   assert.equal(context.recommendation.executionCommand.includes('--commit'), false);
   assert.ok(context.recommendation.commitCommand.includes('openprd loop . --finish'));
   assert.equal(context.recommendation.intentGate.requiresExplicitIntent, true);
+  const continuationContext = await runWorkspace(project, {
+    context: true,
+    message: '继续执行这个记录：019e5ac7-088b-7ff2-86d1-4c026ff68105',
+  });
+  assert.equal(continuationContext.lane.kind, 'continuation');
+  assert.equal(continuationContext.lane.selectorType, 'session');
+  assert.equal(continuationContext.lane.target.sessionId, '019e5ac7-088b-7ff2-86d1-4c026ff68105');
+  assert.equal(continuationContext.lane.target.changeId, null);
+  assert.equal(continuationContext.recommendation.type, 'session-continuation');
+  assert.equal(continuationContext.recommendation.continuationTarget.sessionId, '019e5ac7-088b-7ff2-86d1-4c026ff68105');
+  assert.ok(continuationContext.recommendation.reason.includes('工具无关的会话 ID'));
+  assert.ok(continuationContext.recommendation.reason.includes('不能用相似历史、当前 active change'));
+  assert.equal(continuationContext.recommendation.reason.includes('存在一个依赖已就绪的 OpenPrd 任务'), false);
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'run-state.json')).then(() => true));
   assert.ok(await fs.stat(path.join(project, '.openprd', 'harness', 'iterations.jsonl')).then(() => true));
 
@@ -1253,10 +2509,6 @@ test('run exposes hook-stable context and records hook iterations', async () => 
   assert.ok(iterations.includes('UserPromptSubmit'));
   assert.ok(iterations.includes('context-injected'));
 
-  const verified = await runWorkspace(project, { verify: true });
-  assert.equal(verified.ok, true);
-  assert.ok(verified.checks.some((check) => check.name === 'change' && check.ok));
-
   const logs = [];
   const originalLog = console.log;
   console.log = (...args) => logs.push(args.join(' '));
@@ -1268,9 +2520,42 @@ test('run exposes hook-stable context and records hook iterations', async () => 
   assert.ok(logs.some((line) => line.includes('OpenPrd 运行上下文')));
   assert.ok(logs.some((line) => line.includes('建议只读命令')));
   assert.ok(logs.some((line) => line.includes('执行门槛')));
+
+  const continuationLogs = [];
+  console.log = (...args) => continuationLogs.push(args.join(' '));
+  try {
+    assert.equal(await main(['run', project, '--context', '--message', '继续执行这个记录：019e5ac7-088b-7ff2-86d1-4c026ff68105']), 0);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(continuationLogs.some((line) => line.includes('执行流: 继续已有任务')));
+  assert.ok(continuationLogs.some((line) => line.includes('下一步类型: session-continuation')));
+  assert.ok(continuationLogs.some((line) => line.includes('会话 ID')));
+
+  const tasksPath = path.join(project, 'openprd', 'changes', 'run-loop', 'tasks.md');
+  const tasksText = await fs.readFile(tasksPath, 'utf8');
+  await fs.writeFile(tasksPath, tasksText.replace(/- \[ \]/g, '- [x]'));
+  await fs.writeFile(path.join(project, 'package.json'), `${JSON.stringify({
+    type: 'module',
+    scripts: {
+      'test:smoke': 'node --test smoke.test.js',
+    },
+  }, null, 2)}\n`);
+  await fs.mkdir(path.join(project, '.openprd', 'harness', 'test-reports'), { recursive: true });
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'test-reports', 'run-loop-smoke.md'), [
+    '# EVO run-loop report',
+    '',
+    '- smoke: passed run context main flow',
+    '- feature coverage: tasks done',
+    '',
+  ].join('\n'));
+
+  const verified = await runWorkspace(project, { verify: true });
+  assert.equal(verified.ok, true);
+  assert.ok(verified.checks.some((check) => check.name === 'change' && check.ok));
 });
 
-test('run context keeps lightweight task advance for five or fewer tasks', async () => {
+test('run context keeps lightweight task advance below the implementation task threshold', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'consumer' });
   await synthesizeWorkspace(project, {
@@ -1288,6 +2573,7 @@ test('run context keeps lightweight task advance for five or fewer tasks', async
     functional: ['Expose next task'],
     productType: 'consumer',
   });
+  await reviewWorkspace(project, { mark: 'confirmed' });
   const generated = await generateOpenSpecChangeWorkspace(project, { change: 'small-run' });
   await fs.writeFile(path.join(generated.changeDir, 'tasks.md'), [
     '- [ ] T001.01 Prepare small state',
@@ -1305,8 +2591,387 @@ test('run context keeps lightweight task advance for five or fewer tasks', async
   assert.ok(context.recommendation.command.includes('openprd tasks . --change'));
 });
 
+test('run context prioritizes active requirement intake over historical active change tasks', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await synthesizeWorkspace(project, {
+    title: 'Historical Change',
+    owner: 'PM',
+    problemStatement: 'The workspace has an older unfinished change',
+    whyNow: 'The older change should not take over a new intake',
+    primaryUsers: ['Product agents'],
+    goals: ['Keep new intake separate'],
+    successMetrics: ['Run context points to intake first'],
+    acceptanceGoals: ['Historical change is only a reminder'],
+    inScope: ['Run context recommendation'],
+    outOfScope: ['Executing the older task'],
+    primaryFlows: ['Agent reads run context'],
+    functional: ['Expose next task'],
+    productType: 'consumer',
+  });
+  await reviewWorkspace(project, { mark: 'confirmed' });
+  await generateOpenSpecChangeWorkspace(project, { change: 'historical-change' });
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'requirement-gate.json'), JSON.stringify({
+    version: 1,
+    active: true,
+    status: 'requires-clarification',
+    openedAt: '2026-05-25 10:00:00',
+    updatedAt: '2026-05-25 10:00:00',
+    promptPreview: '新增一个本轮独立需求入口，不要继续旧任务。',
+    requiredFlow: ['clarify', 'capture', 'synthesize', 'review', 'change-generate', 'tasks', 'implementation'],
+    intakeMode: 'focused-reflection',
+  }, null, 2));
+
+  const context = await runWorkspace(project, { context: true });
+  assert.equal(context.activeChange, 'historical-change');
+  assert.equal(context.activeRequirementGate.status, 'requires-clarification');
+  assert.equal(context.recommendation.type, 'requirement-intake');
+  assert.equal(context.recommendation.changeId, null);
+  assert.ok(context.recommendation.command.includes('openprd clarify'));
+  assert.ok(context.recommendation.reason.includes('历史 active change historical-change 仅作为提醒'));
+
+  const continuationContext = await runWorkspace(project, {
+    context: true,
+    message: '继续执行这个记录：019e5ac7-088b-7ff2-86d1-4c026ff68105',
+  });
+  assert.equal(continuationContext.lane.selectorType, 'session');
+  assert.equal(continuationContext.lane.target.changeId, null);
+  assert.equal(continuationContext.recommendation.type, 'session-continuation');
+  assert.ok(continuationContext.recommendation.reason.includes('不能用相似历史、当前 active change'));
+  assert.ok(continuationContext.recommendation.reason.includes('只作为背景提醒'));
+  assert.equal(continuationContext.recommendation.reason.includes('存在一个依赖已就绪的 OpenPrd 任务'), false);
+});
+
+test('run context can route by user-described requirement instead of the global active change', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await writeMinimalChange(project, 'hermes-playwright-chromium-oss', {
+    title: 'Hermes Playwright Chromium OSS',
+    requirementTitle: 'Hermes Playwright Chromium OSS',
+    taskTitle: 'Keep Hermes browser loop alive',
+  });
+  await writeMinimalChange(project, 'resource-layer-public-model-api', {
+    title: 'Resource Layer Public Model API',
+    requirementTitle: 'Public model API for the resource layer',
+    taskTitle: 'Build public model API for the resource layer',
+  });
+  await fs.writeFile(path.join(project, '.openprd', 'state', 'changes.json'), JSON.stringify({
+    version: 1,
+    activeChange: 'hermes-playwright-chromium-oss',
+    changes: {
+      'hermes-playwright-chromium-oss': { id: 'hermes-playwright-chromium-oss', status: 'active' },
+      'resource-layer-public-model-api': { id: 'resource-layer-public-model-api', status: 'draft' },
+    },
+  }, null, 2));
+
+  const context = await runWorkspace(project, {
+    context: true,
+    message: 'resource-layer-public-model-api 公共模型 API 需求',
+  });
+  assert.equal(context.activeChange, 'hermes-playwright-chromium-oss');
+  assert.equal(context.focus.changeId, 'resource-layer-public-model-api');
+  assert.equal(context.lane.kind, 'targeted');
+  assert.equal(context.lane.target.changeId, 'resource-layer-public-model-api');
+  assert.equal(context.recommendation.changeId, 'resource-layer-public-model-api');
+  assert.equal(context.nextTask.id, 'T001.01');
+  assert.equal(context.nextTask.title, 'Build public model API for the resource layer');
+  assert.ok(context.recommendation.reason.includes('当前用户消息已经命中变更 resource-layer-public-model-api'));
+});
+
+test('run context resolves a historical session from local session artifacts before considering active change', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await writeMinimalChange(project, 'hermes-playwright-chromium-oss', {
+    title: 'Hermes Playwright Chromium OSS',
+    requirementTitle: 'Hermes Playwright Chromium OSS',
+    taskTitle: 'Keep Hermes browser loop alive',
+  });
+  await writeMinimalChange(project, 'resource-layer-public-model-api', {
+    title: 'Resource Layer Public Model API',
+    requirementTitle: 'Public model API for the resource layer',
+    taskTitle: 'Build public model API for the resource layer',
+  });
+  await fs.writeFile(path.join(project, '.openprd', 'state', 'changes.json'), JSON.stringify({
+    version: 1,
+    activeChange: 'hermes-playwright-chromium-oss',
+    changes: {
+      'hermes-playwright-chromium-oss': { id: 'hermes-playwright-chromium-oss', status: 'active' },
+      'resource-layer-public-model-api': { id: 'resource-layer-public-model-api', status: 'draft' },
+    },
+  }, null, 2));
+  const sessionId = '019e5d11-8c9d-7652-a5cb-24125046ea48';
+  await fs.mkdir(path.join(project, '.openprd', 'harness', 'requirement-gates'), { recursive: true });
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'requirement-gates', `${sessionId}.json`), JSON.stringify({
+    version: 1,
+    active: false,
+    status: 'execution-authorized',
+    sessionId,
+    promptPreview: '继续 resource-layer-public-model-api 公共模型 API 需求',
+  }, null, 2));
+
+  const context = await runWorkspace(project, {
+    context: true,
+    message: `继续这个Codex任务：${sessionId}`,
+  });
+  assert.equal(context.activeChange, 'hermes-playwright-chromium-oss');
+  assert.equal(context.lane.selectorType, 'session');
+  assert.equal(context.lane.target.sessionId, sessionId);
+  assert.equal(context.lane.target.changeId, 'resource-layer-public-model-api');
+  assert.equal(context.recommendation.type, 'session-continuation');
+  assert.equal(context.recommendation.changeId, 'resource-layer-public-model-api');
+  assert.ok(context.recommendation.reason.includes('本地已恢复到 变更 resource-layer-public-model-api'));
+  assert.ok(context.recommendation.reason.includes('当前工作区 active change hermes-playwright-chromium-oss 只作为背景提醒'));
+});
+
+test('run context prefers a persisted session binding over ambiguous requirement gate text', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await writeMinimalChange(project, 'hermes-playwright-chromium-oss', {
+    title: 'Hermes Playwright Chromium OSS',
+    requirementTitle: 'Hermes Playwright Chromium OSS',
+    taskTitle: 'Keep Hermes browser loop alive',
+  });
+  await writeMinimalChange(project, 'resource-layer-public-model-api', {
+    title: 'Resource Layer Public Model API',
+    requirementTitle: 'Public model API for the resource layer',
+    taskTitle: 'Build public model API for the resource layer',
+  });
+  await fs.writeFile(path.join(project, '.openprd', 'state', 'changes.json'), JSON.stringify({
+    version: 1,
+    activeChange: 'hermes-playwright-chromium-oss',
+    changes: {
+      'hermes-playwright-chromium-oss': { id: 'hermes-playwright-chromium-oss', status: 'active' },
+      'resource-layer-public-model-api': { id: 'resource-layer-public-model-api', status: 'draft' },
+    },
+  }, null, 2));
+  const sessionId = '019e5f21-54be-7042-bb92-9ba6b2c24757';
+  await fs.mkdir(path.join(project, '.openprd', 'harness', 'requirement-gates'), { recursive: true });
+  await fs.mkdir(path.join(project, '.openprd', 'harness', 'session-bindings'), { recursive: true });
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'requirement-gates', `${sessionId}.json`), JSON.stringify({
+    version: 1,
+    active: true,
+    status: 'prd-review-required',
+    sessionId,
+    promptPreview: '继续这个记录，别被当前 active change 带偏。',
+  }, null, 2));
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'session-bindings', `${sessionId}.json`), JSON.stringify({
+    version: 1,
+    sessionId,
+    promptPreview: '继续资源层公共模型 API 需求',
+    title: 'Resource Layer Public Model API',
+    changeId: 'resource-layer-public-model-api',
+    workUnitId: 'wu-20260525220909-30c25b2d',
+    versionId: 'v0165',
+    digest: 'deadbeef',
+    reviewStatus: 'confirmed',
+  }, null, 2));
+
+  const context = await runWorkspace(project, {
+    context: true,
+    message: `继续这个Codex任务：${sessionId}`,
+  });
+  assert.equal(context.activeChange, 'hermes-playwright-chromium-oss');
+  assert.equal(context.lane.selectorType, 'session');
+  assert.equal(context.lane.target.sessionId, sessionId);
+  assert.equal(context.lane.target.changeId, 'resource-layer-public-model-api');
+  assert.equal(context.recommendation.changeId, 'resource-layer-public-model-api');
+  assert.ok(context.lane.resolution.reason.includes('lane 绑定指向变更 resource-layer-public-model-api'));
+  assert.ok(context.recommendation.reason.includes('本地已恢复到 变更 resource-layer-public-model-api'));
+  assert.ok(context.recommendation.reason.includes('当前工作区 active change hermes-playwright-chromium-oss 只作为背景提醒'));
+});
+
+test('run verify validates the focused change instead of the global active change', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await writeMinimalChange(project, 'hermes-playwright-chromium-oss', {
+    title: 'Hermes Playwright Chromium OSS',
+    requirementTitle: 'Hermes Playwright Chromium OSS',
+    taskTitle: 'Keep Hermes browser loop alive',
+  });
+  await writeMinimalChange(project, 'resource-layer-public-model-api', {
+    title: 'Resource Layer Public Model API',
+    requirementTitle: 'Public model API for the resource layer',
+    taskTitle: 'Build public model API for the resource layer',
+  });
+
+  const validatedChanges = [];
+  const taskStateFor = (changeId, title) => ({
+    ok: true,
+    action: 'list',
+    projectRoot: project,
+    changeId,
+    changeDir: path.join(project, 'openprd', 'changes', changeId),
+    tasks: [{
+      id: 'T001.01',
+      title,
+      taskHandle: `${changeId}:T001.01:${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      relativePath: `openprd/changes/${changeId}/tasks.md`,
+      lineNumber: 1,
+      checked: false,
+      metadata: {
+        verify: 'node -e "process.exit(0)"',
+      },
+    }],
+    summary: {
+      total: 1,
+      completed: 0,
+      pending: 1,
+      blocked: 0,
+      implementation: {
+        total: 1,
+        completed: 0,
+        pending: 1,
+      },
+    },
+    nextTask: {
+      id: 'T001.01',
+      title,
+      taskHandle: `${changeId}:T001.01:${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      relativePath: `openprd/changes/${changeId}/tasks.md`,
+      lineNumber: 1,
+      metadata: {
+        verify: 'node -e "process.exit(0)"',
+      },
+    },
+    blockedTasks: [],
+  });
+
+  const run = createRunWorkspace({
+    checkStandardsWorkspace: async () => ({ ok: true, errors: [] }),
+    listOpenPrdChangesWorkspace: async () => ({
+      ok: true,
+      activeChange: 'hermes-playwright-chromium-oss',
+      changes: [
+        {
+          id: 'hermes-playwright-chromium-oss',
+          active: true,
+          changeDir: path.join(project, 'openprd', 'changes', 'hermes-playwright-chromium-oss'),
+        },
+        {
+          id: 'resource-layer-public-model-api',
+          active: false,
+          changeDir: path.join(project, 'openprd', 'changes', 'resource-layer-public-model-api'),
+        },
+      ],
+    }),
+    listOpenSpecTaskWorkspace: async (_projectRoot, options = {}) => (
+      options.change === 'resource-layer-public-model-api'
+        ? taskStateFor('resource-layer-public-model-api', 'Build public model API for the resource layer')
+        : taskStateFor('hermes-playwright-chromium-oss', 'Keep Hermes browser loop alive')
+    ),
+    nextWorkspace: async () => ({
+      workflow: [],
+      recommendation: {
+        nextAction: 'noop',
+        suggestedCommand: 'openprd next .',
+        reason: 'stub',
+      },
+      analysisSnapshot: null,
+      prdReviewState: null,
+    }),
+    resumeOpenSpecDiscoveryWorkspace: async () => null,
+    validateOpenSpecChangeWorkspace: async (_projectRoot, options = {}) => {
+      validatedChanges.push(options.change);
+      return {
+        ok: options.change === 'resource-layer-public-model-api',
+        errors: options.change === 'resource-layer-public-model-api' ? [] : ['wrong change validated'],
+      };
+    },
+    validateWorkspace: async () => ({
+      report: {
+        valid: true,
+        errors: [],
+        warnings: [],
+      },
+    }),
+    verifyOpenSpecDiscoveryWorkspace: async () => ({
+      ok: true,
+      verification: {
+        errors: [],
+      },
+    }),
+    verifyQualityWorkspace: async () => ({
+      ok: true,
+      errors: [],
+      report: {
+        readiness: {
+          productionReady: true,
+          attentionGates: [],
+        },
+      },
+    }),
+  });
+
+  const result = await run(project, {
+    verify: true,
+    message: 'resource-layer-public-model-api 公共模型 API 需求',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.context.focus.changeId, 'resource-layer-public-model-api');
+  assert.deepEqual(validatedChanges, ['resource-layer-public-model-api']);
+});
+
+test('run context and verify ignore reference discovery by default', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  await synthesizeWorkspace(project, {
+    title: 'Reference Discovery Boundary',
+    owner: 'PM',
+    problemStatement: 'Reference discovery should not pollute primary run verification',
+    whyNow: 'Verify output needs to stay scoped to the current project',
+    primaryUsers: ['Project maintainers'],
+    goals: ['Keep primary verify scoped'],
+    successMetrics: ['Run context keeps the implementation recommendation'],
+    acceptanceGoals: ['Reference discovery stays outside default run verify'],
+    inScope: ['Run context', 'Run verify'],
+    outOfScope: ['Reference mining workflows'],
+    primaryFlows: ['Maintainer reads run context'],
+    functional: Array.from({ length: 10 }, (_, index) => `Expose implementation slice ${index + 1}`),
+    productType: 'consumer',
+  });
+  await reviewWorkspace(project, { mark: 'confirmed' });
+  await generateOpenSpecChangeWorkspace(project, { change: 'reference-boundary' });
+
+  const tasksPath = path.join(project, 'openprd', 'changes', 'reference-boundary', 'tasks.md');
+  const tasksText = await fs.readFile(tasksPath, 'utf8');
+  await fs.writeFile(tasksPath, tasksText.replace(/- \[ \]/g, '- [x]'));
+  await fs.writeFile(path.join(project, 'package.json'), `${JSON.stringify({
+    type: 'module',
+    scripts: {
+      'test:smoke': 'node --test smoke.test.js',
+    },
+  }, null, 2)}\n`);
+  await fs.mkdir(path.join(project, '.openprd', 'harness', 'test-reports'), { recursive: true });
+  await fs.writeFile(path.join(project, '.openprd', 'harness', 'test-reports', 'reference-boundary-smoke.md'), [
+    '# EVO reference boundary report',
+    '',
+    '- smoke: passed scoped verify flow',
+    '- feature coverage: tasks done',
+    '',
+  ].join('\n'));
+
+  const referenceProject = path.join(project, 'research', 'reference-repo');
+  await fs.mkdir(path.join(referenceProject, '.git'), { recursive: true });
+  await fs.writeFile(path.join(referenceProject, 'ref.js'), 'export const reference = true;\n');
+  await openspecDiscoveryWorkspace(project, {
+    mode: 'reference',
+    reference: 'research/reference-repo',
+  });
+
+  const context = await runWorkspace(project, { context: true });
+  assert.equal(context.activeChange, 'reference-boundary');
+  assert.equal(context.discovery, null);
+  assert.equal(context.recommendation.type, 'change-review');
+
+  const verified = await runWorkspace(project, { verify: true });
+  assert.equal(verified.context.discovery, null);
+  assert.equal(verified.checks.some((check) => check.name === 'discovery'), false);
+  assert.equal(verified.errors.some((error) => error.startsWith('discovery:')), false);
+});
+
 test('fleet dry-run plans historical updates without auto-claiming agent-only projects', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'openprd-fleet-test-'));
+  const openprdHome = path.join(root, '.openprd-home');
   const existing = path.join(root, 'existing-openprd');
   const agentOnly = path.join(root, 'agent-only');
   const plain = path.join(root, 'plain-project');
@@ -1316,7 +2981,31 @@ test('fleet dry-run plans historical updates without auto-claiming agent-only pr
   await fs.writeFile(path.join(agentOnly, 'AGENTS.md'), '# Local Agent Notes\n');
   await fs.writeFile(path.join(plain, 'package.json'), '{"name":"plain-project"}\n');
 
-  await initWorkspace(existing, { templatePack: 'agent' });
+  await initWorkspace(existing, { templatePack: 'agent', openprdHome });
+  const synthesized = await synthesizeWorkspace(existing, {
+    title: '历史需求',
+    owner: 'PM',
+    problemStatement: '历史项目缺少稳定需求身份',
+    whyNow: '多 Agent 并行后容易串需求',
+    primaryUsers: ['维护者'],
+    goals: ['历史确认命令可校验'],
+    inScope: ['补历史 work unit'],
+    outOfScope: ['接管 agent-only 项目'],
+    functional: ['历史评审产物带工作单元 ID'],
+  });
+  const legacyVersionPath = path.join(existing, '.openprd', 'state', 'versions', 'v0001.json');
+  const legacySnapshot = JSON.parse(await fs.readFile(legacyVersionPath, 'utf8'));
+  delete legacySnapshot.workUnitId;
+  delete legacySnapshot.targetRoot;
+  await fs.writeFile(legacyVersionPath, `${JSON.stringify(legacySnapshot, null, 2)}\n`);
+  await fs.rm(path.join(existing, '.openprd', 'engagements', 'work-units'), { recursive: true, force: true });
+  const legacyStatePath = path.join(existing, '.openprd', 'state', 'current.json');
+  const legacyState = JSON.parse(await fs.readFile(legacyStatePath, 'utf8'));
+  delete legacyState.activeWorkUnitId;
+  delete legacyState.targetRoot;
+  delete legacyState.reviewStatus.workUnitId;
+  delete legacyState.reviewStatus.stableArtifact;
+  await fs.writeFile(legacyStatePath, `${JSON.stringify(legacyState, null, 2)}\n`);
   await fs.appendFile(path.join(existing, '.codex', 'skills', 'openprd-harness', 'SKILL.md'), '\nmanual drift\n');
   await fs.writeFile(path.join(existing, '.openprd', 'templates', 'base', 'prd.md'), '# PRD\n\n## 1. Problem\n');
   await fs.writeFile(path.join(existing, '.openprd', 'engagements', 'active', 'intake.md'), '# Intake\n\n## Questions\n\n- What problem are we solving?\n');
@@ -1325,6 +3014,7 @@ test('fleet dry-run plans historical updates without auto-claiming agent-only pr
     updateOpenprd: true,
     dryRun: true,
     maxDepth: 2,
+    openprdHome,
   });
   assert.equal(dryRun.ok, true);
   assert.equal(dryRun.summary.openprd, 1);
@@ -1336,8 +3026,10 @@ test('fleet dry-run plans historical updates without auto-claiming agent-only pr
   const updated = await fleetWorkspace(root, {
     updateOpenprd: true,
     maxDepth: 2,
+    openprdHome,
   });
   assert.equal(updated.summary.updated, 1);
+  assert.equal(updated.summary.backfilled, 1);
   assert.equal(updated.summary.setup, 0);
   assert.equal(updated.projects.find((project) => project.relativePath === 'agent-only').status, 'skipped');
   assert.equal(await fs.stat(path.join(agentOnly, '.openprd')).then(() => true).catch(() => false), false);
@@ -1347,6 +3039,16 @@ test('fleet dry-run plans historical updates without auto-claiming agent-only pr
   assert.equal(doctor.agentIntegration.drift.ok, true);
   assert.ok((await fs.readFile(path.join(existing, '.openprd', 'templates', 'base', 'prd.md'), 'utf8')).includes('元信息'));
   assert.ok((await fs.readFile(path.join(existing, '.openprd', 'engagements', 'active', 'intake.md'), 'utf8')).includes('我们要解决什么问题？'));
+  const backfilledSnapshot = JSON.parse(await fs.readFile(legacyVersionPath, 'utf8'));
+  assert.match(backfilledSnapshot.workUnitId, /^wu-legacy-v0001-[a-f0-9]{8}$/);
+  assert.equal(backfilledSnapshot.digest, synthesized.snapshot.digest);
+  const backfilledHtml = await fs.readFile(path.join(existing, '.openprd', 'reviews', 'v0001.html'), 'utf8');
+  assert.ok(backfilledHtml.includes(`--digest &#39;${synthesized.snapshot.digest}&#39;`));
+  assert.ok(backfilledHtml.includes(`--work-unit &#39;${backfilledSnapshot.workUnitId}&#39;`));
+  assert.equal(
+    await fs.stat(path.join(existing, '.openprd', 'engagements', 'work-units', `${backfilledSnapshot.workUnitId}.json`)).then(() => true),
+    true
+  );
 
   const cliLogs = [];
   const originalLog = console.log;
@@ -1359,9 +3061,157 @@ test('fleet dry-run plans historical updates without auto-claiming agent-only pr
   assert.ok(cliLogs.some((line) => line.includes('OpenPrd fleet: 通过')));
 });
 
+test('fleet sync-registry backfills known workspaces and reports registry scope outside the current root', async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'openprd-fleet-registry-test-'));
+  const openprdHome = path.join(workspaceRoot, '.openprd-home');
+  const scopedRoot = path.join(workspaceRoot, 'scoped');
+  const otherRoot = path.join(workspaceRoot, 'other');
+  const scopedProject = path.join(scopedRoot, 'existing-openprd');
+  const otherProject = path.join(otherRoot, 'another-openprd');
+  await fs.mkdir(scopedProject, { recursive: true });
+  await fs.mkdir(otherProject, { recursive: true });
+
+  await initWorkspace(scopedProject, { templatePack: 'agent', openprdHome });
+  await initWorkspace(otherProject, { templatePack: 'agent', openprdHome });
+  await fs.rm(path.join(openprdHome, 'registry'), { recursive: true, force: true });
+
+  const synced = await fleetWorkspace(scopedRoot, {
+    syncRegistry: true,
+    maxDepth: 2,
+    openprdHome,
+  });
+  assert.equal(synced.ok, true);
+  assert.equal(synced.summary.synced, 1);
+  assert.equal(synced.registry.knownTotal, 1);
+  assert.equal(synced.registry.outsideRoot, 0);
+
+  await updateAgentIntegrationWorkspace(otherProject, { openprdHome });
+
+  const scopedDryRun = await fleetWorkspace(scopedRoot, {
+    dryRun: true,
+    updateOpenprd: true,
+    maxDepth: 2,
+    openprdHome,
+  });
+  assert.equal(scopedDryRun.registry.knownTotal, 2);
+  assert.equal(scopedDryRun.registry.scopedKnown, 1);
+  assert.equal(scopedDryRun.registry.outsideRoot, 1);
+});
+
+test('fleet update reports workspace health gaps without blocking generated guidance updates', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'openprd-fleet-health-test-'));
+  const openprdHome = path.join(root, '.openprd-home');
+  const existing = path.join(root, 'existing-openprd');
+  await fs.mkdir(existing, { recursive: true });
+
+  await initWorkspace(existing, { templatePack: 'agent', openprdHome });
+  await fs.appendFile(path.join(existing, '.codex', 'skills', 'openprd-harness', 'SKILL.md'), '\nmanual drift\n');
+  await fs.writeFile(path.join(existing, 'docs', 'basic', 'backend-structure.md'), '# Backend\n', 'utf8');
+
+  const updated = await fleetWorkspace(root, {
+    updateOpenprd: true,
+    maxDepth: 1,
+    openprdHome,
+  });
+  const project = updated.projects.find((item) => item.relativePath === 'existing-openprd');
+  assert.equal(updated.ok, true);
+  assert.equal(updated.summary.updated, 1);
+  assert.equal(updated.summary.failed, 0);
+  assert.equal(updated.summary.healthAttention, 1);
+  assert.equal(updated.errors.length, 0);
+  assert.equal(project.status, 'updated');
+  assert.equal(project.ok, true);
+  assert.equal(project.healthOk, false);
+  assert.ok(project.healthErrors.some((error) => error.includes('docs/basic/backend-structure.md')));
+  assert.ok((await fs.readFile(path.join(existing, '.codex', 'skills', 'openprd-harness', 'SKILL.md'), 'utf8')).includes('OPENPRD:GENERATED'));
+
+  const cliLogs = [];
+  const originalLog = console.log;
+  console.log = (...args) => cliLogs.push(args.join(' '));
+  try {
+    assert.equal(await main(['fleet', root, '--update-openprd', '--max-depth', '1']), 0);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(cliLogs.some((line) => line.includes('OpenPrd fleet: 通过')));
+  assert.ok(cliLogs.some((line) => line.includes('失败 0')));
+  assert.ok(cliLogs.some((line) => line.includes('项目健康: 1 个需关注')));
+  assert.ok(cliLogs.some((line) => line.includes('需关注: standards: docs/basic/backend-structure.md')));
+});
+
+test('fleet update preserves standards external reference paths', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'openprd-fleet-standards-config-test-'));
+  const openprdHome = path.join(root, '.openprd-home');
+  const existing = path.join(root, 'existing-openprd');
+  await fs.mkdir(existing, { recursive: true });
+
+  await initWorkspace(existing, { templatePack: 'agent', openprdHome });
+  await fs.mkdir(path.join(existing, 'research', 'reference-repo'), { recursive: true });
+  await fs.mkdir(path.join(existing, 'resources', 'toolkit-sources'), { recursive: true });
+
+  const standardsConfigPath = path.join(existing, '.openprd', 'standards', 'config.json');
+  const standardsConfig = JSON.parse(await fs.readFile(standardsConfigPath, 'utf8'));
+  standardsConfig.externalReferences = {
+    ...(standardsConfig.externalReferences ?? {}),
+    paths: ['research', 'resources/toolkit-sources'],
+  };
+  await fs.writeFile(standardsConfigPath, `${JSON.stringify(standardsConfig, null, 2)}\n`);
+
+  const updated = await fleetWorkspace(root, {
+    updateOpenprd: true,
+    maxDepth: 1,
+    openprdHome,
+  });
+  assert.equal(updated.summary.updated, 1);
+
+  const nextConfig = JSON.parse(await fs.readFile(standardsConfigPath, 'utf8'));
+  assert.deepEqual(nextConfig.externalReferences?.paths, ['research', 'resources/toolkit-sources']);
+});
+
 test('freeze writes a snapshot and handoff exports openprd bundle', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'b2b' });
+  await synthesizeWorkspace(project, {
+    title: '企业客户交接',
+    owner: 'PM',
+    problemStatement: '销售团队在企业客户导入时容易丢失上下文',
+    whyNow: '线索量正在增长',
+    evidence: ['CRM 备注'],
+    primaryUsers: ['销售运营'],
+    stakeholders: ['销售团队', '客户成功团队'],
+    goals: ['减少客户导入遗漏'],
+    successMetrics: ['交接完成率超过 95%'],
+    acceptanceGoals: ['团队可以检查每个导入字段'],
+    inScope: ['企业客户导入检查清单'],
+    outOfScope: ['账单迁移'],
+    primaryFlows: ['销售运营检查客户导入信息'],
+    edgeCases: ['必填字段缺失'],
+    failureModes: ['CRM 导入失败'],
+    functional: ['创建导入检查记录'],
+    nonFunctional: ['p95 < 2s'],
+    businessRules: ['只有客户负责人可以批准'],
+    technical: ['复用当前 CRM 同步'],
+    compliance: ['SOC2 审计日志'],
+    dependencies: ['CRM API'],
+    assumptions: ['CRM 客户已存在'],
+    risks: ['负责人分配错误'],
+    openQuestions: ['是否需要法务批准？'],
+    handoffOwner: 'PM',
+    nextStep: '冻结并交接',
+    targetSystem: 'OpenPrd',
+    productType: 'b2b',
+    buyer: '销售负责人',
+    user: '销售运营',
+    admin: '系统管理员',
+    operator: '客户成功运营',
+    roles: '销售负责人、销售运营、客户成功运营、系统管理员',
+    asIs: '销售运营手动检查 CRM 备注后转交客户成功',
+    toBe: '系统生成检查清单并要求负责人确认后交接',
+    permissionMatrix: '客户负责人可批准，运营可编辑，客户成功可查看',
+    approvalFlow: '销售负责人确认后进入客户成功交接',
+  });
+  await diagramWorkspace(project, { open: false, type: 'architecture', mark: 'confirmed' });
+  await reviewWorkspace(project, { mark: 'confirmed' });
 
   const freezeResult = await freezeWorkspace(project);
   assert.equal(freezeResult.ok, true);
@@ -1524,12 +3374,14 @@ test('openprd discovery verifies structured task metadata and dependencies', asy
   await fs.writeFile(
     path.join(project, 'openprd', 'changes', 'structured-change', 'tasks.md'),
     [
-      '- [ ] T001.01 Prepare database import contract',
-      '  - verify: npm run test -- migration',
-      '- [ ] T001.02 Port legacy database import preview',
+      '- [ ] T001.01 评审生成的 spec 覆盖',
+      '  - type: governance',
+      '  - done: structured-change 的 spec 覆盖当前变更目标',
+      '  - verify: openprd change . --validate --change structured-change',
+      '- [ ] T001.02 实现主流程: Port legacy database import preview',
+      '  - type: implementation',
       '  - deps: T001.99',
-      '  - done: preview shows counts, conflicts, skipped items, warnings',
-      '  - verify: npm run test -- migration',
+      '  - verify: openprd change . --validate --change structured-change',
       '',
     ].join('\n')
   );
@@ -1539,6 +3391,8 @@ test('openprd discovery verifies structured task metadata and dependencies', asy
   assert.equal(failed.verification.valid, false);
   assert.ok(failed.verification.errors.some((error) => error.includes('缺少 "done:"')));
   assert.ok(failed.verification.errors.some((error) => error.includes('依赖未知任务 T001.99')));
+  assert.ok(failed.verification.errors.some((error) => error.includes('按 PRD 小节平移')));
+  assert.ok(failed.verification.errors.some((error) => error.includes('只做了 change 结构校验')));
 });
 
 test('openprd validates change structure without external openspec cli', async () => {
@@ -1566,9 +3420,15 @@ test('openprd validates change structure without external openspec cli', async (
   ].join('\n'));
   await fs.writeFile(path.join(changeDir, 'design.md'), '## Context\n\nInternal validation belongs to OpenPrd.\n');
   await fs.writeFile(path.join(changeDir, 'tasks.md'), [
-    '- [ ] T001.01 Implement desktop shell validation',
-    '  - done: Behavior is covered by OpenPrd validation',
+    '- [ ] T001.01 评审生成的 spec 覆盖',
+    '  - type: governance',
+    '  - done: OpenPrd change 结构已覆盖桌面壳校验需求',
     '  - verify: openprd change . --validate --change desktop-rebuild',
+    '- [ ] T001.02 补齐桌面壳校验入口',
+    '  - type: implementation',
+    '  - deps: T001.01',
+    '  - done: 桌面壳校验入口已经接到 OpenPrd 自有校验路径',
+    '  - verify: openprd run . --verify',
     '',
   ].join('\n'));
   await fs.writeFile(path.join(changeDir, 'specs', 'desktop-shell', 'spec.md'), [
@@ -1620,7 +3480,8 @@ test('openprd validates spec body language policy', async () => {
     '',
   ].join('\n'));
   await fs.writeFile(path.join(changeDir, 'tasks.md'), [
-    '- [ ] T001.01 校验 spec 语言',
+    '- [ ] T001.01 评审 spec 语言约束',
+    '  - type: governance',
     '  - done: spec 语言规则已覆盖',
     '  - verify: openprd change . --validate --change desktop-rebuild',
     '',
@@ -1692,6 +3553,11 @@ test('openprd generates a change from the latest prd snapshot', async () => {
     productType: 'consumer',
   });
 
+  await assert.rejects(
+    () => generateOpenSpecChangeWorkspace(project, { change: 'signup-flow' }),
+    /review\.html/,
+  );
+  await reviewWorkspace(project, { mark: 'confirmed' });
   const result = await generateOpenSpecChangeWorkspace(project, { change: 'signup-flow' });
   assert.equal(result.ok, true);
   assert.equal(result.changeId, 'signup-flow');
@@ -1746,6 +3612,7 @@ test('openprd applies accepted specs and archives changes', async () => {
     targetSystem: 'OpenPrd',
     productType: 'consumer',
   });
+  await reviewWorkspace(project, { mark: 'confirmed' });
   await generateOpenSpecChangeWorkspace(project, { change: 'checkout-flow' });
 
   const listed = await listOpenPrdChangesWorkspace(project);
@@ -1805,6 +3672,7 @@ test('openprd exposes natural change task and specs cli commands', async () => {
     productType: 'consumer',
   });
 
+  await reviewWorkspace(project, { mark: 'confirmed' });
   const logs = [];
   const originalLog = console.log;
   console.log = (...args) => logs.push(args.join(' '));
@@ -1824,9 +3692,20 @@ test('openprd exposes natural change task and specs cli commands', async () => {
   assert.ok(generatedProposal.includes('## 变更内容'));
   assert.ok(generatedProposal.includes('## 影响范围'));
   const generatedTasks = await fs.readFile(path.join(project, 'openprd', 'changes', 'profile-settings', 'tasks.md'), 'utf8');
+  assert.ok(generatedTasks.includes('  - type: implementation'));
+  assert.ok(generatedTasks.includes('  - type: documentation'));
   assert.ok(generatedTasks.includes('docs/basic'));
   assert.ok(generatedTasks.includes('缺失的已补齐，过期的已更新'));
   assert.ok(generatedTasks.includes('openprd standards . --verify'));
+  assert.ok(generatedTasks.includes('openprd run . --verify'));
+  assert.equal(/^(?:- \[ \] )?T\d{3}\.\d+\s+(实现主流程|实现需求|验证验收目标|验证非功能需求)\s*[:：]/m.test(generatedTasks), false);
+  const taskState = await listOpenSpecTaskWorkspace(project, { change: 'profile-settings' });
+  assert.ok(taskState.summary.implementation.total >= 2);
+  assert.ok(taskState.tasks.some((task) => task.metadata.type === 'implementation' && task.metadata.verify === 'openprd run . --verify'));
+  assert.equal(
+    taskState.tasks.filter((task) => task.metadata.type !== 'governance' && /^openprd change \. --validate\b/i.test(task.metadata.verify ?? '')).length,
+    0
+  );
 });
 
 test('openprd advances tasks by dependency order and verify command', async () => {
@@ -1920,18 +3799,22 @@ test('openprd loop plans prompts and finishes one verified task', async () => {
   assert.equal(planned.ok, true);
   assert.equal(planned.summary.total, 2);
   assert.equal(planned.next.id, 'T001.01');
+  assert.equal(planned.next.taskHandle, 'loop-demo:T001.01:prepare-loop-state');
 
   const status = await statusLoopWorkspace(project);
   assert.equal(status.next.id, 'T001.01');
+  assert.equal(status.next.taskHandle, 'loop-demo:T001.01:prepare-loop-state');
 
-  const next = await nextLoopWorkspace(project, { item: 'T001.02' });
+  const next = await nextLoopWorkspace(project, { item: 'loop-demo:T001.02:launch-one-task-session' });
   assert.equal(next.dependencyState.ready, false);
   assert.deepEqual(next.dependencyState.incomplete, ['T001.01']);
 
   const prompt = await promptLoopWorkspace(project, { agent: 'codex' });
   assert.equal(prompt.ok, true);
   assert.equal(prompt.task.id, 'T001.01');
+  assert.equal(prompt.task.taskHandle, 'loop-demo:T001.01:prepare-loop-state');
   assert.match(prompt.prompt, /不要开始下一个任务/);
+  assert.match(prompt.prompt, /任务句柄: loop-demo:T001\.01:prepare-loop-state/);
   assert.match(prompt.prompt, /Computer Use/);
   assert.match(prompt.prompt, /Playwright/);
   assert.match(prompt.invocation.display, /codex exec --full-auto/);
@@ -1940,15 +3823,20 @@ test('openprd loop plans prompts and finishes one verified task', async () => {
   const dryRun = await runLoopWorkspace(project, { agent: 'claude', dryRun: true });
   assert.equal(dryRun.ok, true);
   assert.equal(dryRun.dryRun, true);
+  assert.equal(dryRun.task.taskHandle, 'loop-demo:T001.01:prepare-loop-state');
   assert.match(dryRun.invocation.display, /claude --print/);
+  const loopStateAfterDryRun = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'loop-state.json'), 'utf8'));
+  assert.equal(loopStateAfterDryRun.currentTaskHandle, 'loop-demo:T001.01:prepare-loop-state');
+  assert.equal(loopStateAfterDryRun.currentTaskTitle, 'Prepare loop state');
 
-  const verify = await verifyLoopWorkspace(project, { item: 'T001.01' });
+  const verify = await verifyLoopWorkspace(project, { item: 'loop-demo:T001.01:prepare-loop-state' });
   assert.equal(verify.ok, true);
 
-  const finish = await finishLoopWorkspace(project, { item: 'T001.01', commit: false });
+  const finish = await finishLoopWorkspace(project, { item: 'loop-demo:T001.01:prepare-loop-state', commit: false });
   assert.equal(finish.ok, true);
   assert.equal(finish.summary.done, 1);
   assert.equal(finish.next.id, 'T001.02');
+  assert.equal(finish.next.taskHandle, 'loop-demo:T001.02:launch-one-task-session');
   assert.equal(finish.testReport, path.join('.openprd', 'harness', 'test-reports', 'T001.01.md'));
   assert.equal(finish.regressionHtml, path.join('.openprd', 'harness', 'test-reports', 'T001.01.html'));
   assert.ok(await fs.stat(path.join(project, finish.testReport)).then(() => true));
@@ -1962,13 +3850,68 @@ test('openprd loop plans prompts and finishes one verified task', async () => {
   const featureList = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'feature-list.json'), 'utf8'));
   assert.equal(featureList.tasks.find((task) => task.id === 'T001.01').status, 'done');
   assert.equal(featureList.tasks.find((task) => task.id === 'T001.02').status, 'pending');
+  assert.equal(featureList.tasks.find((task) => task.id === 'T001.02').taskHandle, 'loop-demo:T001.02:launch-one-task-session');
 
   const tasksText = await fs.readFile(path.join(changeDir, 'tasks.md'), 'utf8');
   assert.match(tasksText, /- \[x\] T001\.01 Prepare loop state/);
 
   const sessions = await fs.readFile(path.join(project, '.openprd', 'harness', 'agent-sessions.jsonl'), 'utf8');
   assert.match(sessions, /"action":"run-dry-run"/);
+  assert.match(sessions, /"taskHandle":"loop-demo:T001\.01:prepare-loop-state"/);
   assert.match(sessions, /"action":"finish"/);
+  const loopStateAfterFinish = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'loop-state.json'), 'utf8'));
+  assert.equal(loopStateAfterFinish.currentTaskHandle, 'loop-demo:T001.02:launch-one-task-session');
+  assert.equal(loopStateAfterFinish.currentTaskTitle, 'Launch one-task session');
+});
+
+test('loop finish blocks the final task when EVO quality is not production-ready', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+  const changeDir = path.join(project, 'openprd', 'changes', 'loop-evo');
+  await fs.mkdir(path.join(changeDir, 'specs', 'loop-evo'), { recursive: true });
+  await fs.writeFile(path.join(changeDir, 'proposal.md'), [
+    '# Proposal',
+    '',
+    '## Why',
+    'Final delivery must not skip EVO quality.',
+    '',
+    '## What Changes',
+    '- `loop-evo`: Add a final quality gate.',
+    '',
+    '## Impact',
+    'Loop completion now depends on production-ready evidence.',
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(changeDir, 'specs', 'loop-evo', 'spec.md'), [
+    '# loop-evo 规格',
+    '',
+    '## ADDED Requirements',
+    '',
+    '### Requirement: 最终 Loop 任务必须通过 EVO 质量',
+    '最后一个任务完成前必须通过 OpenPrd 质量评估。',
+    '',
+    '#### Scenario: Agent 完成最终任务',
+    '- **WHEN** 最后一项任务自测通过',
+    '- **THEN** 系统还会检查 production-ready 质量报告',
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(changeDir, 'tasks.md'), [
+    '- [ ] T001.01 Finish final task',
+    '  - done: final task is ready',
+    '  - verify: node -e "process.exit(0)"',
+    '',
+  ].join('\n'));
+
+  await initLoopWorkspace(project, { agent: 'codex' });
+  await planLoopWorkspace(project, { change: 'loop-evo' });
+  const finish = await finishLoopWorkspace(project, { item: 'T001.01', commit: false });
+
+  assert.equal(finish.ok, false);
+  assert.ok(finish.errors.some((error) => error.includes('Final EVO quality gate')));
+  assert.equal(finish.quality.report.readiness.productionReady, false);
+  assert.ok(finish.quality.report.readiness.attentionGates.includes('smoke'));
+  const featureList = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'feature-list.json'), 'utf8'));
+  assert.equal(featureList.tasks.find((task) => task.id === 'T001.01').status, 'failed');
 });
 
 test('validate fails for an empty project', async () => {
@@ -2009,6 +3952,18 @@ test('clarify returns user questions and capture writes answers into state', asy
   });
   assert.equal(captured.stateKey, 'problemStatement');
   assert.equal(captured.value, '用户无法在移动端高效完成节点选择与实时会话查看');
+
+  const presentation = await captureWorkspace(project, {
+    field: 'reviewPresentation',
+    value: JSON.stringify({
+      mapNodes: {
+        problem: { title: '问题定义', text: '移动端节点选择困难' },
+      },
+    }),
+    source: 'agent-inferred',
+  });
+  assert.equal(presentation.stateKey, 'reviewPresentation');
+  assert.equal(presentation.value.mapNodes.problem.text, '移动端节点选择困难');
 });
 
 test('capture can import multiple answers from a json file', async () => {
@@ -2093,6 +4048,135 @@ test('synthesize creates versioned PRD snapshots and diff detects changes', asyn
   assert.equal(history.versions[1].versionId, 'v0002');
 });
 
+test('capture drops inherited review presentation when requirement content changes', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'agent' });
+
+  await captureWorkspace(project, {
+    jsonFile: await writeAnswersFile(project, 'old-review.json', {
+      'meta.title': { value: '旧账号闭环需求', source: 'user-confirmed' },
+      'problem.problemStatement': { value: '旧问题定义', source: 'user-confirmed' },
+      'scenarios.primaryFlows': {
+        value: ['旧流程正文'],
+        source: 'user-confirmed',
+      },
+      reviewPresentation: {
+        value: {
+          mapNodes: {
+            problem: { title: '问题定义', text: '旧账号问题图' },
+          },
+          flowNodes: [
+            { text: '旧登录流程一步' },
+            { text: '旧登录流程二步' },
+            { text: '旧登录流程三步' },
+          ],
+        },
+        source: 'user-confirmed',
+      },
+    }),
+  });
+
+  await synthesizeWorkspace(project, {
+    productType: 'agent',
+  });
+
+  await captureWorkspace(project, {
+    jsonFile: await writeAnswersFile(project, 'new-review.json', {
+      'meta.title': { value: 'Hermes 保留数据卸载成功判定修复', source: 'user-confirmed' },
+      'problem.problemStatement': {
+        value: '当前 Hermes 的保留数据卸载在多配置场景下会被误判失败。',
+        source: 'user-confirmed',
+      },
+      'scenarios.primaryFlows': {
+        value: [
+          '执行 Hermes 保留数据卸载',
+          '清理程序、服务与托管文件',
+          '保留 ~/.hermes 数据并返回成功',
+        ],
+        source: 'user-confirmed',
+      },
+    }),
+  });
+
+  const staleState = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'state', 'current.json'), 'utf8'));
+  assert.equal(staleState.reviewPresentation, undefined);
+  assert.equal(staleState.captureMeta.reviewPresentation, undefined);
+
+  const resynthesized = await synthesizeWorkspace(project, {
+    productType: 'agent',
+  });
+  assert.equal(resynthesized.snapshot.reviewPresentation, null);
+
+  const reviewHtml = await fs.readFile(resynthesized.reviewPath, 'utf8');
+  assert.ok(reviewHtml.includes('执行 Hermes 保留数据卸载'));
+  assert.ok(reviewHtml.includes('保留 ~/.hermes 数据并返回成功'));
+  assert.equal(reviewHtml.includes('旧登录流程一步'), false);
+  assert.equal(reviewHtml.includes('旧账号问题图'), false);
+});
+
+test('capture keeps explicit review presentation when new content and presentation arrive together', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'agent' });
+
+  await captureWorkspace(project, {
+    jsonFile: await writeAnswersFile(project, 'old-presentation.json', {
+      'meta.title': { value: '旧需求', source: 'user-confirmed' },
+      'problem.problemStatement': { value: '旧问题', source: 'user-confirmed' },
+      reviewPresentation: {
+        value: {
+          flowNodes: [
+            { text: '旧展示一步' },
+            { text: '旧展示二步' },
+            { text: '旧展示三步' },
+          ],
+        },
+        source: 'user-confirmed',
+      },
+    }),
+  });
+  await synthesizeWorkspace(project, { productType: 'agent' });
+
+  await captureWorkspace(project, {
+    jsonFile: await writeAnswersFile(project, 'new-presentation.json', {
+      'meta.title': { value: 'Hermes 保留数据卸载成功判定修复', source: 'user-confirmed' },
+      'problem.problemStatement': {
+        value: 'Hermes 保留数据卸载应该在多配置场景下继续成功。',
+        source: 'user-confirmed',
+      },
+      'scenarios.primaryFlows': {
+        value: [
+          '执行 Hermes 保留数据卸载',
+          '清理程序、服务与托管文件',
+          '保留 ~/.hermes 数据并返回成功',
+        ],
+        source: 'user-confirmed',
+      },
+      reviewPresentation: {
+        value: {
+          mapNodes: {
+            problem: { title: '问题定义', text: '新卸载问题图' },
+          },
+          flowNodes: [
+            { text: '新展示一步' },
+            { text: '新展示二步' },
+            { text: '新展示三步' },
+          ],
+        },
+        source: 'user-confirmed',
+      },
+    }),
+  });
+
+  const currentState = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'state', 'current.json'), 'utf8'));
+  assert.equal(currentState.reviewPresentation.flowNodes[0].text, '新展示一步');
+
+  const resynthesized = await synthesizeWorkspace(project, { productType: 'agent' });
+  assert.equal(resynthesized.snapshot.reviewPresentation.mapNodes.problem.text, '新卸载问题图');
+  const reviewHtml = await fs.readFile(resynthesized.reviewPath, 'utf8');
+  assert.ok(reviewHtml.includes('新展示一步'));
+  assert.equal(reviewHtml.includes('旧展示一步'), false);
+});
+
 test('diagram creates reviewable architecture artifacts', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'consumer' });
@@ -2138,6 +4222,8 @@ test('diagram creates reviewable architecture artifacts', async () => {
 
   assert.ok(html.includes('架构评审'));
   assert.ok(html.includes('AI 操作导师'));
+  assert.ok(html.includes('需求定稿前'));
+  assert.equal(/freeze/i.test(html), false);
   assert.ok(mermaid.includes('flowchart LR'));
   assert.ok(mermaid.includes('方案边界'));
   assert.equal(result.type, 'architecture');
@@ -2191,6 +4277,9 @@ test('diagram creates reviewable product flow artifacts', async () => {
 
   assert.ok(html.includes('产品流程评审'));
   assert.ok(html.includes('AI 操作导师'));
+  assert.ok(html.includes('需求定稿前'));
+  assert.ok(html.includes('进入实现前确认'));
+  assert.equal(/freeze/i.test(html), false);
   assert.ok(mermaid.includes('flowchart LR'));
   assert.ok(mermaid.includes('决策点'));
   assert.equal(result.type, 'product-flow');
@@ -2462,6 +4551,52 @@ test('next suggests freeze after a complete PRD has been synthesized', async () 
   assert.equal(result.taskGraph.nextReadyNode, 'diagram');
 });
 
+test('next does not trigger business guardrails for compliance-only token wording', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+
+  await synthesizeWorkspace(project, {
+    title: 'Signup Flow',
+    owner: 'PM',
+    problemStatement: 'Users bounce at signup',
+    whyNow: 'Activation is low',
+    evidence: ['Survey data'],
+    primaryUsers: ['Busy creators'],
+    stakeholders: ['Growth team'],
+    goals: ['Improve activation'],
+    successMetrics: ['Activation > 40%'],
+    acceptanceGoals: ['Users can sign up in less than 2 minutes'],
+    inScope: ['Signup flow'],
+    outOfScope: ['Billing'],
+    primaryFlows: ['User signs up'],
+    edgeCases: ['OAuth failure'],
+    failureModes: ['Email validation error'],
+    functional: ['Create account'],
+    nonFunctional: ['p95 < 2s'],
+    businessRules: ['Invite required'],
+    technical: ['Reuse current auth service'],
+    compliance: ['API token must stay on the server and never appear in client logs'],
+    dependencies: ['Auth API'],
+    assumptions: ['Users have email'],
+    risks: ['Signup drop-off'],
+    openQuestions: ['Need SSO?'],
+    handoffOwner: 'PM',
+    nextStep: 'Freeze and review',
+    targetSystem: 'OpenPrd',
+    productType: 'consumer',
+    persona: 'Busy creators',
+    segment: 'Self-serve',
+    journey: 'Activation',
+    activationMetric: 'Signup completion',
+    retentionMetric: 'Returning users',
+  });
+
+  const result = await nextWorkspace(project);
+  assert.equal(result.recommendation.nextAction, 'diagram');
+  assert.equal(result.recommendation.currentGate, 'product-flow diagram review');
+  assert.equal(result.analysis.missingFields.some((field) => field.path.startsWith('businessGuardrails.')), false);
+});
+
 test('next asks for business guardrails when a PRD includes free metered AI usage', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'consumer' });
@@ -2509,6 +4644,86 @@ test('next asks for business guardrails when a PRD includes free metered AI usag
   assert.ok(result.analysis.missingFields.some((field) => field.path === 'businessGuardrails.costDrivers'));
 });
 
+test('confirmed review absorbs inferred business guardrails instead of asking again', async () => {
+  const project = await makeTempProject();
+  await initWorkspace(project, { templatePack: 'consumer' });
+
+  const answersPath = path.join(project, 'guardrails.json');
+  await fs.writeFile(answersPath, JSON.stringify({
+    'businessGuardrails.costDrivers': {
+      value: ['免费用户触发图像生成会消耗第三方模型额度'],
+      source: 'agent-inferred',
+    },
+    'businessGuardrails.usageLimits': {
+      value: ['免费用户每天最多生成 3 张预览图'],
+      source: 'agent-inferred',
+    },
+    'businessGuardrails.abusePrevention': {
+      value: ['同设备和账号共享限额，并拦截批量刷额度'],
+      source: 'agent-inferred',
+    },
+    'businessGuardrails.monitoringSignals': {
+      value: ['按账号统计生成成功率和额度消耗'],
+      source: 'agent-inferred',
+    },
+    'businessGuardrails.alertThresholds': {
+      value: ['日消耗超过预算阈值时报警'],
+      source: 'agent-inferred',
+    },
+    'businessGuardrails.stopLossActions': {
+      value: ['超阈值后暂停免费预览并降级到占位提示'],
+      source: 'agent-inferred',
+    },
+  }, null, 2));
+  await captureWorkspace(project, { jsonFile: answersPath });
+
+  await synthesizeWorkspace(project, {
+    title: 'AI Image Trial',
+    owner: 'PM',
+    problemStatement: 'Free users need to try AI generation before upgrading',
+    whyNow: 'Trial conversion depends on showing value',
+    evidence: ['Support requests'],
+    primaryUsers: ['Free creators'],
+    stakeholders: ['Growth team'],
+    goals: ['Increase trial conversion'],
+    successMetrics: ['Trial conversion > 8%'],
+    acceptanceGoals: ['Free users can generate a limited preview'],
+    inScope: ['AI generation preview'],
+    outOfScope: ['Paid plan billing'],
+    primaryFlows: ['Free user generates a preview image'],
+    edgeCases: ['Quota exhausted'],
+    failureModes: ['Third-party model call fails'],
+    functional: ['Allow free users to generate AI image previews'],
+    nonFunctional: ['p95 < 3s'],
+    businessRules: ['Free users require quota checks'],
+    technical: ['Use current model gateway'],
+    compliance: ['Content policy'],
+    dependencies: ['Model API'],
+    assumptions: ['Users are signed in'],
+    risks: ['Free quota can be abused'],
+    openQuestions: ['What is the daily preview limit?'],
+    handoffOwner: 'PM',
+    nextStep: 'Review guardrails',
+    targetSystem: 'OpenPrd',
+    productType: 'consumer',
+    persona: 'Free creators',
+    segment: 'Self-serve',
+    journey: 'Trial activation',
+    activationMetric: 'First preview generated',
+    retentionMetric: 'Return after preview',
+  });
+
+  const beforeReview = await nextWorkspace(project);
+  assert.equal(beforeReview.recommendation.nextAction, 'clarify-user');
+  assert.ok(beforeReview.recommendation.suggestedQuestions.some((question) => question.includes('请确认这个推断输入')));
+
+  await reviewWorkspace(project, { mark: 'confirmed' });
+
+  const afterReview = await nextWorkspace(project);
+  assert.equal(afterReview.recommendation.nextAction, 'diagram');
+  assert.equal(afterReview.recommendation.currentGate, 'product-flow diagram review');
+});
+
 test('generated changes include business guardrail tasks for metered free usage', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'consumer' });
@@ -2549,6 +4764,7 @@ test('generated changes include business guardrail tasks for metered free usage'
     productType: 'consumer',
   });
 
+  await reviewWorkspace(project, { mark: 'confirmed' });
   const result = await generateOpenSpecChangeWorkspace(project, { change: 'ai-image-trial' });
   assert.equal(result.validation.valid, true);
   const tasks = await fs.readFile(path.join(project, 'openprd', 'changes', 'ai-image-trial', 'tasks.md'), 'utf8');
@@ -2557,7 +4773,7 @@ test('generated changes include business guardrail tasks for metered free usage'
   assert.ok(tasks.includes('验证成本监控、报警和止损'));
 });
 
-test('next suggests freeze after required diagram has been confirmed', async () => {
+test('next suggests freeze after required diagram and PRD review have been confirmed', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'consumer' });
 
@@ -2598,6 +4814,19 @@ test('next suggests freeze after required diagram has been confirmed', async () 
   });
 
   await diagramWorkspace(project, { open: false, type: 'product-flow', mark: 'confirmed' });
+  const reviewGate = await nextWorkspace(project);
+  assert.equal(reviewGate.recommendation.nextAction, 'review');
+  assert.equal(reviewGate.recommendation.currentGate, 'prd review');
+  assert.match(reviewGate.recommendation.suggestedCommand, /openprd review/);
+
+  const reviewed = await reviewWorkspace(project, { mark: 'confirmed' });
+  assert.equal(reviewed.ok, true);
+  assert.equal(reviewed.status, 'confirmed');
+
+  const runContext = await runWorkspace(project, { context: true });
+  assert.equal(runContext.recommendation.type, 'prd-change');
+  assert.ok(runContext.recommendation.executionCommand.includes('openprd change . --generate'));
+
   const result = await nextWorkspace(project);
   assert.equal(result.recommendation.nextAction, 'freeze');
   assert.equal(result.recommendation.currentGate, 'freeze review');

@@ -7,6 +7,7 @@ import { timestamp } from '../time.js';
 import {
   listOpenSpecStructuredTasks,
   parseOpenSpecTaskDeps,
+  summarizeOpenSpecTaskTypes,
 } from './tasks.js';
 
 async function readText(filePath) {
@@ -50,6 +51,7 @@ function getDependencyState(task, taskById) {
 function summarizeOpenSpecTasks(tasks, taskById) {
   const pending = tasks.filter((task) => !task.checked);
   const completed = tasks.filter((task) => task.checked);
+  const taskTypes = summarizeOpenSpecTaskTypes(tasks);
   const blocked = pending
     .map((task) => ({
       task,
@@ -63,6 +65,8 @@ function summarizeOpenSpecTasks(tasks, taskById) {
     completed: completed.length,
     pending: pending.length,
     blocked: blocked.length,
+    taskTypes,
+    implementation: taskTypes.implementation ?? { total: 0, completed: 0, pending: 0 },
     nextReady,
     blockedTasks: blocked,
   };
@@ -184,6 +188,8 @@ export async function listOpenSpecTaskWorkspace(projectRoot, options = {}) {
       completed: state.summary.completed,
       pending: state.summary.pending,
       blocked: state.summary.blocked,
+      taskTypes: state.summary.taskTypes,
+      implementation: state.summary.implementation,
     },
     nextTask: state.summary.nextReady,
     blockedTasks: state.summary.blockedTasks.map(({ task, dependencyState }) => ({
@@ -287,6 +293,8 @@ export async function advanceOpenSpecTaskWorkspace(projectRoot, options = {}) {
       completed: updatedState.summary.completed,
       pending: updatedState.summary.pending,
       blocked: updatedState.summary.blocked,
+      taskTypes: updatedState.summary.taskTypes,
+      implementation: updatedState.summary.implementation,
     },
   };
 }

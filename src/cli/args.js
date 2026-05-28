@@ -1,6 +1,6 @@
 function parseCommandArgs(argv) {
   const args = [...argv];
-  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, dryRun: false, updateOpenprd: false, setupMissing: false, doctor: false, context: false, recordHook: false, plan: false, prompt: false, loopRun: false, finish: false, commit: false, html: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, artifactMarkdown: null, contentJson: null, source: null, reference: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', hookProfile: null, templatePack: null, target: 'openprd', path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, event: null, risk: null, outcome: null, preview: null, learn: null, genre: null, style: null, topic: null, enable: false, disable: false, agent: 'codex', agentCommand: null, message: null };
+  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, review: false, reject: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, write: false, dryRun: false, updateOpenprd: false, backfillWorkUnits: false, syncRegistry: false, setupMissing: false, doctor: false, context: false, recordHook: false, plan: false, prompt: false, loopRun: false, finish: false, commit: false, html: false, template: false, failOnViolation: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, artifactMarkdown: null, contentJson: null, presentation: null, source: null, reference: null, actual: null, out: null, format: null, quality: null, maxPanelWidth: null, referenceLabel: null, actualLabel: null, classifyExternal: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', hookProfile: null, templatePack: null, target: 'openprd', targetRoot: null, path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, version: null, digest: null, workUnit: null, event: null, risk: null, outcome: null, preview: null, learn: null, genre: null, style: null, topic: null, enable: false, disable: false, agent: 'codex', agentCommand: null, message: null };
   const positionals = [];
 
   while (args.length > 0) {
@@ -35,6 +35,14 @@ function parseCommandArgs(argv) {
     }
     if (arg === '--check') {
       flags.check = true;
+      continue;
+    }
+    if (arg === '--review') {
+      flags.review = true;
+      continue;
+    }
+    if (arg === '--reject') {
+      flags.reject = true;
       continue;
     }
     if (arg === '--resume') {
@@ -81,6 +89,14 @@ function parseCommandArgs(argv) {
       flags.dryRun = true;
       continue;
     }
+    if (arg === '--write') {
+      flags.write = true;
+      continue;
+    }
+    if (arg === '--fail-on-violation') {
+      flags.failOnViolation = true;
+      continue;
+    }
     if (arg === '--plan') {
       flags.plan = true;
       continue;
@@ -105,8 +121,20 @@ function parseCommandArgs(argv) {
       flags.html = true;
       continue;
     }
+    if (arg === '--template') {
+      flags.template = true;
+      continue;
+    }
     if (arg === '--update-openprd') {
       flags.updateOpenprd = true;
+      continue;
+    }
+    if (arg === '--backfill-work-units') {
+      flags.backfillWorkUnits = true;
+      continue;
+    }
+    if (arg === '--sync-registry') {
+      flags.syncRegistry = true;
       continue;
     }
     if (arg === '--setup-missing') {
@@ -189,12 +217,48 @@ function parseCommandArgs(argv) {
       flags.contentJson = args.shift() ?? null;
       continue;
     }
+    if (arg === '--presentation') {
+      flags.presentation = args.shift() ?? null;
+      continue;
+    }
     if (arg === '--source') {
       flags.source = args.shift() ?? null;
       continue;
     }
     if (arg === '--reference') {
       flags.reference = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--actual') {
+      flags.actual = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--out') {
+      flags.out = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--format') {
+      flags.format = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--quality') {
+      flags.quality = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--max-panel-width') {
+      flags.maxPanelWidth = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--reference-label') {
+      flags.referenceLabel = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--actual-label') {
+      flags.actualLabel = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--classify-external') {
+      flags.classifyExternal = args.shift() ?? '';
       continue;
     }
     if (arg === '--max-iterations') {
@@ -309,8 +373,24 @@ function parseCommandArgs(argv) {
       flags.to = args.shift() ?? null;
       continue;
     }
+    if (arg === '--version') {
+      flags.version = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--digest') {
+      flags.digest = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--work-unit' || arg === '--work-unit-id') {
+      flags.workUnit = args.shift() ?? null;
+      continue;
+    }
     if (arg === '--target') {
       flags.target = args.shift() ?? 'openprd';
+      continue;
+    }
+    if (arg === '--target-root') {
+      flags.targetRoot = args.shift() ?? null;
       continue;
     }
     if (arg === '--path' || arg === '-p') {
@@ -336,18 +416,23 @@ function usage() {
     '  openprd setup [path] [--tools <all|codex,claude,cursor>] [--hook-profile <lite|guarded|full>] [--force] [--json]',
     '  openprd update [path] [--tools <all|codex,claude,cursor>] [--hook-profile <lite|guarded|full>] [--force] [--json]',
     '  openprd doctor [path] [--tools <all|codex,claude,cursor>] [--hook-profile <lite|guarded|full>] [--json]',
-    '  openprd fleet <root> [--dry-run|--doctor|--update-openprd|--setup-missing] [--hook-profile <lite|guarded|full>] [--max-depth <n>] [--include <csv>] [--exclude <csv>] [--report <file>] [--json]',
-    '  openprd run [path] [--context|--verify|--record-hook --event <name> --risk <level> --outcome <text> --preview <text>] [--json]',
-    '  openprd loop [path] [--init|--plan|--next|--prompt|--run|--verify|--finish] [--change <id>] [--item <task-id>] [--agent <codex|claude>] [--agent-command <cmd>] [--commit] [--dry-run] [--message <text>] [--json]',
+    '  openprd fleet <root> [--dry-run|--doctor|--update-openprd|--backfill-work-units|--sync-registry|--setup-missing] [--hook-profile <lite|guarded|full>] [--max-depth <n>] [--include <csv>] [--exclude <csv>] [--report <file>] [--json]',
+    '  openprd run [path] [--context|--verify|--record-hook --event <name> --risk <level> --outcome <text> --preview <text>] [--message <text>] [--json]',
+    '  openprd loop [path] [--init|--plan|--next|--prompt|--run|--verify|--finish] [--change <id>] [--item <task-id-or-handle>] [--agent <codex|claude>] [--agent-command <cmd>] [--commit] [--dry-run] [--message <text>] [--json]',
     '  openprd classify [path] <consumer|b2b|agent>',
-    '  openprd clarify [path] [--open] [--json]',
-    '  openprd capture [path] (--field <section.path> --value <text|json> | --json-file <answers.json> | --artifact-markdown <artifact.md>) [--source <user-confirmed|project-derived|agent-inferred>] [--append] [--json]',
+    '  openprd clarify [path] [--mode <auto|inline|inline-with-checklist>] [--json]',
+    '  openprd capture [path] (--field <section.path> --value <text|json> | --json-file <answers.json> | --artifact-markdown <artifact.md>) [--source <user-confirmed|project-derived|agent-inferred|agent-normalized>] [--append] [--json]',
     '  openprd interview [path] [--product-type <consumer|b2b|agent>]',
     '  openprd playground [path] [--open] [--json]',
     '  openprd learn [path] [--topic <text>] [--genre <internet-product|scientific|fairy-tale|web-novel|xianxia>] [--style <substyle>] [--source <workspace|docs|loop|all>] [--content-json <file>] [--open] [--enable|--disable] [--json]',
-    '  openprd quality [path] [--init|--verify|--report --html|--learn --from <report-id-or-json>] [--force] [--json]',
+    '  openprd quality [path] [--init|--verify|--report --html|--learn [--review] --from <report-id-or-json-or-diagnostics-or-turn-state>] [--force] [--json]',
+    '  openprd visual-compare [path] --reference <effect-image> --actual <screenshot-image> [--out <file.jpg>] [--format <jpg|png|webp>] [--quality <1..100>] [--max-panel-width <px>] [--json]',
+    '  openprd dev-check [path] <file...> [--json]',
+    '  openprd grow [path] [--review|--apply --id <candidate-id>|--reject --id <candidate-id>|--init|--check] [--notes <text>] [--json]',
     '  openprd benchmark <add|list|approve|verify> [target-or-id] [path-for-list-or-verify] [--path <project>] [--notes <text>] [--id <benchmark-id>] [--json]',
-    '  openprd synthesize [path] [--title <text>] [--owner <text>] [--problem <text>] [--why-now <text>] [--open]',
+    '  openprd synthesize [path] [--title <text>] [--owner <text>] [--problem <text>] [--why-now <text>] [--work-unit <id>] [--target-root <path>] [--open] [--json]',
+    '  openprd review [path] [--open] [--mark <pending-confirmation|confirmed|needs-revision>] [--version <id>] [--digest <sha256>] [--work-unit <id>] [--notes <text>] [--json]',
+    '  openprd review-presentation [path] [--template] [--version <id>] [--presentation <json>] [--write] [--fail-on-violation] [--json]',
     '  openprd diagram [path] [--type <architecture|product-flow>] [--input <contract.json>] [--mark <pending-confirmation|confirmed|needs-revision>] [--open] [--json]',
     '  openprd diff [path] [--from <version>] [--to <version>]',
     '  openprd history [path]',
@@ -355,7 +440,7 @@ function usage() {
     '  openprd status [path] [--json]',
     '  openprd freeze [path] [--json]',
     '  openprd handoff [path] [--target openprd] [--json]',
-    '  openprd standards [path] [--init] [--check|--verify] [--force] [--json]',
+    '  openprd standards [path] [--init|--classify-external <path>] [--check|--verify] [--force] [--json]',
     '  openprd change [path] (--generate|--validate|--apply|--archive|--activate|--close) [--change <id>] [--force] [--keep] [--json]',
     '  openprd changes [path] [--json]',
     '  openprd specs [path] [--json]',

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "workUnitId": "wu-20260524015648-6d33ded7",
+  "title": "Verify 边界与历史项目刷新",
+  "status": "confirmed",
+  "projectRoot": "/Users/chaojifeng/Projects/harness-engineer/openprd",
+  "workspaceRoot": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd",
+  "targetRoot": "/Users/chaojifeng/Projects/harness-engineer/openprd",
+  "latestVersionId": "v0001",
+  "latestVersionDigest": "dc988d7a94c07d2a8070968a71ddacffb374eaeee12aa85eb93231e06dd7b077",
+  "reviewArtifact": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/reviews/v0001.html",
+  "activeReviewArtifact": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/review.html",
+  "artifactBundle": {
+    "dir": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/artifacts/active/v0001-review",
+    "html": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/artifacts/active/v0001-review/artifact.html",
+    "markdown": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/artifacts/active/v0001-review/data.md",
+    "patch": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/artifacts/active/v0001-review/capture-patch.json"
+  },
+  "createdAt": "2026-05-24 01:56:48",
+  "updatedAt": "2026-05-28 10:43:58",
+  "reviewPath": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/reviews/v0001.html",
+  "activeReviewPath": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/review.html"
+}

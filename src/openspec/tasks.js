@@ -58,7 +58,7 @@ export function parseOpenSpecTaskFile(text) {
       return;
     }
 
-    const metadataMatch = line.match(/^\s{2,}-\s+(deps|done|verify):\s*(.*)$/i);
+    const metadataMatch = line.match(/^\s{2,}-\s+(deps|done|verify|type|category|kind|oracle):\s*(.*)$/i);
     if (currentTask && metadataMatch) {
       currentTask.metadata[metadataMatch[1].toLowerCase()] = metadataMatch[2].trim();
     }
@@ -77,6 +77,89 @@ export function parseOpenSpecTaskDeps(rawValue) {
     return [];
   }
   return value.split(',').map((dep) => dep.trim()).filter(Boolean);
+}
+
+const GENERIC_TASK_TITLE_PATTERNS = [
+  /^(实现主流程|实现需求|实现验收目标|实现非功能需求)\s*[:：]/i,
+  /^(验证验收目标|验证非功能需求)\s*[:：]/i,
+  /^(Implement primary flow|Implement requirement|Implement acceptance goal|Implement non-functional requirement)\s*[:：]/i,
+  /^(Validate acceptance goal|Validate non-functional requirement)\s*[:：]/i,
+];
+
+function looksLikeGovernanceTitle(title) {
+  const value = String(title ?? '').trim();
+  return (
+    /^(评审|检查|校验|验证|运行|Review|Check|Validate|Verify|Run)/i.test(value)
+    && /(OpenPrd\s+spec|OpenPrd\s+change|change\s+structure|change\s+schema|spec\s*(覆盖|校验|语言)?|review(?:\.html|\s+html)?|proposal|design|任务拆解)/i.test(value)
+  );
+}
+
+function isSpecOnlyValidateCommand(rawValue) {
+  const value = String(rawValue ?? '').replace(/\s+/g, ' ').trim();
+  if (!value || !/^openprd change \. --validate\b/i.test(value)) {
+    return false;
+  }
+  return !/(?:&&|\|\||;|\n)/.test(value);
+}
+
+export function normalizeOpenSpecTaskType(taskOrType) {
+  const rawType = typeof taskOrType === 'string'
+    ? taskOrType
+    : (taskOrType?.metadata?.type ?? taskOrType?.metadata?.category ?? taskOrType?.metadata?.kind ?? '');
+  const value = String(rawType ?? '').trim().toLowerCase();
+  if (['implementation', 'impl', 'feature', 'code'].includes(value)) {
+    return 'implementation';
+  }
+  if (['verification', 'verify', 'test', 'qa'].includes(value)) {
+    return 'verification';
+  }
+  if (['documentation', 'docs', 'doc'].includes(value)) {
+    return 'documentation';
+  }
+  if (['governance', 'spec', 'review', 'process'].includes(value)) {
+    return 'governance';
+  }
+
+  const title = typeof taskOrType === 'string' ? '' : String(taskOrType?.title ?? '');
+  if (looksLikeGovernanceTitle(title)) {
+    return 'governance';
+  }
+  if (/^(实现|新增|创建|接入|改造|搭建|Build|Create|Add|Implement|Wire|Prepare)/i.test(title)) {
+    return 'implementation';
+  }
+  if (/^(验证|测试|校验|运行|Verify|Test|Validate)/i.test(title)) {
+    return 'verification';
+  }
+  if (/docs\/basic|README|文档|说明书|Documentation|Docs/i.test(title)) {
+    return 'documentation';
+  }
+  return 'governance';
+}
+
+export function summarizeOpenSpecTaskTypes(tasks) {
+  const byType = {};
+  for (const type of ['implementation', 'verification', 'documentation', 'governance']) {
+    byType[type] = {
+      total: 0,
+      completed: 0,
+      pending: 0,
+    };
+  }
+
+  for (const task of tasks ?? []) {
+    const type = normalizeOpenSpecTaskType(task);
+    if (!byType[type]) {
+      byType[type] = { total: 0, completed: 0, pending: 0 };
+    }
+    byType[type].total += 1;
+    if (task.checked) {
+      byType[type].completed += 1;
+    } else {
+      byType[type].pending += 1;
+    }
+  }
+
+  return byType;
 }
 
 export function formatOpenSpecTaskLocation(task) {
@@ -176,11 +259,18 @@ export function validateOpenSpecStructuredTasks(sortedFiles, errors, checks) {
   }
 
   for (const task of tasks) {
+    const normalizedType = normalizeOpenSpecTaskType(task);
     if (!task.metadata.done) {
       errors.push(`${formatOpenSpecTaskLocation(task)} 缺少 "done:"。`);
     }
     if (!task.metadata.verify) {
       errors.push(`${formatOpenSpecTaskLocation(task)} 缺少 "verify:"。`);
+    }
+    if (GENERIC_TASK_TITLE_PATTERNS.some((pattern) => pattern.test(task.title))) {
+      errors.push(`${formatOpenSpecTaskLocation(task)} 任务标题仍在按 PRD 小节平移（${task.title}）；请改成可直接执行的实现或验证单元，不要使用“实现主流程:”或“验证验收目标:”这类泛化标题。`);
+    }
+    if (normalizedType !== 'governance' && isSpecOnlyValidateCommand(task.metadata.verify)) {
+      errors.push(`${formatOpenSpecTaskLocation(task)} 的 verify 只做了 change 结构校验；${normalizedType} 任务必须提供能证明实际落地的验证命令或审查步骤。`);
     }
 
     for (const depId of parseOpenSpecTaskDeps(task.metadata.deps)) {

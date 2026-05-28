@@ -36,6 +36,7 @@ Each chapter should support:
 - `label`
 - `semanticTitle`
 - `summary`
+- `visualExplainer`
 - `paragraphs`
 - `retrievalBlocks`
 - `workedExamples`
@@ -56,6 +57,22 @@ Each chapter should support:
 - `steps`
 - `principle`
 
+### Visual Explainer
+
+- `title`
+- `analogy`
+- `scene`
+- `whyItMatters`
+- `takeaways`
+- `image`
+
+### Visual Explainer Image
+
+- `path`
+- `alt`
+- `caption`
+- `prompt`
+
 ## Rules
 
 - Facts belong to evidence.
@@ -64,6 +81,8 @@ Each chapter should support:
 - Style migration audit belongs to `styleTransfer`.
 - Rendering belongs to the HTML reader.
 - The outline should stay chapter-oriented; retrieval questions remain in chapter body content instead of separate TOC leaf nodes.
+- `visualExplainer` helps readers form intuition faster, but it cannot replace evidence or introduce unsupported facts.
+- If `visualExplainer.image.path` is present, prefer a relative path under `packagePaths.assetsDir` so the archived reader stays portable.
 - Claims that cannot be supported by the manifest should be marked as inference.
 - Version the contract whenever the shape changes.
 
@@ -85,6 +104,18 @@ Each chapter should support:
       "label": "问题地图",
       "semanticTitle": "从任务完成回到工作区事实",
       "summary": "先把发生了什么说清楚。",
+      "visualExplainer": {
+        "title": "像开业前先做联合质检",
+        "analogy": "先别急着开门营业，而是让不同角色独立检查风险。",
+        "scene": "产品负责人先看用户旅程，工程负责人再看实现风险。",
+        "whyItMatters": "非技术读者可以先抓住机制，再回到证据细节。",
+        "takeaways": ["先独立看", "后统一判", "再决定做不做"],
+        "image": {
+          "path": "assets/chapter-1.png",
+          "alt": "开业前联合质检的图文示意",
+          "caption": "图片只帮助理解，不替代证据。"
+        }
+      },
       "retrievalBlocks": [],
       "workedExamples": [],
       "evidenceIds": ["current-state", "task-graph"]

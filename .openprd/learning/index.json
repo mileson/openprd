@@ -1,9 +1,48 @@
 {
   "version": 1,
   "generatedAt": "2026-05-12 16:44:27",
-  "updatedAt": "2026-05-13 17:16:25",
-  "currentPackageId": "lr-20260513-171625-空-reader-复核",
+  "updatedAt": "2026-05-28 22:38:15",
+  "currentPackageId": "lr-20260528-223815-openprd-典型协作场景",
   "packages": [
+    {
+      "version": 1,
+      "generatedAt": "2026-05-28 22:38:15",
+      "packageId": "lr-20260528-223815-openprd-典型协作场景",
+      "title": "OpenPrd 的三段式协作闭环",
+      "topic": "OpenPrd 典型协作场景",
+      "genreId": "internet-product",
+      "genreLabel": "互联网产品",
+      "styleId": "teaching-brief",
+      "styleLabel": "教学型拆解",
+      "promptPackId": "internet-product.teaching-brief",
+      "trigger": "manual",
+      "sourceScope": "docs",
+      "contentMode": "agent-authored",
+      "authoringStatus": "agent-authored",
+      "needsAgentDraft": false,
+      "autoOpen": true,
+      "related": {
+        "changeId": null,
+        "taskId": null,
+        "verifyCommand": null,
+        "testReport": null,
+        "commitSha": null
+      },
+      "paths": {
+        "readerHtml": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260528-223815-openprd/reader.html",
+        "assetsDir": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260528-223815-openprd/assets",
+        "packageJson": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260528-223815-openprd/learning-package.json",
+        "contentJson": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260528-223815-openprd/learning-content.json",
+        "contentMarkdown": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260528-223815-openprd/learning-content.md",
+        "evidenceManifest": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260528-223815-openprd/evidence-manifest.json",
+        "agentContext": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260528-223815-openprd/agent-context.json",
+        "agentPrompt": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/learning/archive/lr-20260528-223815-openprd/agent-prompt.md"
+      },
+      "sourceCount": 18,
+      "claimCount": 18,
+      "chapterCount": 2,
+      "relativeDir": "learning/archive/lr-20260528-223815-openprd"
+    },
     {
       "version": 1,
       "generatedAt": "2026-05-13 17:16:25",

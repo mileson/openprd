@@ -1,3 +1,56 @@
 version: 1
 schema: openprd.benchmarks.v1
-sources: []
+updatedAt: 2026-05-28 11:30:07
+sources:
+  - id: milvus-io-ai-code-review-gets-better-when-models-debate-claude-vs-gemini-vs-code
+    title: milvus.io/ai-code-review-gets-better-when-models-debate-claude-vs-gemini-vs-codex-vs-qwen-vs-minimax.md
+    scope: project
+    status: approved
+    sourceType: engineering-article
+    url: https://milvus.io/ar/blog/ai-code-review-gets-better-when-models-debate-claude-vs-gemini-vs-codex-vs-qwen-vs-minimax.md
+    path: null
+    repo: null
+    researchMethod: official_page_first
+    scenarios:
+      - agent-harness
+      - pr-review-harness
+    triggerWhen:
+      - 设计 Agent harness、长程任务、状态持久化、验证门禁或人工接管
+      - 设计 merge 前高风险复核、独立 reviewer 交叉验证、误报过滤、reviewer agreement 或 merge recommendation
+    notFor:
+      - 普通 PRD / 产品流程设计
+      - 与 CLI 无关的一次性 UI 视觉问题
+      - 默认给每个低风险 PR 拉起多 reviewer 并行审查
+    note: AI code review / PR review harness；reviewer agreement、交叉验证、误报过滤、hallucination filter、merge
+      recommendation
+    value: AI code review / PR review harness；reviewer agreement、交叉验证、误报过滤、hallucination filter、merge
+      recommendation
+    addedAt: 2026-05-28 11:01:00
+    approvedAt: 2026-05-28 11:01:06
+    lastVerified: 2026-05-28 11:30:06
+  - id: nolanlawson-com-using-ai-to-write-better-code-more-slowly
+    title: nolanlawson.com/using-ai-to-write-better-code-more-slowly
+    scope: project
+    status: approved
+    sourceType: web
+    url: https://nolanlawson.com/2026/05/25/using-ai-to-write-better-code-more-slowly/
+    path: null
+    repo: null
+    researchMethod: official_page_first
+    scenarios:
+      - agent-harness
+      - pr-review-harness
+    triggerWhen:
+      - 设计 Agent harness、长程任务、状态持久化、验证门禁或人工接管
+      - 设计 merge 前高风险复核、独立 reviewer 交叉验证、误报过滤、reviewer agreement 或 merge recommendation
+    notFor:
+      - 普通 PRD / 产品流程设计
+      - 与 CLI 无关的一次性 UI 视觉问题
+      - 默认给每个低风险 PR 拉起多 reviewer 并行审查
+    note: AI code review / PR review harness；独立审查、主代理先不站队、汇总后再验证、critical/high/medium/low 分级、merge
+      recommendation
+    value: AI code review / PR review harness；独立审查、主代理先不站队、汇总后再验证、critical/high/medium/low 分级、merge
+      recommendation
+    addedAt: 2026-05-28 11:00:52
+    approvedAt: 2026-05-28 11:01:06
+    lastVerified: 2026-05-28 11:30:07

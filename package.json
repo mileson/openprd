@@ -9,13 +9,25 @@
   },
   "files": [
     "AGENTS.md",
+    "CONTRIBUTING.md",
+    "README_CN.md",
+    "SECURITY.md",
     "bin",
+    "docs/assets",
+    "scripts",
     "src",
     ".openprd",
+    "!.openprd/artifacts",
+    "!.openprd/artifacts/**",
     "!.openprd/harness",
     "!.openprd/harness/**",
+    "!.openprd/learning",
+    "!.openprd/learning/**",
+    "!.openprd/quality/evidence",
+    "!.openprd/quality/evidence/**",
     "!.openprd/quality/reports",
     "!.openprd/quality/reports/**",
+    "!.openprd/growth/preferences.local.json",
     "!.openprd/knowledge/incidents",
     "!.openprd/knowledge/incidents/**",
     "!.openprd/knowledge/patterns",
@@ -35,9 +47,11 @@
   },
   "scripts": {
     "start": "node ./bin/openprd.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:smoke": "node --test --test-name-pattern \"quality requires current smoke evidence|run exposes hook-stable\""
   },
   "dependencies": {
+    "sharp": "^0.34.5",
     "yaml": "^2.8.2"
   }
 }

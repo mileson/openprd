@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { DEFAULT_DEVELOPMENT_STANDARDS, validateDevelopmentStandardsConfig } from './dev-standards.js';
+import { DEFAULT_GROWTH_CONFIG, validateGrowthConfig } from './growth.js';
 
 export const OPENPRD_STANDARDS_CONFIG = path.join('.openprd', 'standards', 'config.json');
 export const OPENPRD_STANDARDS_DIR = path.join('.openprd', 'standards');
@@ -67,6 +69,10 @@ const DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS = [
   '**/__fixtures__/**',
   '**/fixtures/**',
 ];
+const EXTERNAL_REFERENCE_CANDIDATE_MIN_FILES = 5;
+const PROVISIONAL_EXTERNAL_REFERENCE_PATH_SEGMENTS = new Set([
+  'toolkit-sources',
+]);
 const DOC_PLACEHOLDER_PATTERNS = [
   /待补充/,
   /说明当前项目/,
@@ -378,6 +384,14 @@ function toPosixPath(value) {
   return String(value ?? '').split(path.sep).join('/');
 }
 
+function shellQuoteArg(value) {
+  const text = String(value ?? '');
+  if (/^[a-zA-Z0-9_./:-]+$/.test(text)) {
+    return text;
+  }
+  return `'${text.replaceAll("'", "'\\''")}'`;
+}
+
 function globToRegExp(pattern) {
   const escaped = toPosixPath(pattern)
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
@@ -423,6 +437,39 @@ function normalizeStringList(value) {
   return value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim());
 }
 
+function normalizeExternalReferencePath(projectRoot, value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) {
+    throw new Error('external reference path is required.');
+  }
+  const absolutePath = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(projectRoot, raw);
+  const relativePath = toPosixPath(path.relative(projectRoot, absolutePath)).replace(/\/+$/, '');
+  if (!relativePath || relativePath === '.') {
+    throw new Error('external reference path cannot be the project root.');
+  }
+  if (relativePath.startsWith('../') || path.isAbsolute(relativePath)) {
+    throw new Error(`external reference path must be inside the project: ${raw}`);
+  }
+  return relativePath;
+}
+
+function normalizeExternalReferencePaths(projectRoot, value) {
+  const paths = [];
+  for (const item of normalizeStringList(value)) {
+    try {
+      paths.push(normalizeExternalReferencePath(projectRoot, item));
+    } catch {
+      // Invalid user config is reported elsewhere by standards config validation.
+    }
+  }
+  return [...new Set(paths)].sort();
+}
+
+function externalReferenceIgnorePatterns(projectRoot, config = {}) {
+  return normalizeExternalReferencePaths(projectRoot, config?.externalReferences?.paths)
+    .map((externalPath) => `${externalPath}/**`);
+}
+
 function sourceManualIgnorePatterns(config = {}) {
   return [
     ...DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS,
@@ -432,14 +479,21 @@ function sourceManualIgnorePatterns(config = {}) {
   ];
 }
 
-async function collectSourceFiles(projectRoot, dirPath = projectRoot, files = [], ignorePatterns = DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS) {
+async function collectSourceFiles(projectRoot, dirPath = projectRoot, files = [], ignorePatterns = DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS, discovery = { externalReferenceCandidates: [] }) {
   const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     const absolutePath = cjoin(dirPath, entry.name);
     const relativePath = toPosixPath(path.relative(projectRoot, absolutePath));
     if (entry.isDirectory()) {
+      if (relativePath && await exists(cjoin(absolutePath, '.git'))) {
+        discovery.externalReferenceCandidates.push({
+          path: relativePath,
+          reason: 'nested-git',
+          confidence: 'high',
+        });
+      }
       if (!shouldIgnoreDir(entry.name) && !matchesIgnoredPath(relativePath, ignorePatterns, { directory: true })) {
-        await collectSourceFiles(projectRoot, absolutePath, files, ignorePatterns);
+        await collectSourceFiles(projectRoot, absolutePath, files, ignorePatterns, discovery);
       }
       continue;
     }
@@ -451,6 +505,82 @@ async function collectSourceFiles(projectRoot, dirPath = projectRoot, files = []
     }
   }
   return files;
+}
+
+function pathIsUnder(relativePath, parentPath) {
+  const normalized = toPosixPath(relativePath).replace(/^\/+/, '');
+  const parent = toPosixPath(parentPath).replace(/^\/+|\/+$/g, '');
+  return normalized === parent || normalized.startsWith(`${parent}/`);
+}
+
+function longestDetectedCandidateForPath(relativePath, detectedCandidates) {
+  return detectedCandidates
+    .filter((candidate) => pathIsUnder(relativePath, candidate.path))
+    .sort((a, b) => b.path.length - a.path.length)[0] ?? null;
+}
+
+function fallbackCandidateRoot(relativePath) {
+  const parts = toPosixPath(relativePath).split('/').filter(Boolean);
+  if (parts.length >= 2) {
+    return parts.slice(0, 2).join('/');
+  }
+  return null;
+}
+
+function buildExternalReferenceCandidates({ filesMissingManual, foldersMissingManual, detectedCandidates }) {
+  const grouped = new Map();
+  const add = (candidatePath, kind, reason = 'large-manual-gap', confidence = 'medium') => {
+    if (!candidatePath) return;
+    const current = grouped.get(candidatePath) ?? {
+      path: candidatePath,
+      reason,
+      confidence,
+      missingFiles: 0,
+      missingFolders: 0,
+      suggestedCommand: `openprd standards . --classify-external ${shellQuoteArg(candidatePath)}`,
+    };
+    if (current.reason !== 'nested-git' && reason === 'nested-git') {
+      current.reason = reason;
+      current.confidence = confidence;
+    }
+    if (kind === 'file') current.missingFiles += 1;
+    if (kind === 'folder') current.missingFolders += 1;
+    grouped.set(candidatePath, current);
+  };
+
+  const detected = [...new Map(detectedCandidates.map((candidate) => [candidate.path, candidate])).values()];
+  for (const relativePath of filesMissingManual) {
+    const detectedRoot = longestDetectedCandidateForPath(relativePath, detected);
+    add(detectedRoot?.path ?? fallbackCandidateRoot(relativePath), 'file', detectedRoot?.reason, detectedRoot?.confidence);
+  }
+  for (const relativePath of foldersMissingManual) {
+    const detectedRoot = longestDetectedCandidateForPath(relativePath, detected);
+    add(detectedRoot?.path ?? fallbackCandidateRoot(relativePath), 'folder', detectedRoot?.reason, detectedRoot?.confidence);
+  }
+
+  return [...grouped.values()]
+    .filter((candidate) => candidate.reason === 'nested-git' || candidate.missingFiles >= EXTERNAL_REFERENCE_CANDIDATE_MIN_FILES)
+    .sort((a, b) => (b.missingFiles + b.missingFolders) - (a.missingFiles + a.missingFolders));
+}
+
+function shouldProvisionallyIgnoreExternalReferenceCandidate(candidate) {
+  if (!candidate?.path) {
+    return false;
+  }
+  if (candidate.reason === 'nested-git') {
+    return true;
+  }
+  return toPosixPath(candidate.path)
+    .split('/')
+    .filter(Boolean)
+    .some((segment) => PROVISIONAL_EXTERNAL_REFERENCE_PATH_SEGMENTS.has(segment));
+}
+
+function filterRelativePathsOutsideParents(relativePaths, parentPaths = []) {
+  if (!Array.isArray(parentPaths) || parentPaths.length === 0) {
+    return relativePaths;
+  }
+  return relativePaths.filter((relativePath) => !parentPaths.some((parentPath) => pathIsUnder(relativePath, parentPath)));
 }
 
 async function isOpenPrdToolProject(projectRoot) {
@@ -468,27 +598,41 @@ function hasHeaderManual(text) {
 }
 
 async function validateSourceManuals(projectRoot, errors, checks, options = {}) {
-  const sourceFiles = await collectSourceFiles(projectRoot, projectRoot, [], options.ignorePatterns);
-  const sourceDirs = new Set(sourceFiles.map((filePath) => path.dirname(filePath)));
-  const filesMissingManual = [];
-  const foldersMissingManual = [];
+  const discovery = { externalReferenceCandidates: [] };
+  const sourceFiles = await collectSourceFiles(projectRoot, projectRoot, [], options.ignorePatterns, discovery);
+  const filesMissingManualRaw = [];
+  const foldersMissingManualRaw = [];
 
   for (const filePath of sourceFiles) {
     const relativePath = path.relative(projectRoot, filePath);
     const text = await readText(filePath).catch(() => '');
     if (!hasHeaderManual(text)) {
-      filesMissingManual.push(relativePath);
+      filesMissingManualRaw.push(relativePath);
     }
   }
 
-  for (const dirPath of sourceDirs) {
+  const sourceDirsRaw = new Set(sourceFiles.map((filePath) => path.dirname(filePath)));
+  for (const dirPath of sourceDirsRaw) {
     const expectedPath = cjoin(dirPath, sourceManualReadmeName(projectRoot, dirPath));
     const relativePath = path.relative(projectRoot, expectedPath);
     const text = await readText(expectedPath).catch(() => null);
     if (!text || !hasAllManualSections(text)) {
-      foldersMissingManual.push(relativePath);
+      foldersMissingManualRaw.push(relativePath);
     }
   }
+
+  const externalReferenceCandidates = buildExternalReferenceCandidates({
+    filesMissingManual: filesMissingManualRaw,
+    foldersMissingManual: foldersMissingManualRaw,
+    detectedCandidates: discovery.externalReferenceCandidates,
+  });
+  const provisionalExternalReferencePaths = externalReferenceCandidates
+    .filter(shouldProvisionallyIgnoreExternalReferenceCandidate)
+    .map((candidate) => candidate.path);
+  const filteredSourceFilePaths = sourceFiles.filter((filePath) => !provisionalExternalReferencePaths.some((parentPath) => pathIsUnder(path.relative(projectRoot, filePath), parentPath)));
+  const sourceDirs = new Set(filteredSourceFilePaths.map((filePath) => path.dirname(filePath)));
+  const filesMissingManual = filterRelativePathsOutsideParents(filesMissingManualRaw, provisionalExternalReferencePaths);
+  const foldersMissingManual = filterRelativePathsOutsideParents(foldersMissingManualRaw, provisionalExternalReferencePaths);
 
   for (const relativePath of filesMissingManual) {
     errors.push(`${relativePath} 缺少文件说明书；请在文件头部补齐 ${STANDARD_MANUAL_SECTIONS.join('、')}。`);
@@ -497,12 +641,21 @@ async function validateSourceManuals(projectRoot, errors, checks, options = {}) 
     errors.push(`${relativePath} 缺少文件夹说明书或章节不完整。`);
   }
 
-  checks.push(`源文件说明书: ${sourceFiles.length - filesMissingManual.length}/${sourceFiles.length}。`);
+  checks.push(`源文件说明书: ${filteredSourceFilePaths.length - filesMissingManual.length}/${filteredSourceFilePaths.length}。`);
   checks.push(`文件夹说明书: ${sourceDirs.size - foldersMissingManual.length}/${sourceDirs.size}。`);
+  if (options.externalReferencePaths?.length) {
+    checks.push(`外部参考源码: ${options.externalReferencePaths.length} 个已跳过逐文件说明书。`);
+  }
+  if (provisionalExternalReferencePaths.length > 0) {
+    checks.push(`外部参考候选: ${provisionalExternalReferencePaths.length} 个已暂按候选跳过逐文件说明书，待人工确认。`);
+  }
 
   return {
     ignorePatterns: options.ignorePatterns ?? DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS,
-    sourceFiles: sourceFiles.map((filePath) => path.relative(projectRoot, filePath)),
+    externalReferencePaths: options.externalReferencePaths ?? [],
+    provisionalExternalReferencePaths,
+    externalReferenceCandidates,
+    sourceFiles: filteredSourceFilePaths.map((filePath) => path.relative(projectRoot, filePath)),
     sourceDirs: [...sourceDirs].map((dirPath) => path.relative(projectRoot, dirPath) || '.'),
     filesMissingManual,
     foldersMissingManual,
@@ -539,6 +692,11 @@ function buildStandardsConfig() {
     },
     sourceManual: {
       ignorePaths: DEFAULT_SOURCE_MANUAL_IGNORE_PATTERNS,
+    },
+    developmentStandards: DEFAULT_DEVELOPMENT_STANDARDS,
+    growth: DEFAULT_GROWTH_CONFIG,
+    externalReferences: {
+      paths: [],
     },
     qualityGates: {
       changeValidateRequiresStandards: true,
@@ -627,9 +785,22 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
     if (config.docsRoot !== 'docs/basic') {
       errors.push(`${OPENPRD_STANDARDS_CONFIG} docsRoot must be docs/basic.`);
     }
+    validateDevelopmentStandardsConfig(config, errors);
+    validateGrowthConfig(config, errors);
+    for (const externalPath of normalizeStringList(config?.externalReferences?.paths)) {
+      try {
+        normalizeExternalReferencePath(projectRoot, externalPath);
+      } catch (error) {
+        errors.push(`${OPENPRD_STANDARDS_CONFIG} externalReferences.paths has invalid path ${externalPath}: ${error.message}`);
+      }
+    }
   }
 
-  const ignorePatterns = sourceManualIgnorePatterns(config ?? {});
+  const externalReferencePaths = normalizeExternalReferencePaths(projectRoot, config?.externalReferences?.paths);
+  const ignorePatterns = [
+    ...sourceManualIgnorePatterns(config ?? {}),
+    ...externalReferenceIgnorePatterns(projectRoot, config ?? {}),
+  ];
   const requiredDocs = [];
   const sourceFiles = await collectSourceFiles(projectRoot, projectRoot, [], ignorePatterns);
   const hasProjectSource = sourceFiles.length > 0;
@@ -674,9 +845,11 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
     && config?.fileManual?.enabled !== false
     && config?.folderManual?.enabled !== false;
   const manualReport = enforceSourceManuals
-    ? await validateSourceManuals(projectRoot, errors, checks, { ignorePatterns })
+    ? await validateSourceManuals(projectRoot, errors, checks, { ignorePatterns, externalReferencePaths })
     : {
       ignorePatterns,
+      externalReferencePaths,
+      externalReferenceCandidates: [],
       sourceFiles: [],
       sourceDirs: [],
       filesMissingManual: [],
@@ -686,6 +859,9 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
   checks.push(`Standards docs root: ${STANDARD_DOCS_ROOT.replaceAll(path.sep, '/')}`);
   checks.push(`Required docs: ${requiredDocs.filter((doc) => doc.exists).length}/${STANDARD_DOCS.length}.`);
   checks.push(`Manual templates: ${templateFiles.filter((file) => file.exists).length}/${STANDARD_TEMPLATE_FILES.length}.`);
+  const lineConfig = config?.developmentStandards?.codeFileLines ?? DEFAULT_DEVELOPMENT_STANDARDS.codeFileLines;
+  checks.push(`Development standards: code files ok <= ${lineConfig.okMax} lines, attention <= ${lineConfig.attentionMax} lines.`);
+  checks.push(`Growth layer: ${config?.growth?.enabled === false ? 'disabled' : 'enabled'} with user review required before applying candidates.`);
 
   return {
     ok: errors.length === 0,
@@ -699,5 +875,40 @@ export async function checkStandardsWorkspace(projectRoot, options = {}) {
     requiredDocs,
     templateFiles,
     manualReport,
+  };
+}
+
+export async function classifyExternalReferenceWorkspace(projectRoot, options = {}) {
+  const configPath = standardsConfigPath(projectRoot);
+  if (!(await exists(configPath))) {
+    throw new Error(`${OPENPRD_STANDARDS_CONFIG} is required. Run: openprd standards . --init`);
+  }
+  const config = await readJson(configPath);
+  const externalPath = normalizeExternalReferencePath(projectRoot, options.externalReference);
+  const absoluteExternalPath = cjoin(projectRoot, externalPath);
+  const externalStat = await fs.stat(absoluteExternalPath).catch(() => null);
+  if (!externalStat?.isDirectory()) {
+    throw new Error(`external reference path must be an existing directory: ${externalPath}`);
+  }
+  const paths = new Set(normalizeExternalReferencePaths(projectRoot, config?.externalReferences?.paths));
+  const alreadyPresent = paths.has(externalPath);
+  paths.add(externalPath);
+  const updatedConfig = {
+    ...config,
+    externalReferences: {
+      ...(config.externalReferences ?? {}),
+      paths: [...paths].sort(),
+    },
+  };
+  await writeJson(configPath, updatedConfig);
+  return {
+    ok: true,
+    action: 'classify-external-reference',
+    projectRoot,
+    docsRoot: STANDARD_DOCS_ROOT,
+    path: externalPath,
+    alreadyPresent,
+    configPath: path.relative(projectRoot, configPath),
+    changed: alreadyPresent ? [] : [{ path: externalPath, status: 'external-reference' }],
   };
 }

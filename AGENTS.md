@@ -1,187 +1,43 @@
-# OpenPrd Agent Contract
-
-This repository ships its own agent-facing skills under `/Users/mileson/Workspace/AI工作室/OpenPrd/skills/`.
-
-If you are an agent working in this repository, prefer these repo-local skills over unrelated global heuristics.
-
-## Skill Routing
-
-### Always read first
-
-- `/Users/mileson/Workspace/AI工作室/OpenPrd/skills/openprd-shared/SKILL.md`
-
-Use it for shared guardrails:
-- language-following output
-- proper noun preservation
-- read-only vs mutating command discipline
-- freeze / handoff gate awareness
-- workspace-first reasoning using `.openprd/`
-
-### Main workflow
-
-- `/Users/mileson/Workspace/AI工作室/OpenPrd/skills/openprd-harness/SKILL.md`
-
-Use it when advancing the workspace through:
-- `init`
-- `classify`
-- `interview`
-- `synthesize`
-- `diagram`
-- `freeze`
-- `handoff`
-
-### Diagram and visual review
-
-- `/Users/mileson/Workspace/AI工作室/OpenPrd/skills/openprd-diagram-review/SKILL.md`
-
-Use it when the task needs:
-- an architecture diagram
-- a product flow diagram
-- a user journey / flow confirmation artifact
-- a visual review before freeze
-
-### OpenPrd discovery mode
-
-- `skills/openprd-discovery-loop/SKILL.md`
-
-Use it when the task needs:
-- deep completion of requirements, specs, and tasks for an existing project
-- reference project behavior mining
-- sustained requirement clarification and coverage tracking
-
-Natural-language routing:
-- If the user says OpenPrd or OpenSpec plus 持续 / 深度 / 全面 / 完整 / 穷尽 / 补全 / 复刻 / 对标 / 参考, route to `skills/openprd-discovery-loop/SKILL.md`.
-- Do not require the user to mention a skill name.
-- Choose the discovery mode internally from the user intent and available project/reference context.
-- When tasks exceed 25 substantive checkbox items, shard them as `tasks.md`, `tasks-002.md`, `tasks-003.md`, etc. The final checkbox in each non-final file must hand off to the next file.
-- For stable long-running tasks, use only `deps`, `done`, and `verify` metadata under ids like `T009.07`; keep source evidence in `.openprd/discovery` state files.
-- Run `openprd discovery <path> --verify` after task sharding so the CLI can catch change-structure errors, oversized files, missing handoffs, task dependency gaps, and spec delta issues.
-- Use `openprd change <path> --generate --change <id>` when a frozen or synthesized PRD needs to become concrete OpenPrd change files.
-- Use `openprd tasks <path> --change <id>` to find the next dependency-ready task, then `openprd tasks <path> --change <id> --advance --verify --item <task-id>` to run its verify command and mark it complete.
-- Use `openprd change <path> --apply --change <id>` to promote specs into the accepted baseline, then `openprd change <path> --archive --change <id>` to move completed work out of active changes.
-
-### OpenPrd benchmark routing
-
-- `skills/openprd-benchmark-router/SKILL.md`
-
-Use it when the task needs:
-- best practices / benchmark research
-- reference product or reference repo design comparison
-- OpenPrd product or PRD workflow optimization
-- CLI, skill, command, adapter, hook, or generated guidance optimization
-- Agent harness, long-running task, context engineering, or prompt engineering design
-
-Natural-language routing:
-- If the user asks for 最佳实践 / 对标 / benchmark / 参考 / 复刻 / prompt engineering / Agent harness / context engineering / CLI skill 体系, route to `skills/openprd-benchmark-router/SKILL.md` before forming the design conclusion.
-- Public GitHub project architecture and cross-module design comparisons use DeepWiki first.
-- Third-party library, API, SDK, MCP, CLI, or version-specific usage uses Context7 first.
-- Official product docs and engineering blogs should be treated as primary sources; clearly separate verified facts from OpenPrd-specific inference.
-- If benchmark work expands into sustained reference-project mining or requirements completion, hand off to `skills/openprd-discovery-loop/SKILL.md`.
-
-### OpenPrd standards
-
-- `skills/openprd-standards/SKILL.md`
-
-Use it when the task needs:
-- project baseline docs under `docs/basic/`
-- file manual standards
-- folder README standards
-- standards verification before change readiness
-
-Natural-language routing:
-- If the user asks to establish, check, repair, or enforce project docs, file manuals, folder manuals, or standardization, route to `skills/openprd-standards/SKILL.md`.
-- Use `openprd standards <path> --init` to create the standards contract.
-- Use `openprd standards <path> --verify` before claiming implementation readiness when standards are in scope.
-- The canonical project docs path is only `docs/basic/`.
-
-### OpenPrd agent setup
-
-Use setup/update/doctor when the task needs automatic agent guidance instead of asking users to invoke skills manually.
-
-- `openprd init <path>` installs the default agent integration.
-- `openprd setup <path>` installs or repairs OpenPrd guidance for Codex, Claude, and Cursor.
-- `openprd update <path>` refreshes generated guidance files from the canonical OpenPrd source.
-- `openprd doctor <path>` verifies generated rules, standards, workspace validation, and Codex hooks.
-- `openprd run <path> --context` selects the next hook-stable execution unit.
-- `openprd run <path> --verify` verifies the current run gates.
-- `openprd fleet <root> --dry-run` audits historical projects before batch updates.
-- `openprd fleet <root> --update-openprd` refreshes only projects that already contain `.openprd/`.
-- Codex hooks are expected to be enabled through project `.codex/config.toml` and user Codex config with `codex_hooks = true`.
-- `.openprd/harness/` stores the install manifest, hook state, hook event log, and drift report.
-- Treat drift as a repairable gate: run `openprd update <path>`, then `openprd doctor <path>`.
-
-## Tool Reality
-
-The current CLI supports:
-
-- `openprd clarify`
-- `openprd capture`
-- `openprd setup`
-- `openprd update`
-- `openprd doctor`
-- `openprd run`
-- `openprd diagram --type architecture`
-- `openprd diagram --type product-flow`
-- `openprd change`
-- `openprd changes`
-- `openprd specs`
-- `openprd tasks`
-- `openprd discovery`
-- `openprd standards`
-
-Do not invent commands or artifact types that are not implemented.
-
-## Working Principles
-
-1. Rebuild state from `.openprd/` before making workflow decisions.
-2. Prefer `openprd status` and `openprd next` before mutating commands.
-3. Ask the user for missing critical product facts before pushing the workspace forward; use `openprd clarify` to generate those questions and `openprd capture` to store the answers.
-4. Prefer diagram review before freeze when the system or flow shape still needs confirmation.
-5. Keep unresolved assumptions and open questions visible instead of silently resolving them.
-
 <!-- OPENPRD:AGENTS:START -->
 ## OpenPrd Harness
 
-本项目由 OpenPrd 管理。Agent 应优先遵循 harness，而不是零散的临时指令。
+本项目由 OpenPrd 管理。Agent 应优先遵循 repo-local skills 和 hooks；`AGENTS.md` 只保留轻量入口合同。
+
+### Scope
+
+- skill 路由放在 `openprd-router`，命令清单放在 command catalog，强约束放在 hooks。
+- `AGENTS.md` 只说明入口、默认行为和高风险门禁，不再承载静态长清单。
+
+### Entry Points
+
+- 先读 `skills/openprd-router/SKILL.md`；在生成的 Codex / Claude 环境里，优先读同名 `openprd-router` skill。
+- 需要具体命令时，优先读 `.openprd/harness/command-catalog.md`，不要继续把命令清单膨胀回 `AGENTS.md`。
+- `$openprd-shared`：共用语言、文档影响、敏感信息、浏览器安全、小程序验证、产品文案与 i18n 规则。
+- `$openprd-harness`：主工作流、`run/loop`、需求入口、review/change/tasks 与执行节奏。
+- `$openprd-benchmark-router`：外部技术、公开 GitHub 仓库、benchmark/对标/最佳实践路由。
+- `$openprd-standards` / `$openprd-quality`：`docs/basic/`、就绪验证、EVO 门禁、知识沉淀。
+- `$openprd-diagram-review` / `$openprd-discovery-loop`：可视评审与长时间只读挖掘。
 
 ### 默认行为
 
-1. 在规划或改文件前，先从 `.openprd/` 重建状态。
-2. 选择下一个执行单元前先运行 `openprd run . --context`，但把它当作建议上下文，不要机械照执行。
-3. 跟随任何建议前先判断当前用户意图。遇到规划、分析、架构评审、“怎么改”或“会动哪些文件”这类请求时，保持只读并基于证据回答。
-4. 如果用户提出新的产品、模块或工作流需求，编码前先走需求入口：clarify、记录用户回答、synthesize/review、生成或检查 OpenPrd change、拆分任务，并等待用户明确确认。
-5. 如果用户在确认后要求实现，且工作会影响产品或架构，就要先生成或检查 OpenPrd change，再开始编码。
-6. 实现过程中，对每个新增或修改文件都做一次文档影响检查：缺少 `docs/basic/`、文件说明书或目录 README 就补齐；如果变更影响职责、流程、结构、依赖或产品行为，就同步更新现有文档。涉及后端、脚本、Agent、工具链、服务或数据处理变更时，还要把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、`help`、`doctor`、`dry-run`、`status` 与接口协议、返回结构、身份边界是否受影响，并更新 `docs/basic/backend-structure.md` 或明确写不适用原因。
-7. 在宣称准备就绪前，运行 `openprd standards . --verify`、`openprd quality . --verify` 和 `openprd run . --verify`。
-8. 把 `.openprd/harness/` 视为已安装的 agent 控制状态目录：其中包含 run state、iterations、events、hook state、install manifest 和 drift report。
-9. Codex hooks 默认使用 lite 模式：`UserPromptSubmit` 加一个轻量 `PreToolUse` 写入门禁。只有项目明确需要完整遥测时，才使用 `--hook-profile full`。
-10. 对任何带 `locale: zh-CN` 的 OpenPrd diagram contract，所有可见标签、节点文案、流程标签、卡片、面板和评审说明都必须使用简体中文。只保留必要的专有名词和技术字段名。
-11. 当用户要求最佳实践、benchmark、对标、参考产品、prompt engineering、Agent harness、context engineering、CLI 或 skill 体系优化时，先使用项目生成的 `openprd-benchmark-router`，再按 DeepWiki、Context7 或官方资料规则调研。
+1. 动手前先从 `.openprd/` 重建状态，并先运行 `openprd run . --context`；它是建议上下文，不是自动执行指令。
+2. 规划、分析、架构评审、“怎么改”或“会动哪些文件”类请求保持只读；只有用户明确要求实现、继续任务、深度调研、对标复刻或提交时才进入执行。
+3. 先分流再执行：L0 小修（空格、错别字、按钮文案、简单样式、明确 bugfix）直接处理并事后说明；L1 中等改动先在对话内给 mini-plan 再执行；L2 新产品、模块或工作流需求先走 requirement intake，再 `review/change/tasks`，最后才实现。`review.html` 是稳定评审 artifact，不再默认等于唯一的人类停顿点；默认按 decision-points approval policy 执行，只有当前 lane 仍要求人类决策时才在 final answer 主体里停下请求确认。
+4. 纯图片、封面图、配图、海报、插画、图标、贴纸、mockup 或“先看样子”请求默认直接使用 Codex 原生 Image 2；其中 logo、icon、avatar、badge 等开发素材在用户未明确要求场景化展示时，默认按独立素材输出（standalone asset）生成：全画布单主体，不额外添加卡片、设备框或其他展示容器；只有进入实现阶段且已有参考图时，才使用 `openprd visual-compare`。
+5. 用户给出会话 ID 并要求继续时，按工具无关的历史会话续接；不要要求工具专属 ID，也不要用当前 active change 或相似历史替代指定会话。
+6. 代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 `openprd dev-check . <file...>`；宣称准备就绪前，运行 `openprd standards . --verify`、`openprd quality . --verify` 和 `openprd run . --verify`。
 
-### 标准命令
+### Hook-Enforced Gates
 
-- `openprd next .` - 选择下一步 harness 动作。
-- `openprd run . --context` - 选择下一个 hook-stable 执行单元。
-- `openprd run . --verify` - 校验当前 run 门禁。
-- `openprd quality . --verify` - 生成覆盖 observability、business guardrails、smoke、performance、极端场景和知识缺口的 HTML 质量评估报告。
-- `openprd quality . --learn --from <report-id-or-json>` - 把已审阅或修复的问题沉淀成项目级经验 skill 知识。
-- `openprd loop . --plan --change <id>` - 构建“一次会话只做一个任务”的 feature list。
-- `openprd loop . --run --agent codex|claude --dry-run` - 准备一个全新的单任务 agent 会话。
-- `openprd loop . --run --agent codex|claude` - 仅在用户明确要求开发、继续推进、深度调研 / benchmark 或复刻时执行。
-- `openprd loop . --finish --item <task-id> --commit` - 完成校验、写入暂存测试报告、标记 done，并且只有当用户明确要求 commit 时才创建任务提交。
-- `openprd standards . --verify` - 校验项目文档标准。
-- `openprd change . --validate --change <id>` - 校验 change 结构。
-- `openprd discovery . --verify` - verify long-running discovery state.
-- `openprd doctor .` - check agent integration health.
-- `openprd update .` - repair generated agent guidance drift.
-- `openprd update . --hook-profile lite|guarded|full` - choose Codex hook weight; default `lite` keeps requirement-intake write gates without full telemetry.
-- `openprd fleet <root> --dry-run` - audit historical projects before batch updates.
-
-`openprd setup` and `openprd update` also enable Codex hooks in the user Codex config when run from the CLI.
+- requirement：需求未完成 `clarify/review/change/tasks` 前阻断实现写入；tasks 就绪后，只有用户原始意图已明确要求实现，或后续明确发出执行指令时才放行。
+- research：公开 GitHub 架构/对标先 DeepWiki；第三方技术用法、配置、限制、版本差异或迁移先查本地证据，不足时再按 `resolve_library_id -> query_docs` 使用 Context7。
+- skill-visualization：修改 skill、`SKILL.md`、`AGENTS.md` 或相关 workflow 前，先输出彩色 Mermaid 方案并等待用户确认。
+- secrets / weapp / browser / copy：分别处理 `secrets-vault`、`weapp-dev-mcp`、窗口归属与 i18n/普通用户文案提醒。
+- 需要细节时，读 router 指向的 skill 和 command catalog，而不是继续扩写 `AGENTS.md`。
 
 ### High-Risk Gate
 
 Before freeze, handoff, accepted spec apply/archive, commit, push, release, or publish, ensure `openprd standards . --verify`, `openprd quality . --verify`, `openprd run . --verify`, and `openprd doctor .` are healthy.
-
+If the quality report says `productionReady=false`, do not claim readiness; list the missing evidence or gates.
 The only baseline documentation path is `docs/basic/`.
 <!-- OPENPRD:AGENTS:END -->

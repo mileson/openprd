@@ -1,5 +1,8 @@
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { cjoin, writeText } from './fs-utils.js';
+import { renderQualityEvalArtifact as renderQualityEvalArtifactV2 } from './quality-html-artifact.js';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -395,85 +398,16 @@ function formatEvidenceItem(item) {
   `;
 }
 
-function optionCandidates(clarification) {
-  const mainQuestion = clarification.mustAskUser[0]?.prompt ?? '先确认一句话需求的真实目标。';
-  return [
-    {
-      title: '方向 A · 澄清优先',
-      summary: '先把问题、用户、成功标准问清楚，再收敛范围，适合一句话模糊需求。',
-      tradeoffs: [
-        mainQuestion,
-        '优点: 风险低，适合需求仍在早期发散。',
-        '代价: 前期问题较多，进入执行稍慢。',
-      ],
-    },
-    {
-      title: '方向 B · 方案对比优先',
-      summary: '直接生成多个方案给用户选，再反推需求边界，适合用户有判断但说不清。',
-      tradeoffs: [
-        '优点: 用户更容易通过“看方案”表达偏好。',
-        '代价: 如果基础目标没问清，方案容易偏题。',
-      ],
-    },
-    {
-      title: '方向 C · 参数试玩优先',
-      summary: '先给一个可调参数的 playground，让用户先玩出偏好，再结构化回写。',
-      tradeoffs: [
-        '优点: 特别适合流程、布局、密度、节奏类决策。',
-        '代价: 需要更强的 HTML artifact 支撑。',
-      ],
-    },
-  ];
-}
 
-function buildClarifyExportPayload(clarification) {
-  return {
-    action: 'capture',
-    nextRecommendedPhase: clarification.shouldAskUser ? 'clarify' : 'synthesize',
-    confirmedQuestionIds: clarification.mustAskUser.map((item) => item.id),
-    requirementIntake: clarification.requirementIntake ?? null,
-    exportedAt: new Date().toISOString(),
-  };
-}
-
-function formatRequirementIntakeDepth(requirementIntake) {
-  if (!requirementIntake?.active) {
-    return '';
-  }
-  const checklist = requirementIntake.layers.map((layer) => `${layer.title}: ${layer.question}`);
-  const asciiTemplate = [
-    '页面 / 流程草图（如涉及界面）',
-    '+--------------------------------------------------+',
-    '| 入口 / 标题                                      |',
-    '+----------------------+---------------------------+',
-    '| 主要选择区           | 方案预览 / 风险提示       |',
-    '| - 用户/对象           | - 将创建或更新什么        |',
-    '| - 技能/配置/步骤      | - 需要用户确认的动作      |',
-    '+----------------------+---------------------------+',
-    '| [保存草稿] [预览方案] [确认应用]                 |',
-    '+--------------------------------------------------+',
-  ].join('\n');
-  return [
-    formatEvidenceItem({
-      title: '需求入口深挖门禁',
-      description: `新产品、模块或流程需求至少先确认 ${requirementIntake.minimumDepth} 层：用户场景问题、目标流程、细节验收。`,
-      items: checklist,
-    }),
-    formatExportItem({
-      title: 'ASCII 线框提示',
-      description: requirementIntake.needsInterfaceSketch
-        ? '本需求看起来涉及界面，请先把大致布局画给用户确认。'
-        : '如果后续发现涉及界面，也要先补这类线框再进入 PRD 合成。',
-      payload: asciiTemplate,
-    }),
-  ].join('\n');
-}
-
-function buildReviewExportPayload(snapshot) {
+export function buildReviewExportPayload(snapshot) {
   const sections = snapshot.sections ?? {};
+  const presentation = buildReviewPresentationFeedback(snapshot);
   return {
     versionId: snapshot.versionId,
     title: snapshot.title,
+    digest: snapshot.digest ?? null,
+    workUnitId: snapshot.workUnitId ?? null,
+    targetRoot: snapshot.targetRoot ?? null,
     reviewStatus: 'pending-confirmation',
     recommendedActions: [
       '确认问题与目标',
@@ -482,8 +416,1242 @@ function buildReviewExportPayload(snapshot) {
       '确认关键风险与开放问题',
     ],
     sectionKeys: Object.keys(sections),
+    presentationContract: presentation.contract,
+    presentationFeedback: presentation.violations,
     exportedAt: new Date().toISOString(),
   };
+}
+
+const REVIEW_PRESENTATION_CONTRACT = {
+  intent: '这些限制用于反馈给 Agent 重新概括，不由 HTML 模板截断原文。',
+  expectedDataShape: {
+    reviewPresentation: {
+      mapNodes: {
+        problem: { title: '问题定义', text: '30 字以内的图中正文' },
+        goal: { title: '15 字以内标题', text: '30 字以内的图中正文' },
+        scope: { title: '15 字以内标题', text: '30 字以内的图中正文' },
+        flow: { title: '15 字以内标题', text: '30 字以内的图中正文' },
+        risk: { title: '15 字以内标题', text: '30 字以内的图中正文' },
+      },
+      flowNodes: [
+        { text: '30 字以内的流程卡片正文' },
+      ],
+    },
+  },
+  rules: [
+    {
+      id: 'review-map-card-text',
+      area: '需求关系图 / 需求流程图',
+      target: '图中每个卡片的正文',
+      maxChars: 30,
+      action: '请写入 reviewPresentation.mapNodes.*.text 或 reviewPresentation.flowNodes[].text，重写成用户一眼能扫懂的短句，不要靠省略号或截断。',
+    },
+    {
+      id: 'review-map-card-title',
+      area: '需求关系图 / 需求流程图',
+      target: '图中卡片标题胶囊',
+      maxChars: 15,
+      action: '请写入 reviewPresentation.mapNodes.*.title，重写成短标题，优先使用业务词，不使用内部技术词。',
+    },
+    {
+      id: 'review-highlight-chip',
+      area: '四个评审卡片',
+      target: '重点摘要胶囊',
+      maxChars: 15,
+      action: '请重写成短标签，保留结论，不要堆叠长句。',
+    },
+    {
+      id: 'review-panel-detail-format',
+      area: '四个评审卡片',
+      target: '明细分点',
+      format: '- **摘要内容**：明细一句话',
+      action: '请把每个明细改写为“加粗短摘要 + 一句话说明”，方便用户先扫重点再读细节。',
+    },
+  ],
+};
+
+export function buildReviewPresentationFeedback(snapshot) {
+  const sectionsData = snapshot.sections ?? {};
+  const violations = [];
+  const addViolation = ({ ruleId, area, target, value, maxChars }) => {
+    const text = normalizedReviewVisibleText(value);
+    const currentChars = reviewVisibleChars(text);
+    if (currentChars <= maxChars) return;
+    violations.push({
+      ruleId,
+      area,
+      target,
+      currentChars,
+      maxChars,
+      currentText: text,
+      action: '请让 Agent 重新提炼这段内容，生成更短、更完整的表达；不要由 HTML 模板直接裁剪。',
+    });
+  };
+
+  const primaryFlows = reviewList(sectionsData.scenarios?.primaryFlows);
+  if (primaryFlows.length >= 2) {
+    primaryFlows.slice(0, 4).forEach((item, index) => {
+      addViolation({
+        ruleId: 'review-map-card-text',
+        area: '需求流程图',
+        target: `流程卡片 ${index + 1}`,
+        value: reviewPresentationFlowNode(snapshot, index, reviewMapText(item)),
+        maxChars: 30,
+      });
+    });
+  } else {
+    const relationshipNodes = [
+      ['problem', '问题定义', sectionsData.problem?.problemStatement || '待确认问题定义'],
+      ['goal', '目标', firstReviewMapValue(sectionsData.goals?.goals, sectionsData.goals?.successMetrics, '待确认目标')],
+      ['scope', '范围', firstReviewMapValue(sectionsData.scope?.inScope, sectionsData.scope?.outOfScope, '待确认范围')],
+      ['flow', '流程', firstReviewMapValue(sectionsData.scenarios?.primaryFlows, sectionsData.scenarios?.edgeCases, '待确认流程')],
+      ['risk', '风险', firstReviewMapValue(sectionsData.risks?.risks, sectionsData.risks?.openQuestions, '待确认风险')],
+    ];
+    relationshipNodes.forEach(([key, fallbackLabel, fallbackValue]) => {
+      const node = reviewPresentationMapNode(snapshot, key, fallbackLabel, reviewMapText(fallbackValue));
+      addViolation({
+        ruleId: 'review-map-card-title',
+        area: '需求关系图',
+        target: `${fallbackLabel}卡片标题`,
+        value: node.label,
+        maxChars: 15,
+      });
+      addViolation({
+        ruleId: 'review-map-card-text',
+        area: '需求关系图',
+        target: `${fallbackLabel}卡片正文`,
+        value: node.value,
+        maxChars: 30,
+      });
+    });
+  }
+
+  const panelChipSources = [
+    ...primaryFlows,
+    ...reviewList(sectionsData.scenarios?.edgeCases),
+    ...reviewList(sectionsData.scenarios?.failureModes),
+    ...reviewList(sectionsData.requirements?.functional),
+    ...reviewList(sectionsData.requirements?.nonFunctional),
+    ...reviewList(sectionsData.constraints?.technical),
+    ...reviewList(sectionsData.constraints?.compliance),
+    ...reviewList(sectionsData.constraints?.dependencies),
+    ...reviewList(sectionsData.businessGuardrails?.rateLimits),
+    ...reviewList(sectionsData.businessGuardrails?.abusePrevention),
+    ...reviewList(sectionsData.businessGuardrails?.costControls),
+    ...reviewList(sectionsData.risks?.risks),
+    ...reviewList(sectionsData.risks?.openQuestions),
+  ];
+  panelChipSources.map((item) => summarizeReviewChip(item)).filter(Boolean).forEach((chip) => {
+    addViolation({
+      ruleId: 'review-highlight-chip',
+      area: '评审卡片重点摘要',
+      target: '重点摘要胶囊',
+      value: chip,
+      maxChars: 15,
+    });
+  });
+
+  reviewPanelDetailGroups(sectionsData).forEach((group) => {
+    group.items.forEach((item, index) => {
+      if (isStructuredReviewPanelDetail(item)) return;
+      violations.push({
+        ruleId: 'review-panel-detail-format',
+        area: group.area,
+        target: `明细 ${index + 1}`,
+        expectedFormat: '- **摘要内容**：明细一句话',
+        currentText: normalizedReviewVisibleText(item),
+        action: '请让 Agent 重新写成“**短摘要**：一句明细”，摘要用于扫读，明细保留完整判断。',
+      });
+    });
+  });
+
+  return {
+    contract: REVIEW_PRESENTATION_CONTRACT,
+    violations,
+  };
+}
+
+function normalizedReviewVisibleText(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function reviewVisibleChars(value) {
+  return Array.from(normalizedReviewVisibleText(value)).length;
+}
+
+function reviewPresentation(snapshot) {
+  const presentation = snapshot?.reviewPresentation;
+  return presentation && typeof presentation === 'object' && !Array.isArray(presentation) ? presentation : {};
+}
+
+function reviewPresentationMapNodes(snapshot) {
+  const nodes = reviewPresentation(snapshot).mapNodes;
+  return nodes && typeof nodes === 'object' && !Array.isArray(nodes) ? nodes : {};
+}
+
+function reviewPresentationMapNode(snapshot, key, fallbackLabel, fallbackValue) {
+  const node = reviewPresentationMapNodes(snapshot)[key];
+  const candidate = node && typeof node === 'object' && !Array.isArray(node) ? node : {};
+  return {
+    label: normalizedReviewVisibleText(candidate.title ?? candidate.label ?? fallbackLabel) || fallbackLabel,
+    value: normalizedReviewVisibleText(candidate.text ?? candidate.value ?? fallbackValue) || fallbackValue,
+  };
+}
+
+function reviewPresentationFlowNode(snapshot, index, fallbackValue) {
+  const nodes = reviewPresentation(snapshot).flowNodes;
+  const node = Array.isArray(nodes) ? nodes[index] : null;
+  if (!node || typeof node !== 'object' || Array.isArray(node)) {
+    return fallbackValue;
+  }
+  return normalizedReviewVisibleText(node.text ?? node.value ?? fallbackValue) || fallbackValue;
+}
+
+function reviewPanelDetailGroups(sectionsData) {
+  return [
+    {
+      area: '主流程与边界情况',
+      items: [
+        ...reviewList(sectionsData.scenarios?.primaryFlows),
+        ...reviewList(sectionsData.scenarios?.edgeCases),
+        ...reviewList(sectionsData.scenarios?.failureModes),
+      ],
+    },
+    {
+      area: '功能与约束',
+      items: [
+        ...reviewList(sectionsData.requirements?.functional),
+        ...reviewList(sectionsData.requirements?.nonFunctional),
+        ...reviewList(sectionsData.constraints?.technical),
+        ...reviewList(sectionsData.constraints?.compliance),
+        ...reviewList(sectionsData.constraints?.dependencies),
+      ],
+    },
+    {
+      area: '业务成本与滥用护栏',
+      items: [
+        ...reviewList(sectionsData.businessGuardrails?.rateLimits),
+        ...reviewList(sectionsData.businessGuardrails?.abusePrevention),
+        ...reviewList(sectionsData.businessGuardrails?.costControls),
+      ],
+    },
+    {
+      area: '开放问题与风险',
+      items: [
+        ...reviewList(sectionsData.risks?.risks),
+        ...reviewList(sectionsData.risks?.openQuestions),
+      ],
+    },
+  ];
+}
+
+function isStructuredReviewPanelDetail(value) {
+  const text = normalizedReviewVisibleText(value);
+  return /^\*\*[^*]{1,24}\*\*\s*[：:]\s*\S+/u.test(text);
+}
+
+function reviewList(items) {
+  return Array.isArray(items) ? items.filter(Boolean).map((item) => String(item).trim()).filter(Boolean) : [];
+}
+
+function splitSvgLines(value, maxChars = 17) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim() || '待补充';
+  const tokens = text.match(/[A-Za-z0-9_./:-]+|[\u4e00-\u9fff]|[^\s]/g) ?? [text];
+  const lines = [];
+  let line = '';
+  let length = 0;
+  const visualLength = (token) => /^[A-Za-z0-9_./:-]+$/.test(token)
+    ? Math.max(1, token.length * 0.62)
+    : 1;
+  for (const token of tokens) {
+    const nextLength = visualLength(token);
+    if (line && length + nextLength > maxChars) {
+      lines.push(line);
+      line = token;
+      length = nextLength;
+    } else {
+      line += token;
+      length += nextLength;
+    }
+  }
+  if (line) {
+    lines.push(line);
+  }
+  return lines;
+}
+
+function svgText(value, x, y, className, maxChars = 17, lineHeight = 16, anchor = 'middle') {
+  const lines = splitSvgLines(value, maxChars);
+  return `<text class="${className}" x="${x}" y="${y}" text-anchor="${anchor}">${lines.map((line, index) => `<tspan x="${x}" dy="${index === 0 ? 0 : lineHeight}">${escapeHtml(line)}</tspan>`).join('')}</text>`;
+}
+
+function reviewIcon(kind) {
+  const icons = {
+    flow: '<svg viewBox="0 0 24 24" role="img" aria-label="流程"><path d="M5 6.5h6.4a3.6 3.6 0 0 1 3.6 3.6v.8" /><path d="M15 17.5H8.6A3.6 3.6 0 0 1 5 13.9v-.8" /><path d="m12 8.5 3-3 3 3" /><path d="m8 15.5-3 3-3-3" /></svg>',
+    function: '<svg viewBox="0 0 24 24" role="img" aria-label="功能"><path d="M5 7h14" /><path d="M5 12h14" /><path d="M5 17h14" /><circle cx="8" cy="7" r="2" /><circle cx="16" cy="12" r="2" /><circle cx="11" cy="17" r="2" /></svg>',
+    guardrail: '<svg viewBox="0 0 24 24" role="img" aria-label="护栏"><path d="M12 3 5 6v5c0 4.4 2.8 8.4 7 9.8 4.2-1.4 7-5.4 7-9.8V6l-7-3Z" /><path d="M9 12.2 11 14l4-4.4" /></svg>',
+    risk: '<svg viewBox="0 0 24 24" role="img" aria-label="风险"><path d="M12 4 3.5 19h17L12 4Z" /><path d="M12 9v4" /><path d="M12 16.5h.01" /></svg>',
+    map: '<svg viewBox="0 0 24 24" role="img" aria-label="图谱"><path d="M12 5v14" /><path d="M5 8h14" /><path d="M7 16h10" /><circle cx="12" cy="5" r="2" /><circle cx="5" cy="8" r="2" /><circle cx="19" cy="8" r="2" /><circle cx="7" cy="16" r="2" /><circle cx="17" cy="16" r="2" /></svg>',
+  };
+  return `<span class="review-icon review-icon-${escapeHtml(kind)}" aria-hidden="true">${icons[kind] ?? icons.flow}</span>`;
+}
+
+function renderReviewOverview(snapshot, sectionsData) {
+  const problem = sectionsData.problem?.problemStatement || '尚未形成明确问题定义';
+  return `
+    <section class="review-overview" aria-labelledby="reviewOverviewTitle">
+      <div class="review-overview-copy">
+        <p class="review-kicker">需求概览</p>
+        <h1 id="reviewOverviewTitle">${escapeHtml(snapshot.title || 'PRD 评审')}</h1>
+        <p class="review-problem">${escapeHtml(problem)}</p>
+      </div>
+    </section>
+  `;
+}
+
+function renderReviewFlowSvg(snapshot, sectionsData) {
+  const flowItems = reviewList(sectionsData.scenarios?.primaryFlows);
+  if (flowItems.length < 2) {
+    return renderReviewMindMapSvg(snapshot, sectionsData);
+  }
+  const nodes = (flowItems.length ? flowItems : [
+    '确认问题定义',
+    '确认范围与边界',
+    '确认主流程',
+    '确认风险与开放问题',
+  ]).slice(0, 4);
+  const positions = [116, 360, 604, 848].slice(0, nodes.length);
+  const arrows = positions.slice(1).map((x, index) => `
+    <path class="review-map-arrow" d="M ${positions[index] + 82} 124 H ${x - 92}" marker-end="url(#reviewArrow)" />
+  `).join('');
+  const nodeMarkup = nodes.map((item, index) => `
+    <g>
+      <rect class="review-map-node node-${index + 1}" x="${positions[index] - 104}" y="72" width="208" height="118" rx="8" />
+      <text class="review-map-step" x="${positions[index] - 78}" y="102">${index + 1}</text>
+      ${svgText(reviewMapCardText(reviewPresentationFlowNode(snapshot, index, reviewMapText(item))), positions[index], 126, 'review-map-label', 13, 15)}
+    </g>
+  `).join('');
+  const overflowNote = flowItems.length > nodes.length
+    ? `<p class="review-map-note">还有 ${flowItems.length - nodes.length} 条流程在下方“主流程与边界情况”里查看。</p>`
+    : '';
+  return `
+    <section class="review-map" aria-labelledby="reviewMapTitle">
+      <div class="review-section-heading">
+        ${reviewIcon('map')}
+        <div>
+          <h2 id="reviewMapTitle">需求流程图</h2>
+        </div>
+      </div>
+      <div class="review-map-canvas">
+        <svg viewBox="0 0 960 280" role="img" aria-label="需求流程图" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <marker id="reviewArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+              <path d="M 0 0 L 12 6 L 0 12 z" fill="#4f46e5" />
+            </marker>
+          </defs>
+          <rect class="review-map-bg" x="2" y="2" width="956" height="276" rx="8" />
+          ${arrows}
+          ${nodeMarkup}
+        </svg>
+      </div>
+      ${overflowNote}
+    </section>
+  `;
+}
+
+function renderReviewMindMapSvg(snapshot, sectionsData) {
+  const problem = sectionsData.problem?.problemStatement || '待确认问题定义';
+  const center = { x: 480, y: 168 };
+  const nodes = [
+    {
+      key: 'goal',
+      label: '目标',
+      value: firstReviewMapValue(sectionsData.goals?.goals, sectionsData.goals?.successMetrics, '待确认目标'),
+      x: 250,
+      y: 94,
+      className: 'node-1',
+    },
+    {
+      key: 'scope',
+      label: '范围',
+      value: firstReviewMapValue(sectionsData.scope?.inScope, sectionsData.scope?.outOfScope, '待确认范围'),
+      x: 710,
+      y: 94,
+      className: 'node-2',
+    },
+    {
+      key: 'flow',
+      label: '流程',
+      value: firstReviewMapValue(sectionsData.scenarios?.primaryFlows, sectionsData.scenarios?.edgeCases, '待确认流程'),
+      x: 250,
+      y: 242,
+      className: 'node-3',
+    },
+    {
+      key: 'risk',
+      label: '风险',
+      value: firstReviewMapValue(sectionsData.risks?.risks, sectionsData.risks?.openQuestions, '待确认风险'),
+      x: 710,
+      y: 242,
+      className: 'node-4',
+    },
+  ];
+  const links = nodes.map((node) => `<path class="review-map-link" d="M ${center.x} ${center.y} L ${node.x} ${node.y}" />`).join('');
+  const satelliteNodes = nodes.map((node) => {
+    const displayNode = reviewPresentationMapNode(snapshot, node.key, node.label, reviewMapText(node.value));
+    return `
+    <g>
+      <rect class="review-map-node ${node.className}" x="${node.x - 122}" y="${node.y - 43}" width="244" height="86" rx="8" />
+      ${reviewMapTagPill(displayNode.label, node.x, node.y - 22, node.className)}
+      ${svgText(reviewMapCardText(displayNode.value), node.x - 94, node.y + 6, 'review-map-label', 15, 14, 'start')}
+    </g>
+  `;
+  }).join('');
+  const centerDisplayNode = reviewPresentationMapNode(snapshot, 'problem', '问题定义', reviewMapText(problem));
+  const centerNode = `
+    <g class="review-map-center-group">
+      <rect class="review-map-center" x="330" y="124" width="300" height="88" rx="8" />
+      ${reviewMapTagPill(centerDisplayNode.label, center.x, 146, 'center')}
+      ${svgText(reviewMapCardText(centerDisplayNode.value), 360, 176, 'review-map-label center', 16, 14, 'start')}
+    </g>
+  `;
+  return `
+    <section class="review-map" aria-labelledby="reviewMapTitle">
+      <div class="review-section-heading">
+        ${reviewIcon('map')}
+        <div>
+          <h2 id="reviewMapTitle">需求关系图</h2>
+        </div>
+      </div>
+      <div class="review-map-canvas">
+        <svg viewBox="0 0 960 336" role="img" aria-label="需求关系图" preserveAspectRatio="xMidYMid meet">
+          <rect class="review-map-bg" x="2" y="2" width="956" height="332" rx="8" />
+          ${links}
+          ${satelliteNodes}
+          ${centerNode}
+        </svg>
+      </div>
+    </section>
+  `;
+}
+
+function reviewMapTagPill(label, x, y, className) {
+  const text = trimReviewChipBoundary(label) || '未命名';
+  const width = Math.max(54, Array.from(text).length * 14 + 26);
+  return `
+    <rect class="review-map-tag-pill ${escapeHtml(className)}" x="${x - width / 2}" y="${y - 13}" width="${width}" height="26" rx="13" />
+    <text class="review-map-tag ${escapeHtml(className)}" x="${x}" y="${y + 4}" text-anchor="middle">${escapeHtml(text)}</text>
+  `;
+}
+
+function firstReviewMapValue(primaryItems, secondaryItems, fallback) {
+  return reviewList(primaryItems)[0] ?? reviewList(secondaryItems)[0] ?? fallback;
+}
+
+function reviewMapText(value) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim() || '待补充';
+  return text.split(/[。！？!?]/).map((item) => item.trim()).find(Boolean) ?? text;
+}
+
+function reviewMapCardText(value) {
+  return reviewMapText(value);
+}
+
+function trimReviewChipBoundary(value) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[\s/|｜:：,，、;；.!?？。-]+$/u, '')
+    .trim();
+}
+
+function condensedReviewChipLabel(value) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  const rules = [
+    { pattern: /截图|红框|口径|用户预期|预期不一致/u, label: '确认分类口径' },
+    { pattern: /Playwright/i, label: 'Playwright 验证' },
+    { pattern: /Host API/i, label: '不新增 Host API' },
+    { pattern: /用量|额度|成本/u, label: '用量额度不变' },
+    { pattern: /后台任务|重复触发|轮询/u, label: '不新增后台任务' },
+    { pattern: /窄屏|响应式/u, label: '窄屏响应式' },
+    { pattern: /滚动|稳定性/u, label: '滚动稳定性' },
+    { pattern: /CSS|样式/i, label: 'CSS 样式' },
+  ];
+  return rules.find((rule) => rule.pattern.test(text))?.label ?? null;
+}
+
+function summarizeReviewChip(value, maxLength = 15) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  const clauses = text.split(/[。；;，,、.!?？]/).map((item) => item.trim()).filter(Boolean);
+  const compact =
+    clauses.find((item) => item.length >= 4 && item.length <= maxLength) ??
+    condensedReviewChipLabel(text) ??
+    clauses.find((item) => item.length >= 4) ??
+    clauses[0] ??
+    text;
+  return trimReviewChipBoundary(compact);
+}
+
+function reviewHighlightChips(items, emptyText) {
+  const chips = [];
+  for (const item of reviewList(items)) {
+    const chip = summarizeReviewChip(item);
+    if (chip && !chips.includes(chip)) {
+      chips.push(chip);
+    }
+    if (chips.length >= 4) break;
+  }
+  if (chips.length === 0) {
+    return `<span class="review-chip empty">${escapeHtml(emptyText)}</span>`;
+  }
+  return chips.map((chip) => `<span class="review-chip">${escapeHtml(chip)}</span>`).join('');
+}
+
+function reviewJourneyLabel(items, fallback) {
+  const text = reviewList(items)[0] ?? fallback;
+  return summarizeReviewChip(text, 18) || fallback;
+}
+
+function reviewJourneyClauses(items) {
+  return reviewList(items)
+    .flatMap((item) => item.split(/[。；;.!?？]/))
+    .flatMap((item) => item.split(/[，,]/))
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 4);
+}
+
+function renderReviewJourneySvg({ primaryFlows, edgeCases, failureModes }) {
+  const primary = reviewList(primaryFlows);
+  const edges = reviewList(edgeCases);
+  const failures = reviewList(failureModes);
+  const primaryClauses = reviewJourneyClauses(primary);
+  const journey = reviewJourneyLabel(primaryClauses.length ? primaryClauses : primary, '待确认用户入口');
+  const step = reviewJourneyLabel(primaryClauses.slice(1).length ? primaryClauses.slice(1) : primary.slice(1), '待确认关键步骤');
+  const outcome = reviewJourneyLabel(primaryClauses.slice(2).length ? primaryClauses.slice(2) : primary.slice(2), '待确认完成状态');
+  const boundary = reviewJourneyLabel(edges, '待确认边界情况');
+  const recovery = reviewJourneyLabel(failures.length ? failures : edges.slice(1), '待确认恢复路径');
+  return `
+    <div class="review-journey-map" aria-label="主流程小图">
+      <svg viewBox="0 0 680 320" role="img" aria-label="用户旅程、关键步骤、边界情况和恢复路径" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="reviewJourneyArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#0d9488" />
+          </marker>
+        </defs>
+        <rect class="review-journey-bg" x="2" y="2" width="676" height="316" rx="8" />
+        <path class="review-journey-arrow" d="M 202 88 H 248" marker-end="url(#reviewJourneyArrow)" />
+        <path class="review-journey-arrow" d="M 432 88 H 478" marker-end="url(#reviewJourneyArrow)" />
+        <path class="review-journey-arrow branch" d="M 340 134 V 164 H 236 V 190" marker-end="url(#reviewJourneyArrow)" />
+        <path class="review-journey-arrow branch" d="M 340 134 V 164 H 454 V 190" marker-end="url(#reviewJourneyArrow)" />
+        <g>
+          <rect class="review-journey-node stage-journey" x="26" y="40" width="176" height="96" rx="8" />
+          <circle class="review-journey-dot stage-journey" cx="56" cy="64" r="12" />
+          <text class="review-journey-number" x="56" y="64" text-anchor="middle">1</text>
+          <text class="review-journey-tag" x="114" y="66" text-anchor="middle">用户旅程</text>
+          ${svgText(journey, 114, 92, 'review-journey-label', 12, 13)}
+        </g>
+        <g>
+          <rect class="review-journey-node stage-step" x="252" y="40" width="176" height="96" rx="8" />
+          <circle class="review-journey-dot stage-step" cx="282" cy="64" r="12" />
+          <text class="review-journey-number" x="282" y="64" text-anchor="middle">2</text>
+          <text class="review-journey-tag" x="340" y="66" text-anchor="middle">关键步骤</text>
+          ${svgText(step, 340, 92, 'review-journey-label', 12, 13)}
+        </g>
+        <g>
+          <rect class="review-journey-node stage-outcome" x="478" y="40" width="176" height="96" rx="8" />
+          <circle class="review-journey-dot stage-outcome" cx="508" cy="64" r="12" />
+          <text class="review-journey-number" x="508" y="64" text-anchor="middle">3</text>
+          <text class="review-journey-tag" x="566" y="66" text-anchor="middle">结果确认</text>
+          ${svgText(outcome, 566, 92, 'review-journey-label', 12, 13)}
+        </g>
+        <g>
+          <rect class="review-journey-node stage-boundary" x="126" y="194" width="220" height="88" rx="8" />
+          <circle class="review-journey-dot stage-boundary" cx="158" cy="218" r="12" />
+          <text class="review-journey-number" x="158" y="218" text-anchor="middle">B</text>
+          <text class="review-journey-tag" x="236" y="220" text-anchor="middle">边界情况</text>
+          ${svgText(boundary, 236, 246, 'review-journey-label', 15, 13)}
+        </g>
+        <g>
+          <rect class="review-journey-node stage-recovery" x="356" y="194" width="220" height="88" rx="8" />
+          <circle class="review-journey-dot stage-recovery" cx="388" cy="218" r="12" />
+          <text class="review-journey-number" x="388" y="218" text-anchor="middle">R</text>
+          <text class="review-journey-tag" x="466" y="220" text-anchor="middle">恢复路径</text>
+          ${svgText(recovery, 466, 246, 'review-journey-label', 15, 13)}
+        </g>
+      </svg>
+    </div>
+  `;
+}
+
+function reviewSubtitleText(value) {
+  return String(value ?? '').replace(/[。.]$/u, '');
+}
+
+function renderReviewPanel({ kind, title, description, items, emptyText, visual = '' }) {
+  return `
+    <section class="review-panel review-panel-${escapeHtml(kind)}">
+      <header class="review-panel-head">
+        ${reviewIcon(kind)}
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          <p>${escapeHtml(reviewSubtitleText(description))}</p>
+        </div>
+      </header>
+      <div class="review-chip-row" aria-label="${escapeHtml(title)}重点摘要">
+        ${reviewHighlightChips(items, emptyText)}
+      </div>
+      ${visual}
+      <ul class="review-panel-list">${reviewPanelListMarkup(items, emptyText)}</ul>
+    </section>
+  `;
+}
+
+function reviewPanelListMarkup(items, emptyText = '暂无') {
+  const normalized = Array.isArray(items) ? items.filter(Boolean).map((item) => String(item).trim()).filter(Boolean) : [];
+  if (normalized.length === 0) {
+    return `<li class="empty">${escapeHtml(emptyText)}</li>`;
+  }
+  return normalized.map((item) => {
+    const parsed = parseReviewPanelDetail(item);
+    return `<li><strong class="review-detail-summary">${escapeHtml(parsed.summary)}</strong><span class="review-detail-body">：${escapeHtml(parsed.detail)}</span></li>`;
+  }).join('');
+}
+
+function parseReviewPanelDetail(value) {
+  const text = normalizedReviewVisibleText(value);
+  const markdown = text.match(/^\*\*([^*]+)\*\*\s*[：:]\s*(.+)$/u);
+  if (markdown) {
+    return {
+      summary: markdown[1].trim(),
+      detail: markdown[2].trim(),
+    };
+  }
+  const plain = text.match(/^([^：:]{2,18})[：:]\s*(.+)$/u);
+  if (plain) {
+    return {
+      summary: plain[1].trim(),
+      detail: plain[2].trim(),
+    };
+  }
+  return {
+    summary: reviewDetailSummary(text),
+    detail: text,
+  };
+}
+
+function reviewDetailSummary(value) {
+  const text = normalizedReviewVisibleText(value);
+  const clause = text.split(/[。；;，,、.!?？]/u).map((item) => item.trim()).find((item) => item.length >= 2 && item.length <= 18);
+  return condensedReviewChipLabel(text) ?? clause ?? '重点说明';
+}
+
+function reviewCopyBundle({ label, command, payload, message = null }) {
+  return [
+    `OpenPrD Review: ${label}`,
+    message ?? null,
+    command ? '命令:' : null,
+    command,
+    '上下文:',
+    payload,
+  ].filter(Boolean).join('\n\n');
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function reviewCommand(snapshot, status, notes = null) {
+  const parts = ['openprd review . --mark', status];
+  if (snapshot.versionId) {
+    parts.push('--version', shellQuote(snapshot.versionId));
+  }
+  if (snapshot.digest) {
+    parts.push('--digest', shellQuote(snapshot.digest));
+  }
+  if (snapshot.workUnitId) {
+    parts.push('--work-unit', shellQuote(snapshot.workUnitId));
+  }
+  if (notes) {
+    parts.push('--notes', shellQuote(notes));
+  }
+  return parts.join(' ');
+}
+
+function renderReviewDecision(snapshot) {
+  const payload = JSON.stringify(buildReviewExportPayload(snapshot), null, 2);
+  const confirmCommand = reviewCommand(snapshot, 'confirmed');
+  const reviseCommand = reviewCommand(snapshot, 'needs-revision', '说明需要调整的点');
+  const confirmCopy = reviewCopyBundle({ label: '认可方案', command: confirmCommand, payload });
+  const reviseCopy = reviewCopyBundle({ label: '需要调整', command: reviseCommand, payload });
+  return `
+    <nav class="review-bottom-bar" aria-label="评审决定">
+      <div class="review-bottom-bar-inner">
+        <button type="button" class="review-bottom-action revise" data-copy-value="${escapeHtml(reviseCopy)}" title="${escapeHtml(reviseCommand)}">
+          需要调整
+        </button>
+        <button type="button" class="review-bottom-action confirm" data-copy-value="${escapeHtml(confirmCopy)}" title="${escapeHtml(confirmCommand)}">
+          认可方案
+        </button>
+      </div>
+    </nav>
+  `;
+}
+
+function renderReviewPage({ snapshot, sectionsData }) {
+  const primaryFlows = reviewList(sectionsData.scenarios?.primaryFlows);
+  const edgeCases = reviewList(sectionsData.scenarios?.edgeCases);
+  const failureModes = reviewList(sectionsData.scenarios?.failureModes);
+  const panels = [
+    renderReviewPanel({
+      kind: 'flow',
+      title: '主流程与边界情况',
+      description: '确认用户旅程、关键步骤和恢复路径是否已经讲清楚，能否进入实现前确认',
+      emptyText: '暂无主流程、边界情况或失败路径。',
+      visual: renderReviewJourneySvg({ primaryFlows, edgeCases, failureModes }),
+      items: [
+        ...primaryFlows,
+        ...edgeCases,
+        ...failureModes,
+      ],
+    }),
+    renderReviewPanel({
+      kind: 'function',
+      title: '功能与约束',
+      description: '区分必须交付、非功能要求和当前依赖假设',
+      emptyText: '暂无功能、非功能要求或依赖约束。',
+      items: [
+        ...reviewList(sectionsData.requirements?.functional),
+        ...reviewList(sectionsData.requirements?.nonFunctional),
+        ...reviewList(sectionsData.constraints?.dependencies),
+      ],
+    }),
+    renderReviewPanel({
+      kind: 'guardrail',
+      title: '业务成本与滥用护栏',
+      description: '涉及免费额度、消耗型成本或第三方调用时，先确认限制、报警和止损动作',
+      emptyText: '暂无业务成本或滥用护栏。',
+      items: [
+        ...reviewList(sectionsData.businessGuardrails?.costDrivers),
+        ...reviewList(sectionsData.businessGuardrails?.usageLimits),
+        ...reviewList(sectionsData.businessGuardrails?.abusePrevention),
+        ...reviewList(sectionsData.businessGuardrails?.monitoringSignals),
+        ...reviewList(sectionsData.businessGuardrails?.alertThresholds),
+        ...reviewList(sectionsData.businessGuardrails?.stopLossActions),
+      ],
+    }),
+    renderReviewPanel({
+      kind: 'risk',
+      title: '开放问题与风险',
+      description: '需求定稿前还没关掉的问题要留在这里，不要默默假定解决',
+      emptyText: '暂无假设、风险或开放问题。',
+      items: [
+        ...reviewList(sectionsData.risks?.assumptions),
+        ...reviewList(sectionsData.risks?.risks),
+        ...reviewList(sectionsData.risks?.openQuestions),
+      ],
+    }),
+  ];
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(snapshot.title || 'PRD 评审')}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --review-bg: #f6f8fb;
+        --review-panel: #ffffff;
+        --review-panel-soft: #f9fafb;
+        --review-text: #172033;
+        --review-muted: #667085;
+        --review-line: #d8dee8;
+        --review-blue: #2563eb;
+        --review-teal: #0f766e;
+        --review-indigo: #4f46e5;
+        --review-amber: #b45309;
+        --review-red: #dc2626;
+        --review-green: #15803d;
+        --review-mono: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--review-bg);
+        color: var(--review-text);
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        overflow-x: hidden;
+      }
+      .review-page {
+        max-width: 1220px;
+        margin: 0 auto;
+        padding: 28px 22px 120px;
+      }
+      .review-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+      .review-brand {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        border: 1px solid var(--review-line);
+        border-radius: 999px;
+        background: var(--review-panel);
+        color: var(--review-muted);
+        padding: 0 12px;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      .review-kicker {
+        margin: 0 0 6px;
+        color: var(--review-muted);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+      .review-overview,
+      .review-map {
+        border: 1px solid var(--review-line);
+        border-radius: 8px;
+        background: var(--review-panel);
+        box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
+      }
+      .review-overview {
+        display: block;
+        padding: 24px;
+      }
+      .review-overview-copy,
+      .review-panel {
+        min-width: 0;
+      }
+      .review-overview h1,
+      .review-map h2,
+      .review-panel h3 {
+        margin: 0;
+        color: var(--review-text);
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
+      }
+      .review-overview h1 {
+        font-size: 32px;
+        line-height: 1.16;
+        word-break: break-word;
+      }
+      .review-problem {
+        max-width: 760px;
+        margin: 12px 0 0;
+        color: var(--review-muted);
+        font-size: 16px;
+        line-height: 1.75;
+        overflow-wrap: anywhere;
+      }
+      .review-map {
+        margin-top: 18px;
+        padding: 20px;
+      }
+      .review-section-heading,
+      .review-panel-head {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .review-section-heading h2 {
+        font-size: 22px;
+      }
+      .review-icon {
+        flex: 0 0 auto;
+        display: inline-flex;
+        width: 38px;
+        height: 38px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+      }
+      .review-icon svg {
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .review-icon-map { color: var(--review-indigo); background: #eef2ff; }
+      .review-icon-flow { color: var(--review-teal); background: #ccfbf1; }
+      .review-icon-function { color: var(--review-blue); background: #dbeafe; }
+      .review-icon-guardrail { color: var(--review-amber); background: #fef3c7; }
+      .review-icon-risk { color: var(--review-red); background: #fee2e2; }
+      .review-map-canvas {
+        margin-top: 14px;
+        overflow-x: auto;
+        max-width: 100%;
+      }
+      .review-map-canvas svg {
+        display: block;
+        width: 100%;
+        min-width: 680px;
+        height: auto;
+      }
+      .review-map-bg {
+        fill: #f8fafc;
+        stroke: #e2e8f0;
+      }
+      .review-map-arrow {
+        fill: none;
+        stroke: var(--review-indigo);
+        stroke-width: 3;
+        stroke-linecap: round;
+      }
+      .review-map-link {
+        fill: none;
+        stroke: #a5b4fc;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+      }
+      .review-map-node {
+        fill: #ffffff;
+        stroke: #cbd5e1;
+        stroke-width: 1.5;
+        filter: drop-shadow(0 10px 16px rgba(15, 23, 42, 0.08));
+      }
+      .review-map-center {
+        fill: #eef2ff;
+        stroke: #818cf8;
+        stroke-width: 1.5;
+        filter: drop-shadow(0 14px 18px rgba(79, 70, 229, 0.12));
+      }
+      .review-map-node.node-1 { stroke: #99f6e4; }
+      .review-map-node.node-2 { stroke: #bfdbfe; }
+      .review-map-node.node-3 { stroke: #fde68a; }
+      .review-map-node.node-4 { stroke: #fecaca; }
+      .review-map-step {
+        fill: var(--review-indigo);
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .review-map-tag {
+        fill: var(--review-muted);
+        font-size: 11px;
+        font-weight: 800;
+      }
+      .review-map-tag-pill {
+        fill: #f8fafc;
+        stroke: #cbd5e1;
+        stroke-width: 1;
+      }
+      .review-map-tag-pill.center { fill: #e0e7ff; stroke: #a5b4fc; }
+      .review-map-tag-pill.node-1 { fill: #ccfbf1; stroke: #5eead4; }
+      .review-map-tag-pill.node-2 { fill: #dbeafe; stroke: #93c5fd; }
+      .review-map-tag-pill.node-3 { fill: #fef3c7; stroke: #facc15; }
+      .review-map-tag-pill.node-4 { fill: #fee2e2; stroke: #fca5a5; }
+      .review-map-tag.center { fill: var(--review-indigo); }
+      .review-map-tag.node-1 { fill: #0f766e; }
+      .review-map-tag.node-2 { fill: #2563eb; }
+      .review-map-tag.node-3 { fill: #b45309; }
+      .review-map-tag.node-4 { fill: #dc2626; }
+      .review-map-label {
+        fill: var(--review-text);
+        font-size: 12px;
+        font-weight: 680;
+      }
+      .review-map-note {
+        margin: 10px 0 0;
+        color: var(--review-muted);
+        font-size: 13px;
+      }
+      .review-panel-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 18px;
+      }
+      .review-panel {
+        min-height: 260px;
+        border: 1px solid var(--review-line);
+        border-radius: 8px;
+        background: var(--review-panel);
+        padding: 18px;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+      }
+      .review-panel h3 {
+        font-size: 20px;
+      }
+      .review-panel-head p {
+        margin: 5px 0 0;
+        color: var(--review-muted);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .review-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 8px;
+        background: var(--review-panel-soft);
+        border: 1px solid var(--review-line);
+      }
+      .review-chip {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        max-width: 100%;
+        min-height: 28px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--review-line);
+        background: #ffffff;
+        color: var(--review-text);
+        font-size: 13px;
+        font-weight: 750;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow-wrap: normal;
+        word-break: keep-all;
+      }
+      .review-panel-flow .review-chip { border-color: #99f6e4; background: #f0fdfa; color: #115e59; }
+      .review-panel-function .review-chip { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+      .review-panel-guardrail .review-chip { border-color: #fde68a; background: #fffbeb; color: #92400e; }
+      .review-panel-risk .review-chip { border-color: #fecaca; background: #fff1f2; color: #991b1b; }
+      .review-chip.empty {
+        color: var(--review-muted);
+        background: #ffffff;
+        border-color: var(--review-line);
+      }
+      .review-journey-map {
+        margin-top: 12px;
+        border: 1px solid var(--review-line);
+        border-radius: 8px;
+        background: #f8fafc;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+      .review-journey-map svg {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        min-height: 230px;
+      }
+      .review-journey-bg {
+        fill: #fbfdff;
+        stroke: none;
+      }
+      .review-journey-arrow {
+        fill: none;
+        stroke: #0d9488;
+        stroke-width: 2;
+        stroke-linecap: round;
+      }
+      .review-journey-arrow.branch {
+        stroke: #94a3b8;
+        stroke-dasharray: 5 6;
+      }
+      .review-journey-node {
+        fill: #ffffff;
+        stroke-width: 1.6;
+        filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.08));
+      }
+      .review-journey-node.stage-journey { stroke: #5eead4; }
+      .review-journey-node.stage-step { stroke: #93c5fd; }
+      .review-journey-node.stage-outcome { stroke: #a5b4fc; }
+      .review-journey-node.stage-boundary { stroke: #fde68a; }
+      .review-journey-node.stage-recovery { stroke: #fecaca; }
+      .review-journey-dot {
+        fill: #0f172a;
+      }
+      .review-journey-dot.stage-journey { fill: #0d9488; }
+      .review-journey-dot.stage-step { fill: #2563eb; }
+      .review-journey-dot.stage-outcome { fill: #4f46e5; }
+      .review-journey-dot.stage-boundary { fill: #ca8a04; }
+      .review-journey-dot.stage-recovery { fill: #dc2626; }
+      .review-journey-number {
+        fill: #ffffff;
+        font-size: 11px;
+        font-weight: 850;
+        dominant-baseline: central;
+      }
+      .review-journey-tag {
+        fill: #64748b;
+        font-size: 12px;
+        font-weight: 850;
+      }
+      .review-journey-label {
+        fill: #0f172a;
+        font-size: 12px;
+        font-weight: 760;
+      }
+      .review-panel-list {
+        margin: 16px 0 0;
+        padding-left: 18px;
+        color: var(--review-text);
+        font-size: 15px;
+        line-height: 1.72;
+        overflow-wrap: anywhere;
+      }
+      .review-panel-list li + li {
+        margin-top: 9px;
+      }
+      .review-detail-summary {
+        font-weight: 850;
+        color: var(--review-text);
+      }
+      .review-detail-body {
+        color: var(--review-text);
+      }
+      .review-panel-list .empty {
+        color: var(--review-muted);
+      }
+      .review-bottom-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 30;
+        padding: 12px 22px calc(12px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--review-line);
+        background: rgba(246, 248, 251, 0.94);
+        box-shadow: 0 -14px 32px rgba(15, 23, 42, 0.08);
+        backdrop-filter: blur(14px);
+      }
+      .review-bottom-bar-inner {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        max-width: 1220px;
+        margin: 0 auto;
+      }
+      .review-bottom-action {
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 152px;
+        min-height: 48px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        padding: 0 20px;
+        font: inherit;
+        font-size: 16px;
+        font-weight: 850;
+        letter-spacing: 0;
+        line-height: 1;
+        white-space: nowrap;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+        transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+      }
+      .review-bottom-action.revise {
+        border-color: #fecaca;
+        background: #fff1f2;
+        color: #b42318;
+      }
+      .review-bottom-action.confirm {
+        border-color: #bbf7d0;
+        background: #ecfdf3;
+        color: #067647;
+      }
+      .review-bottom-action:hover,
+      .review-bottom-action:focus-visible {
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.1);
+        transform: translateY(-1px);
+        outline: none;
+      }
+      .review-bottom-action.revise:hover,
+      .review-bottom-action.revise:focus-visible {
+        border-color: #fda4af;
+        background: #ffe4e6;
+      }
+      .review-bottom-action.confirm:hover,
+      .review-bottom-action.confirm:focus-visible {
+        border-color: #86efac;
+        background: #dcfce7;
+      }
+      .review-bottom-action:active {
+        box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+        transform: translateY(0);
+      }
+      @media (max-width: 860px) {
+        .review-overview {
+          grid-template-columns: 1fr;
+        }
+        .review-panel-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 620px) {
+        .review-page { padding: 18px 12px 128px; }
+        .review-topbar { align-items: flex-start; flex-direction: column; }
+        .review-overview { padding: 18px; }
+        .review-overview h1 {
+          font-size: 26px;
+          word-break: break-all;
+        }
+        .review-problem { word-break: break-all; }
+        .review-map-canvas svg { min-width: 0; }
+        .review-journey-map svg { min-width: 620px; }
+        .review-section-heading h2 { font-size: 20px; }
+        .review-bottom-bar { padding-inline: 12px; }
+        .review-bottom-bar-inner {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+        .review-bottom-action {
+          justify-content: center;
+          padding-inline: 10px;
+          font-size: 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="review-page">
+      <header class="review-topbar">
+        <div class="review-brand">OpenPrd / 评审面板</div>
+      </header>
+      ${renderReviewOverview(snapshot, sectionsData)}
+      ${renderReviewFlowSvg(snapshot, sectionsData)}
+      <section class="review-panel-grid" aria-label="固定评审项">
+        ${panels.join('\n')}
+      </section>
+      ${renderReviewDecision(snapshot)}
+      <script>
+        async function copyReviewText(text) {
+          try {
+            await navigator.clipboard.writeText(text);
+          } catch (error) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            textarea.remove();
+          }
+        }
+        function flashCopied(button) {
+          const old = button.innerHTML;
+          button.textContent = '已复制';
+          setTimeout(() => { button.innerHTML = old; }, 1200);
+        }
+        document.querySelectorAll('[data-copy-value]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            await copyReviewText(button.dataset.copyValue || '');
+            flashCopied(button);
+          });
+        });
+      </script>
+    </main>
+  </body>
+</html>`;
 }
 
 function toYamlLines(value, depth = 0) {
@@ -823,119 +1991,9 @@ export function renderPlaygroundArtifact({ snapshot, state, markdownPath, patchP
 </html>`;
 }
 
-export function renderClarifyArtifact({ snapshot, clarification }) {
-  const hasUserQuestions = clarification.mustAskUser.length > 0;
-  const questionContent = hasUserQuestions
-    ? clarification.mustAskUser.map(formatClarificationQuestion).join('\n')
-    : '<p class="empty">当前没有必须由用户确认的问题。可以回到 Agent 对话继续确认任务拆解或推进下一步；只有需要方案对比、可视审阅或留痕时，再打开这份 HTML。</p>';
-  const directionSection = hasUserQuestions
-    ? card('推荐发散方向', optionCandidates(clarification).map(formatOption).join('\n'))
-    : formatEvidenceItem({
-        title: '建议继续方式',
-        description: '当前信息已经足够支撑下一步，不需要额外 HTML 确认。',
-        items: [
-          '在 Agent 对话中确认任务拆解或继续执行。',
-          '如需留痕，可使用下方回写数据交给 openprd capture 或下一轮 prompt。',
-        ],
-      });
-  const summaryCards = [
-    metricCard('场景', clarification.scenario.label, clarification.scenario.reason),
-    metricCard('必填缺口', `${clarification.missingRequiredFields}`, '当前仍需用户确认或 agent 补全的关键字段数'),
-    metricCard('本轮提问', `${clarification.mustAskUser.length}`, '建议先逐条确认，不一次性压给用户整包问题'),
-    metricCard('后续可推断', `${clarification.canInferLater.length}`, '可在拿到更多事实后由 agent 继续补全'),
-  ];
-
-  const sections = [
-    card('本轮需要用户确认', questionContent),
-    formatRequirementIntakeDepth(clarification.requirementIntake),
-    directionSection,
-    formatEvidenceItem({
-      title: '当前开放问题',
-      description: '这些问题会同时记录进 OpenPrD 工作区，避免在后续讨论中丢失。',
-      items: clarification.mustAskUser.map((item) => item.prompt),
-    }),
-    formatExportItem({
-      title: '给 Agent 的回写数据',
-      description: '这份 JSON 供 openprd capture、决策回写或下一轮 prompt 使用，不是需要用户填写的表单。',
-      payload: JSON.stringify(buildClarifyExportPayload(clarification), null, 2),
-    }),
-  ];
-
-  return pageShell({
-    eyebrow: 'OpenPrd / 需求澄清面板',
-    title: snapshot.title || '需求澄清',
-    subtitle: '先把问题、目标、范围和探索方向看清楚，再决定是否继续发散、对比或合成正式 PRD。',
-    summaryCards,
-    sections,
-    footer: `版本: ${snapshot.versionId} · 产品类型: ${snapshot.productType ?? '未分类'} · 建议下一步: ${clarification.shouldAskUser ? '继续澄清 / 必要时打开 HTML 方案对比' : '回到 Agent 对话继续确认或合成 PRD'}`,
-  });
-}
-
 export function renderReviewArtifact({ snapshot }) {
   const sectionsData = snapshot.sections ?? {};
-  const summaryCards = [
-    metricCard('问题定义', sectionsData.problem?.problemStatement ? '已填写' : '待确认', sectionsData.problem?.problemStatement ?? '尚未形成明确问题定义'),
-    metricCard('目标与指标', `${(sectionsData.goals?.goals ?? []).length} / ${(sectionsData.goals?.successMetrics ?? []).length}`, '目标数 / 成功指标数'),
-    metricCard('范围', `${(sectionsData.scope?.inScope ?? []).length} / ${(sectionsData.scope?.outOfScope ?? []).length}`, '范围内 / 范围外条目数'),
-    metricCard('业务护栏', `${(sectionsData.businessGuardrails?.usageLimits ?? []).length} / ${(sectionsData.businessGuardrails?.alertThresholds ?? []).length}`, '额度限制 / 报警阈值条目数'),
-    metricCard('风险与问题', `${(sectionsData.risks?.risks ?? []).length} / ${(sectionsData.risks?.openQuestions ?? []).length}`, '风险数 / 开放问题数'),
-  ];
-
-  const sections = [
-    formatEvidenceItem({
-      title: '主流程与边界情况',
-      description: '先确认用户旅程、关键步骤、恢复路径是否足够支撑 freeze。',
-      items: [
-        ...(sectionsData.scenarios?.primaryFlows ?? []),
-        ...(sectionsData.scenarios?.edgeCases ?? []),
-        ...(sectionsData.scenarios?.failureModes ?? []),
-      ],
-    }),
-    formatEvidenceItem({
-      title: '功能与约束',
-      description: '这里最适合标出“哪些是必须的，哪些只是当前假设”。',
-      items: [
-        ...(sectionsData.requirements?.functional ?? []),
-        ...(sectionsData.requirements?.nonFunctional ?? []),
-        ...(sectionsData.constraints?.dependencies ?? []),
-      ],
-    }),
-    formatEvidenceItem({
-      title: '业务成本与滥用护栏',
-      description: '涉及免费额度、消耗型成本或第三方调用时，先确认限制、报警和止损动作。',
-      items: [
-        ...(sectionsData.businessGuardrails?.costDrivers ?? []),
-        ...(sectionsData.businessGuardrails?.usageLimits ?? []),
-        ...(sectionsData.businessGuardrails?.abusePrevention ?? []),
-        ...(sectionsData.businessGuardrails?.monitoringSignals ?? []),
-        ...(sectionsData.businessGuardrails?.alertThresholds ?? []),
-        ...(sectionsData.businessGuardrails?.stopLossActions ?? []),
-      ],
-    }),
-    formatEvidenceItem({
-      title: '开放问题与风险',
-      description: 'Freeze 前没有被关掉的问题，应该继续停留在这里，而不是被默默假定解决。',
-      items: [
-        ...(sectionsData.risks?.assumptions ?? []),
-        ...(sectionsData.risks?.risks ?? []),
-        ...(sectionsData.risks?.openQuestions ?? []),
-      ],
-    }),
-    formatExportItem({
-      title: '一键导回 PRD Review 决策',
-      description: '后续可用于 review 状态更新、生成 decision log 或继续进入 diagram review。',
-      payload: JSON.stringify(buildReviewExportPayload(snapshot), null, 2),
-    }),
-  ];
-
-  return pageShell({
-    eyebrow: 'OpenPrd / 评审面板',
-    title: snapshot.title || 'PRD 评审',
-    subtitle: '这不是归档文档，而是 freeze 前的人机确认界面。建议在这里确认问题、范围、流程、风险，再进入 diagram / freeze。',
-    summaryCards,
-    sections,
-    footer: `版本: ${snapshot.versionId} · 负责人: ${snapshot.owner} · 目标系统: ${sectionsData.handoff?.targetSystem ?? 'OpenSpec'}`,
-  });
+  return renderReviewPage({ snapshot, sectionsData });
 }
 
 export function renderRegressionArtifact({ task, report }) {
@@ -993,6 +2051,8 @@ function qualityStatusLabel(status) {
   if (status === 'pass') return '通过';
   if (status === 'fail') return '失败';
   if (status === 'needs-evidence') return '需补证据';
+  if (status === 'advisory') return '建议关注';
+  if (status === 'waived') return '已豁免';
   return '需关注';
 }
 
@@ -1018,98 +2078,402 @@ function miniMetric(title, metric, subtext) {
   `;
 }
 
-export function renderQualityEvalArtifact({ report }) {
-  const summaryCards = [
-    metricCard('质量状态', report.summary.status, `关注门禁: ${report.summary.attentionCount}`),
-    metricCard('扫描文件', `${report.summary.filesScanned}`, '用于识别日志、测试、性能与知识库信号'),
-    metricCard('激活变更', report.summary.activeChange ?? '无', '用于评估任务覆盖完整性'),
-    metricCard('报告格式', 'HTML + JSON', report.id),
-  ];
+function auditStatusClass(status) {
+  if (status === 'pass' || status === 'production-ready' || status === 'waived') return 'audit-pass';
+  if (status === 'fail' || status === 'failed' || status === 'needs-attention') return 'audit-fail';
+  if (status === 'needs-evidence') return 'audit-evidence';
+  return 'audit-advisory';
+}
 
-  const gateItems = report.gates.map((gate) => `
-    <div class="qa-item ${qualityStatusClass(gate.status)}">
-      <div class="qa-label">${escapeHtml(gate.label)}</div>
-      <div class="qa-status-row">
-        <div class="status-badge mini-status ${gate.status === 'pass' ? 'status-pass' : 'status-warn'}">${qualityStatusLabel(gate.status)}</div>
+function auditGateDecision(gate) {
+  if (gate.required && gate.status === 'pass') return '本期必测块已通过';
+  if (gate.required && gate.status === 'waived') return '已豁免，需保留依据';
+  if (gate.required) return '本期必测未通过，不能宣称就绪';
+  if (gate.status === 'pass') return '按风险确认项已有证据';
+  if (gate.status === 'advisory') return '当前可选，风险进入范围后升级';
+  return '当前不阻断，建议补证据';
+}
+
+function auditChips(items, emptyText = '无') {
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (list.length === 0) return `<span class="audit-chip muted">${escapeHtml(emptyText)}</span>`;
+  return list.map((item) => `<span class="audit-chip">${escapeHtml(item)}</span>`).join('\n');
+}
+
+function auditActionItems(report) {
+  const requiredGates = report.gates.filter((gate) => gate.required);
+  const failingRequired = requiredGates.filter((gate) => !['pass', 'waived'].includes(gate.status));
+  const advisory = report.gates.filter((gate) => !gate.required && gate.status !== 'pass');
+  if (failingRequired.length > 0) {
+    return failingRequired.map((gate) => `${reviewerGateDisplay(gate)}: ${gate.warnings[0] ?? gate.evidence?.summary ?? '补齐必需证据后再继续'}`);
+  }
+  if (advisory.length > 0) {
+    return advisory.map((gate) => `${reviewerGateDisplay(gate)}: ${auditGateDecision(gate)}`);
+  }
+  return ['当前本期必测块全部通过；继续保留本次执行证据，交付前复跑 openprd run --verify。'];
+}
+
+function auditEvidenceRows(report) {
+  return report.gates.flatMap((gate) => {
+    const sources = gate.evidence?.sources ?? [];
+    if (sources.length === 0) {
+      return [{
+        gate,
+        source: '未提供',
+        path: gate.required ? '缺少必需证据' : '当前场景未要求',
+        empty: true,
+      }];
+    }
+    return sources.map((source) => ({
+      gate,
+      source: source.source ?? 'evidence',
+      path: source.path ?? 'unknown',
+      empty: false,
+    }));
+  });
+}
+
+function reviewerGateFocus(gate) {
+  const focusByGate = {
+    smoke: '看主流程和最容易出错的失败路径是否真的跑过，而不是只写了测试文件。',
+    'feature-coverage': '看本次需求、任务和验收点是否都被覆盖；如果没有激活任务，要确认这是不是合理状态。',
+    'business-guardrails': '看成本、免费额度、滥用、报警和止损动作是否讲清楚，避免上线后失控。',
+    traceability: '看出问题时能不能从用户动作追到请求、任务和错误，方便复现和定位。',
+    redaction: '看日志、截图、报告和错误信息里是否可能泄露用户隐私、密钥或敏感业务数据。',
+    'normal-performance': '看普通规模下是否会卡顿、超时、资源异常，是否有可比较的基线。',
+    'extreme-performance': '看大数据、并发、异常输入或边界规模下是否有兜底，不只是跑小样本。',
+    knowledge: '看这次发现的问题是否值得沉淀，避免下次 Agent 或团队重复踩同一个坑。',
+  };
+  return focusByGate[gate.id] ?? '看这个测试块是否和本次需求相关，证据是否来自本次执行。';
+}
+
+function reviewerGateQuestion(gate) {
+  if (gate.required && gate.status === 'pass') {
+    return '你可以抽查证据是否对应本次需求；如果证据太泛，要求 Agent 补本次执行记录。';
+  }
+  if (gate.required) {
+    return '这里不能放行。请要求 Agent 补证据、修复问题，并重新生成回归测试报告。';
+  }
+  if (gate.status === 'pass') {
+    return '当前不阻断；你只需要判断这项是否和本次风险相关，必要时抽查证据。';
+  }
+  return '你要决定是否接受本次不补；如果准备发布或风险变高，应要求升级为本期必测。';
+}
+
+function reviewerScenarioLabel(tag) {
+  const labels = {
+    core: '基础验证',
+    frontend: '界面体验',
+    desktop: '桌面端体验',
+    backend: '服务与数据处理',
+    businessCost: '成本与滥用风险',
+    security: '隐私与安全',
+    performance: '性能风险',
+    extreme: '极端场景',
+    release: '上线交付',
+    legacy: '历史兼容',
+  };
+  return labels[tag] ?? tag;
+}
+
+function reviewerGateLabel(report, gateId) {
+  const gate = report.gates.find((item) => item.id === gateId);
+  return reviewerGateDisplay(gate ?? { id: gateId, label: gateId });
+}
+
+function reviewerGateDisplay(gate) {
+  if (gate.id === 'knowledge') return '经验沉淀';
+  return String(gate.label ?? gate.id).replace(/\s*Skill\s*/g, ' ');
+}
+
+function reviewerEnforcementLabel(value) {
+  if (value === 'blocking') return '严格阻断';
+  if (value === 'advisory') return '建议模式';
+  return value ?? '未标明';
+}
+
+function reviewerPolicyLabels(report) {
+  const policy = report.qualityPolicy ?? { scenarioTags: [], requiredGates: [], optionalGates: [] };
+  return {
+    scenarioLabels: policy.scenarioTags.map(reviewerScenarioLabel),
+    requiredLabels: policy.requiredGates.map((gateId) => reviewerGateLabel(report, gateId)),
+    optionalLabels: policy.optionalGates.map((gateId) => reviewerGateLabel(report, gateId)),
+  };
+}
+
+function reviewerDecisionPayload(report, actionItems) {
+  const labels = reviewerPolicyLabels(report);
+  const failingRequired = report.gates
+    .filter((gate) => gate.required && !['pass', 'waived'].includes(gate.status))
+    .map(reviewerGateDisplay);
+  const advisory = report.gates
+    .filter((gate) => !gate.required && gate.status !== 'pass')
+    .map(reviewerGateDisplay);
+  return [
+    `我看了回归测试报告 ${report.id}，我的确认意见如下：`,
+    '',
+    `1. 场景判断：${labels.scenarioLabels.join(', ') || '未标明'}。我认为这个场景【接受 / 不接受】，原因是：`,
+    `2. 本期必测块：${labels.requiredLabels.join(', ') || '无'}。我认为这些回归结果【可信 / 不可信】，需要补充：`,
+    `3. 需确认遗漏：${advisory.join(', ') || '无'}。我选择【不属于本期，可延期 / 属于本期，需要现在补齐】。`,
+    `4. 放行结论：${failingRequired.length === 0 ? '本期必测块可以继续，但请按我的选择处理需确认遗漏。' : `我不同意放行，未通过项包括：${failingRequired.join(', ')}`}`,
+    '',
+    '我希望 Agent 接下来处理：',
+    ...actionItems.map((item) => `- ${item}`),
+  ].join('\n');
+}
+
+function reviewerEvidencePayload(report) {
+  const missing = report.gates.filter((gate) => gate.status !== 'pass' || !gate.evidence?.present);
+  return [
+    `请根据回归测试报告 ${report.id} 补齐或解释以下回归遗漏：`,
+    '',
+    ...missing.map((gate) => [
+      `- ${reviewerGateDisplay(gate)}（${gate.required ? '本期必测' : '按风险确认'}，当前状态：${qualityStatusLabel(gate.status)}）`,
+      `  我要确认：${reviewerGateFocus(gate)}`,
+      `  你需要补充：${regressionHumanText(gate.warnings[0] ?? gate.evidence?.summary ?? '本次执行证据、覆盖范围和判断理由')}`,
+    ].join('\n')),
+    '',
+    '补完后请重新运行 openprd quality . --verify 和 openprd run . --verify，并给我新的报告链接。',
+  ].join('\n');
+}
+
+function reviewerScenarioPayload(report) {
+  const labels = reviewerPolicyLabels(report);
+  return [
+    `我想重新确认回归测试场景。当前报告 ${report.id} 的场景是：${labels.scenarioLabels.join(', ') || '未标明'}。`,
+    '',
+    '请你重新判断：',
+    '- 这个需求是否其实应该按上线交付 / 隐私与安全 / 性能风险 / 服务与数据处理 / 极端场景处理？',
+    '- 哪些按风险确认的测试块应该升级为本期必测？',
+    '- 如果仍保持当前场景，请用面向评审者的语言解释为什么。',
+    '',
+    `当前本期必测块：${labels.requiredLabels.join(', ') || '无'}`,
+  ].join('\n');
+}
+
+function reviewCopyCard(title, description, payload) {
+  return `
+    <div class="review-copy">
+      <div class="review-copy-head">
+        <div>
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(description)}</span>
+        </div>
+        <button type="button" data-copy-nearest>复制回对话</button>
       </div>
-      <ul>${listMarkup(gate.warnings, '暂无额外风险')}</ul>
+      <textarea readonly data-review-copy>${escapeHtml(payload)}</textarea>
+    </div>
+  `;
+}
+
+function regressionGateCopyPayload(gate, report) {
+  const warnings = gate.warnings.map(regressionHumanText);
+  const missingText = warnings.length > 0
+    ? warnings.map((item) => `- ${item}`).join('\n')
+    : `- ${gate.evidence?.summary ?? '请补充本次执行证据和判断理由'}`;
+  return [
+    `请处理回归测试报告 ${report.id} 里的这项问题：${reviewerGateDisplay(gate)}`,
+    '',
+    `当前状态：${regressionResultLabel(gate)}`,
+    `本期要求：${gate.required ? '本期必须处理' : '请判断是否属于本期'}`,
+    `我关心的是：${regressionBlockDescription(gate)}`,
+    '',
+    '当前问题：',
+    missingText,
+    '',
+    '请你接下来：',
+    '1. 如果属于本期需求，请直接修复、补测或补证据。',
+    '2. 如果你认为可以延期，请用需求视角说明原因、影响和后续条件。',
+    '3. 处理后重新运行 openprd quality . --verify 和 openprd run . --verify，并给我新的报告链接。',
+  ].join('\n');
+}
+
+function regressionGateHints(gate) {
+  if (gate.required && gate.status !== 'pass') {
+    return [
+      '不要让用户决策是否修；先按本期必测块修复或补证据。',
+      '补完后重新生成报告，确认必须修复数归零。',
+    ];
+  }
+  if (gate.id === 'feature-coverage' && gate.evidence?.summary === '当前没有激活任务清单') {
+    return [
+      '如果这是具体需求交付，先补 active change/tasks.md。',
+      '把新增、修改、删除、异常路径拆成可验收任务后再回归。',
+    ];
+  }
+  if (gate.status === 'needs-evidence') {
+    return [
+      '先确认项目是否只是有能力但缺本次执行证据。',
+      '如果属于本期风险，补一次实际运行记录，而不是只引用脚本存在。',
+    ];
+  }
+  return [
+    '先判断它是否真的属于本期需求风险。',
+    '属于本期就补测；不属于本期才写清延期理由和触发条件。',
+  ];
+}
+
+function regressionGateSimpleSuggestion(gate) {
+  if (gate.required && gate.status !== 'pass') return '先修复或补证据，再重跑报告。';
+  if (gate.id === 'feature-coverage' && gate.evidence?.summary === '当前没有激活任务清单') {
+    return '具体需求交付时先补 tasks.md。';
+  }
+  if (gate.status === 'needs-evidence') return '如果属于本期，就补本次执行证据。';
+  return '相关就补测，不相关就写清延期理由。';
+}
+
+function regressionResultLabel(gate) {
+  if (gate.status === 'pass') return '已通过';
+  if (gate.required) return '未通过';
+  if (gate.status === 'needs-evidence') return '缺少证据';
+  if (gate.status === 'advisory') return '需确认是否本期处理';
+  return qualityStatusLabel(gate.status);
+}
+
+function regressionResultClass(gate) {
+  if (gate.status === 'pass') return 'audit-pass';
+  if (gate.required) return 'audit-fail';
+  if (gate.status === 'needs-evidence') return 'audit-evidence';
+  return 'audit-advisory';
+}
+
+function regressionExpectation(gate) {
+  if (gate.id === 'feature-coverage' && gate.evidence?.summary === '当前没有激活任务清单') {
+    return '全项目检查可接受；具体需求交付时必须有任务拆解';
+  }
+  if (gate.required) return '本期必须通过';
+  return '本期默认不阻断；若需求涉及此风险，应升级为本期测试';
+}
+
+function regressionTreatment(gate) {
+  if (gate.id === 'feature-coverage' && gate.evidence?.summary === '当前没有激活任务清单') {
+    return '如果这是具体需求交付，应先补 active change/tasks，否则无法证明新增/修改/删除等需求项逐项回归。';
+  }
+  if (gate.required && gate.status === 'pass') return '不需要人工评审；保留证据即可继续。';
+  if (gate.required) return '应当现在修复或补证据，修完后重新生成报告。';
+  if (gate.status === 'pass') return '已覆盖，可作为辅助证据保留。';
+  return '需要判断是否属于本期需求；属于就现在补测，不属于才记录为后续风险。';
+}
+
+function regressionBlockDescription(gate) {
+  const descriptions = {
+    smoke: '核心路径能否跑通，至少覆盖主流程和最关键的失败路径。',
+    'feature-coverage': '需求拆解项是否全部完成，验收点是否有对应回归。',
+    'business-guardrails': '成本、额度、滥用、报警、止损是否有明确保护。',
+    traceability: '出问题时是否能追到用户动作、请求、任务和错误。',
+    redaction: '报告、日志和错误信息是否会暴露隐私、密钥或敏感数据。',
+    'normal-performance': '普通规模下是否可用、不卡顿、不超时。',
+    'extreme-performance': '大数据、并发、异常输入、边界规模是否有兜底。',
+    knowledge: '本次问题是否需要沉淀成经验，避免下次重复漏测。',
+  };
+  return descriptions[gate.id] ?? reviewerGateFocus(gate);
+}
+
+function regressionHumanText(value) {
+  return String(value ?? '')
+    .replace(/阻断此门禁/g, '作为本期必测阻断')
+    .replace(/必需门禁/g, '本期必测块')
+    .replace(/可选门禁/g, '按风险确认项')
+    .replace(/门禁/g, '测试块');
+}
+
+function regressionTaskStatus(task) {
+  if (task.done) return '已完成';
+  if (task.blocked) return '阻塞';
+  return '未完成';
+}
+
+function regressionRequirementRows(activeTasks, report) {
+  const tasks = activeTasks.tasks ?? [];
+  const requiredGates = report.gates.filter((gate) => gate.required);
+  const requiredPassed = requiredGates.filter((gate) => ['pass', 'waived'].includes(gate.status)).length;
+  const failingRequired = requiredGates.filter((gate) => !['pass', 'waived'].includes(gate.status));
+  const advisoryGates = report.gates.filter((gate) => !gate.required && gate.status !== 'pass');
+  if (tasks.length === 0) {
+    return `
+      <tr class="audit-evidence">
+        <td>当前没有激活需求任务</td>
+        <td>项目级必测 ${escapeHtml(`${requiredPassed}/${requiredGates.length}`)} 通过</td>
+        <td>如果这是具体需求交付，应先生成或保留 tasks.md，再逐项回归。</td>
+      </tr>
+    `;
+  }
+  return tasks.map((task) => {
+    const statusClass = !task.done || failingRequired.length > 0
+      ? 'audit-fail'
+      : advisoryGates.length > 0
+        ? 'audit-advisory'
+        : 'audit-pass';
+    const conclusion = !task.done
+      ? '不能放行，应完成或明确延期原因。'
+      : failingRequired.length > 0
+        ? '不能放行，仍有本期必测块未通过。'
+        : advisoryGates.length > 0
+          ? '功能已完成；需确认风险项是否属于本期。'
+          : '通过，无需人工评审。';
+    return `
+      <tr class="${statusClass}">
+        <td>
+          <strong>${escapeHtml(task.title)}</strong>
+          <span><code>${escapeHtml(`${task.source}:${task.line}`)}</code></span>
+        </td>
+        <td>${escapeHtml(regressionTaskStatus(task))} · 必测 ${escapeHtml(`${requiredPassed}/${requiredGates.length}`)}</td>
+        <td>${escapeHtml(conclusion)}</td>
+      </tr>
+    `;
+  }).join('\n');
+}
+
+function regressionGateSummaryCards(report) {
+  return report.gates.map((gate) => `
+    <div class="audit-block-card ${regressionResultClass(gate)}">
+      <div class="audit-block-card-head">
+        <strong>${escapeHtml(reviewerGateDisplay(gate))}</strong>
+        <span class="audit-status ${regressionResultClass(gate)}">${escapeHtml(regressionResultLabel(gate))}</span>
+      </div>
+      <div class="audit-block-meta">
+        <span>${gate.required ? '本期必测' : '按风险确认'}</span>
+        <span>${gate.evidence?.present ? `${gate.evidence.sources.length} 条证据` : '缺少本次证据'}</span>
+      </div>
     </div>
   `).join('\n');
+}
 
-  const obs = report.observability;
-  const evalHarness = report.evalHarness;
-  const businessGuardrails = report.businessGuardrails;
-  const knowledge = report.knowledge;
-  const sections = [
-    card('质量门禁总览', gateItems),
-    card('日志与链路追踪', `
-      <div class="evidence-grid">
-        ${miniMetric('中心化系统', obs.centralizedTools.length > 0 ? obs.centralizedTools.join(', ') : '未检测到', 'OpenTelemetry/Sentry/Datadog/New Relic 等信号')}
-        ${miniMetric('本地日志', obs.localLoggers.length > 0 ? obs.localLoggers.join(', ') : '未检测到', 'console/pino/winston 等项目内日志调用')}
-        ${miniMetric('关联字段', `${obs.correlationFields.length}/${report.configSnapshot.observability.requiredCorrelationFields.length}`, obs.correlationFields.join(', ') || '未检测到')}
+function regressionExceptionItems(report) {
+  const items = report.gates.filter((gate) => gate.required ? gate.status !== 'pass' : gate.status !== 'pass');
+  if (items.length === 0) {
+    return '<div class="audit-empty">没有未通过或需确认的回归块。查看者只需要确认报告对应的是本次需求即可。</div>';
+  }
+  return items.map((gate) => `
+    <div class="audit-risk-card ${regressionResultClass(gate)}">
+      <div class="audit-risk-card-head">
+        <div>
+          <strong>${escapeHtml(reviewerGateDisplay(gate))}</strong>
+          <span>${escapeHtml(regressionResultLabel(gate))}</span>
+        </div>
+        <button type="button" data-copy-nearest>复制给 Agent</button>
       </div>
-      <ul>${listMarkup(obs.recommendations)}</ul>
-    `),
-    card('业务成本与滥用护栏', `
-      <div class="evidence-grid">
-        ${miniMetric('风险信号', businessGuardrails.riskDetected ? '已检测' : '未检测', businessGuardrails.matchedRiskIndicators.slice(0, 4).join(', ') || '暂无命中')}
-        ${miniMetric('缺口数量', `${businessGuardrails.missingEvidence.length}`, businessGuardrails.missingEvidence.join(', ') || '暂无缺口')}
-        ${miniMetric('护栏状态', businessGuardrails.status, businessGuardrails.enabled ? '已启用' : '未启用')}
-      </div>
-      <ul>${listMarkup(businessGuardrails.recommendations)}</ul>
-    `),
-    card('评估执行环境', `
-      <div class="evidence-grid">
-        ${miniMetric('冒烟测试', evalHarness.smoke.present ? '已发现' : '缺失', evalHarness.smoke.commands.join(' | ') || '暂无命令')}
-        ${miniMetric('性能测试', evalHarness.performance.present ? '已发现' : '缺失', evalHarness.performance.commands.join(' | ') || '暂无命令')}
-        ${miniMetric('极端数据', evalHarness.extremeData.present ? '已发现' : '缺失', evalHarness.extremeData.evidence.slice(0, 3).join(', ') || '暂无 evidence')}
-      </div>
-      <div class="qa-meta">正常性能基线: ${escapeHtml(JSON.stringify(evalHarness.performance.normalBaseline))}</div>
-      <div class="qa-meta">极端性能基线: ${escapeHtml(JSON.stringify(evalHarness.performance.extremeBaseline))}</div>
-      <ul>${listMarkup(evalHarness.recommendations)}</ul>
-    `),
-    card('功能覆盖矩阵', `
-      <div class="evidence-grid">
-        ${miniMetric('任务总数', `${evalHarness.featureCoverage.activeTasks.total}`, '来自当前激活 change 的 tasks.md')}
-        ${miniMetric('已完成', `${evalHarness.featureCoverage.activeTasks.done}`, '已勾选任务')}
-        ${miniMetric('待处理', `${evalHarness.featureCoverage.activeTasks.pending}`, '需要继续补齐或验证')}
-      </div>
-      <ul>${listMarkup(evalHarness.featureCoverage.requiredFlows)}</ul>
-    `),
-    card('项目级知识库经验层', `
-      <div class="evidence-grid">
-        ${miniMetric('经验 Skill', `${knowledge.skills.length}`, knowledge.skillDir)}
-        ${miniMetric('事故记录', `${knowledge.incidents.length}`, '用于沉淀验证已修复的问题')}
-      </div>
-      <ul>${listMarkup(knowledge.recommendations)}</ul>
-    `),
-    formatExportItem({
-      title: '结构化质量报告',
-      description: '供 CI、交接、复盘学习、经验 skill 生成和后续质量提升使用。',
-      payload: JSON.stringify(report, null, 2),
-    }),
-  ];
+      <p>${escapeHtml(regressionBlockDescription(gate))}</p>
+      <div class="qa-meta">${escapeHtml(regressionGateSimpleSuggestion(gate))}</div>
+      <textarea readonly class="copy-source" data-review-copy>${escapeHtml(regressionGateCopyPayload(gate, report))}</textarea>
+    </div>
+  `).join('\n');
+}
 
-  return pageShell({
-    eyebrow: 'OpenPrd / 质量评估报告',
-    title: `质量评估报告 ${report.id}`,
-    subtitle: '用于审查日志追踪、业务护栏、冒烟测试、功能覆盖、性能基线、极端场景和项目级经验沉淀。',
-    statusBadge: {
-      label: report.summary.status === 'production-ready' ? '生产就绪' : '需补证据',
-      className: qualityBadgeClass(report.summary.status),
-    },
-    topMeta: [
-      `生成时间: ${report.generatedAt}`,
-      `执行模式: ${report.readiness.enforcement}`,
-    ],
-    summaryCards,
-    sections,
-    footer: 'OpenPrd 质量报告',
-  });
+export function renderQualityEvalArtifact({ report }) {
+  return renderQualityEvalArtifactV2({ report });
 }
 
 function learningSourceAnchor(sourceId) {
   return `source-${slugify(sourceId, 'source')}`;
+}
+
+function learningAssetUrl(rawPath) {
+  const value = String(rawPath ?? '').trim();
+  if (!value) return null;
+  if (/^(?:https?:|data:|file:)/i.test(value)) return value;
+  if (path.isAbsolute(value)) return pathToFileURL(value).href;
+  return encodeURI(value.split(path.sep).join('/'));
 }
 
 function formatLearningParagraphs(paragraphs) {
@@ -1162,12 +2526,58 @@ function formatLearningWorkedExamples(examples, chapterId) {
   `;
 }
 
+function formatLearningVisualExplainer(explainer, chapterId) {
+  if (!explainer || typeof explainer !== 'object') return '';
+  const takeaways = Array.isArray(explainer.takeaways) ? explainer.takeaways.filter(Boolean) : [];
+  const imageUrl = learningAssetUrl(explainer.image?.path);
+  const hasImage = Boolean(imageUrl);
+  return `
+    <section class="learning-block visual" id="${escapeHtml(chapterId)}-visual">
+      <div class="visual-header">
+        <div class="visual-kicker">一眼看懂</div>
+        <h4>${escapeHtml(explainer.title ?? '图文解释')}</h4>
+      </div>
+      <div class="visual-grid${hasImage ? ' has-image' : ''}">
+        ${hasImage ? `
+          <figure class="visual-figure">
+            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(explainer.image?.alt ?? explainer.title ?? 'visual explainer')}" loading="lazy" />
+            ${explainer.image?.caption ? `<figcaption>${escapeHtml(explainer.image.caption)}</figcaption>` : ''}
+          </figure>
+        ` : ''}
+        <div class="visual-copy">
+          <div class="visual-note">
+            <div class="visual-label">比喻</div>
+            <p>${escapeHtml(explainer.analogy ?? '')}</p>
+          </div>
+          <div class="visual-note">
+            <div class="visual-label">场景</div>
+            <p>${escapeHtml(explainer.scene ?? '')}</p>
+          </div>
+          <div class="visual-note">
+            <div class="visual-label">为什么这张图有用</div>
+            <p>${escapeHtml(explainer.whyItMatters ?? '')}</p>
+          </div>
+          ${takeaways.length > 0 ? `
+            <div class="visual-note">
+              <div class="visual-label">看图重点</div>
+              <ul class="visual-takeaways">${listMarkup(takeaways, '暂无重点')}</ul>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function formatLearningEvidenceDetails(chapter, sourcesById) {
   const ids = Array.isArray(chapter.evidenceIds) ? chapter.evidenceIds.filter(Boolean) : [];
   if (ids.length === 0) return '';
   return `
     <details class="chapter-evidence" id="${escapeHtml(chapter.id)}-evidence">
-      <summary><span>本章出处</span>${formatLearningEvidenceChips(ids)}</summary>
+      <summary>
+        <span class="evidence-summary-title">本章出处</span>
+        <span class="evidence-summary-count">${ids.length} 个来源</span>
+      </summary>
       <div class="evidence-mini-list">
         ${ids.map((id) => {
           const source = sourcesById.get(id);
@@ -1186,10 +2596,11 @@ function formatLearningEvidenceDetails(chapter, sourcesById) {
 
 function formatLearningChapter(chapter, index, sourcesById) {
   return `
-    <section class="chapter" id="${escapeHtml(chapter.id)}" data-chapter-index="${index}"${index === 0 ? '' : ' hidden'}>
+    <section class="chapter${index === 0 ? ' active' : ''}" id="${escapeHtml(chapter.id)}" data-chapter-index="${index}"${index === 0 ? '' : ' hidden'}>
       <div class="chapter-kicker" id="${escapeHtml(chapter.id)}-reading">第 ${index + 1} 章 · ${escapeHtml(chapter.label)}</div>
       <h2>${escapeHtml(chapter.semanticTitle)}</h2>
       <p class="chapter-summary">${escapeHtml(chapter.summary)}</p>
+      ${formatLearningVisualExplainer(chapter.visualExplainer, chapter.id)}
       ${formatLearningParagraphs(chapter.paragraphs)}
       ${formatLearningRetrievalBlocks(chapter.retrievalBlocks, chapter.id)}
       ${formatLearningWorkedExamples(chapter.workedExamples, chapter.id)}
@@ -1198,10 +2609,10 @@ function formatLearningChapter(chapter, index, sourcesById) {
   `;
 }
 
-function formatLearningOutlineNode(node, indexPath = '1') {
+function formatLearningOutlineNode(node, indexPath = '1', activeChapterId = null) {
   const hasChildren = Array.isArray(node.children) && node.children.length > 0;
   const label = `
-    <span class="outline-jump depth-${escapeHtml(node.depth ?? 1)}" data-target-id="${escapeHtml(node.id)}">
+    <span class="outline-jump depth-${escapeHtml(node.depth ?? 1)}${node.id === activeChapterId ? ' active' : ''}" data-target-id="${escapeHtml(node.id)}">
       <span class="outline-number">${escapeHtml(indexPath)}</span>
       <span class="outline-copy">
         <strong>${escapeHtml(node.title)}</strong>
@@ -1215,7 +2626,7 @@ function formatLearningOutlineNode(node, indexPath = '1') {
       <details class="outline-branch" open>
         <summary>${label}</summary>
         <ol>
-          ${node.children.map((child, childIndex) => formatLearningOutlineNode(child, `${indexPath}.${childIndex + 1}`)).join('\n')}
+          ${node.children.map((child, childIndex) => formatLearningOutlineNode(child, `${indexPath}.${childIndex + 1}`, activeChapterId)).join('\n')}
         </ol>
       </details>
     </li>
@@ -1247,6 +2658,7 @@ function formatLearningEmptyState(content, packageMeta, evidenceManifest) {
   const promptPath = content.agentPromptPath ?? packageMeta?.paths?.agentPrompt ?? null;
   const contextPath = content.agentContextPath ?? packageMeta?.paths?.agentContext ?? null;
   const contentPath = content.packagePaths?.contentJson ?? packageMeta?.paths?.contentJson ?? null;
+  const assetsDir = content.packagePaths?.assetsDir ?? packageMeta?.paths?.assetsDir ?? null;
   const renderCommand = contentPath ? `openprd learn . --content-json ${contentPath} --open` : null;
   const sourceCount = evidenceManifest?.sourceCount ?? (evidenceManifest?.sources?.length ?? 0);
   const claimCount = evidenceManifest?.claimCount ?? (evidenceManifest?.claims?.length ?? 0);
@@ -1261,19 +2673,20 @@ function formatLearningEmptyState(content, packageMeta, evidenceManifest) {
         <div class="stat"><div class="stat-value">${claimCount}</div><div class="stat-label">条结构化判断</div></div>
         <div class="stat"><div class="stat-value">${gapCount}</div><div class="stat-label">个待补缺口</div></div>
       </div>
-      <ol class="empty-steps">
-        <li>让 Agent 读取写作提示、上下文和证据清单。</li>
-        <li>由 Agent 把标题、目录、章节正文、检索练习和工作示例写进 <code>learning-content.json</code>。</li>
-        <li>写完后重新执行渲染命令，再打开阅读器查看成品。</li>
-      </ol>
-      <div class="empty-paths">
-        ${promptPath ? `<div><strong>写作提示</strong><span>${escapeHtml(promptPath)}</span></div>` : ''}
-        ${contextPath ? `<div><strong>上下文</strong><span>${escapeHtml(contextPath)}</span></div>` : ''}
-        ${contentPath ? `<div><strong>内容 JSON</strong><span>${escapeHtml(contentPath)}</span></div>` : ''}
-        ${renderCommand ? `<div><strong>重渲染命令</strong><span>${escapeHtml(renderCommand)}</span></div>` : ''}
-      </div>
-    </section>
-  `;
+	      <ol class="empty-steps">
+	        <li>让 Agent 读取写作提示、上下文和证据清单。</li>
+	        <li>由 Agent 把标题、目录、章节正文、检索练习、工作示例和需要的 visualExplainer 写进 <code>learning-content.json</code>。</li>
+	        <li>写完后重新执行渲染命令，再打开阅读器查看成品。</li>
+	      </ol>
+	      <div class="empty-paths">
+	        ${promptPath ? `<div><strong>写作提示</strong><span>${escapeHtml(promptPath)}</span></div>` : ''}
+	        ${contextPath ? `<div><strong>上下文</strong><span>${escapeHtml(contextPath)}</span></div>` : ''}
+	        ${contentPath ? `<div><strong>内容 JSON</strong><span>${escapeHtml(contentPath)}</span></div>` : ''}
+	        ${assetsDir ? `<div><strong>图片素材目录</strong><span>${escapeHtml(assetsDir)}</span></div>` : ''}
+	        ${renderCommand ? `<div><strong>重渲染命令</strong><span>${escapeHtml(renderCommand)}</span></div>` : ''}
+	      </div>
+	    </section>
+	  `;
 }
 
 export function renderLearningArtifact({ packageMeta, content, evidenceManifest }) {
@@ -1281,8 +2694,6 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
   const sources = Array.isArray(evidenceManifest.sources) ? evidenceManifest.sources : [];
   const claims = Array.isArray(evidenceManifest.claims) ? evidenceManifest.claims : [];
   const gaps = Array.isArray(evidenceManifest.gaps) ? evidenceManifest.gaps : [];
-  const retrievalCount = chapters.reduce((sum, chapter) => sum + (chapter.retrievalBlocks?.length ?? 0), 0);
-  const workedCount = chapters.reduce((sum, chapter) => sum + (chapter.workedExamples?.length ?? 0), 0);
   const isAwaitingAgent = content.authoringStatus === 'awaiting-agent-content' || chapters.length === 0;
   const title = content.title || packageMeta?.title || 'OpenPrd 复盘学习包';
   const outline = Array.isArray(content.outline) && content.outline.length > 0
@@ -1295,6 +2706,8 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
       children: [],
     }));
   const sourcesById = new Map(sources.map((source) => [source.id, source]));
+  const initialChapterId = chapters[0]?.id ?? outline[0]?.id ?? null;
+  const initialProgressPercent = chapters.length > 0 ? String((1 / chapters.length) * 100) : '0';
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1305,21 +2718,23 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
     <style>
       :root {
         color-scheme: light;
-        --bg: #efede6;
-        --paper: #fbfaf6;
-        --panel: #fffefa;
-        --ink: #151513;
-        --text: #26241f;
-        --muted: #6f6a60;
-        --line: #ded8cc;
-        --line-strong: #c9c0b2;
-        --accent: #13736b;
-        --accent-deep: #0c514c;
-        --accent-soft: #e5f1ee;
-        --amber: #7a5428;
-        --amber-soft: #f1e7d7;
-        --jade: #13736b;
-        --wash: #f7f5ef;
+        --bg: #f6fbff;
+        --bg-deep: #eef6ff;
+        --paper: #ffffff;
+        --panel: rgba(255, 255, 255, 0.96);
+        --ink: #171411;
+        --text: #1f2b3d;
+        --muted: #66758b;
+        --line: rgba(121, 151, 194, 0.28);
+        --line-strong: rgba(91, 126, 177, 0.32);
+        --accent: #ef7b43;
+        --accent-deep: #d95f26;
+        --accent-soft: #fff2e8;
+        --amber: #8a5a2b;
+        --amber-soft: #f6e7d4;
+        --jade: #ef7b43;
+        --wash: #f5f9ff;
+        --danger-soft: rgba(220,38,38,0.08);
         --reader-scale: 1;
         --mono: "JetBrains Mono","SFMono-Regular",Menlo,monospace;
         --serif: "Songti SC","Noto Serif CJK SC","Iowan Old Style","Palatino Linotype",serif;
@@ -1330,9 +2745,11 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
       body {
         margin: 0;
         background:
-          linear-gradient(90deg, rgba(21,21,19,0.04) 0 1px, transparent 1px 100%),
-          linear-gradient(180deg, #f7f5ef 0%, var(--bg) 100%);
-        background-size: 64px 64px, auto;
+          linear-gradient(90deg, rgba(95, 129, 181, 0.07) 0 1px, transparent 1px 100%),
+          linear-gradient(rgba(95, 129, 181, 0.07) 0 1px, transparent 1px 100%),
+          radial-gradient(circle at top, rgba(255,255,255,0.82), transparent 30%),
+          linear-gradient(180deg, #fbfdff 0%, var(--bg) 50%, var(--bg-deep) 100%);
+        background-size: 56px 56px, 56px 56px, auto, auto;
         color: var(--text);
         font-family: var(--ui);
         overflow: hidden;
@@ -1351,7 +2768,7 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
         border: 1px solid var(--line);
         border-radius: 18px;
         background: var(--panel);
-        box-shadow: 0 18px 44px rgba(27, 24, 20, 0.08);
+        box-shadow: 0 20px 50px rgba(92, 122, 168, 0.14);
       }
       .side-panel {
         position: sticky;
@@ -1361,7 +2778,7 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
         overflow: auto;
         padding: 18px;
         background:
-          linear-gradient(180deg, rgba(255,255,255,0.9), rgba(251,250,246,0.96)),
+          linear-gradient(180deg, rgba(255,255,255,0.985), rgba(252,254,255,0.985)),
           var(--panel);
       }
       .reader {
@@ -1376,7 +2793,7 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
       .reader-header {
         border-bottom: 1px solid var(--line);
         background:
-          linear-gradient(135deg, rgba(255,254,250,0.98), rgba(247,245,239,0.96)),
+          linear-gradient(135deg, rgba(255,255,255,0.995), rgba(249,252,255,0.98)),
           var(--paper);
         padding: 16px 30px 10px;
       }
@@ -1398,9 +2815,10 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
       h1 {
         margin: 0;
         font-family: var(--serif);
-        font-size: clamp(28px, 3.4vw, 38px);
-        line-height: 1.12;
-        font-weight: 800;
+        font-size: clamp(27px, 3.2vw, 36px);
+        line-height: 1.14;
+        font-weight: 700;
+        letter-spacing: 0.01em;
         color: var(--ink);
       }
       .subtitle {
@@ -1423,12 +2841,43 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
         color: var(--muted);
         font-size: 12px;
       }
+      .meta-details summary,
+      .retrieval-item summary,
+      .chapter-evidence summary {
+        list-style: none;
+      }
+      .meta-details summary::-webkit-details-marker,
+      .retrieval-item summary::-webkit-details-marker,
+      .chapter-evidence summary::-webkit-details-marker {
+        display: none;
+      }
       .meta-details summary {
         width: fit-content;
         cursor: pointer;
         color: var(--accent-deep);
-        font-weight: 750;
+        font-weight: 650;
         line-height: 1.4;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .meta-details summary::before,
+      .retrieval-item summary::before,
+      .chapter-evidence summary::before {
+        content: "▸";
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 12px;
+        color: var(--accent-deep);
+        font-size: 11px;
+        transform-origin: 50% 50%;
+        transition: transform 120ms ease;
+      }
+      .meta-details[open] summary::before,
+      .retrieval-item[open] summary::before,
+      .chapter-evidence[open] summary::before {
+        transform: rotate(90deg);
       }
       .meta-pill,
       .evidence-chip {
@@ -1436,16 +2885,16 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
         width: fit-content;
         border: 1px solid var(--line);
         border-radius: 999px;
-        padding: 5px 9px;
-        background: #ffffff;
+        padding: 4px 8px;
+        background: rgba(255,255,255,0.86);
         color: var(--muted);
-        font-size: 11px;
+        font-size: 10.5px;
         text-decoration: none;
       }
       .evidence-chip {
         color: var(--accent);
         background: var(--accent-soft);
-        border-color: rgba(15,118,110,0.22);
+        border-color: rgba(239,123,67,0.22);
       }
       .evidence-chip.muted {
         color: var(--muted);
@@ -1464,7 +2913,7 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
         border: 1px solid var(--line);
         border-radius: 999px;
         padding: 7px 10px;
-        background: #fffefa;
+        background: rgba(255, 255, 255, 0.96);
         color: var(--text);
         font: inherit;
         font-size: 14px;
@@ -1540,11 +2989,22 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
         border: 1px solid transparent;
         cursor: pointer;
       }
-      .outline-jump.active,
       .outline-jump:hover {
-        border-color: rgba(15,118,110,0.24);
-        background: var(--accent-soft);
-        color: #134e4a;
+        border-color: rgba(239,123,67,0.18);
+        background: rgba(255, 246, 239, 0.78);
+        color: var(--accent-deep);
+      }
+      .outline-jump.active {
+        border-color: rgba(239,123,67,0.24);
+        background: linear-gradient(180deg, rgba(255,246,239,0.96), rgba(255,250,245,0.98));
+        color: var(--accent-deep);
+      }
+      .outline-jump.active .outline-number,
+      .outline-jump.active .outline-copy strong {
+        color: var(--accent-deep);
+      }
+      .outline-jump.active .outline-copy small {
+        color: #b27044;
       }
       .outline-number {
         color: var(--amber);
@@ -1554,6 +3014,9 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
       .outline-copy strong,
       .outline-copy small {
         display: block;
+      }
+      .outline-copy strong {
+        font-weight: 700;
       }
       .outline-copy small {
         margin-top: 3px;
@@ -1588,25 +3051,32 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
       }
       .chapter[hidden] { display: none; }
       .chapter.active {
-        box-shadow: inset 5px 0 0 var(--accent);
+        box-shadow: none;
       }
       .chapter-kicker {
-        color: var(--accent);
+        color: var(--accent-deep);
         font-size: 13px;
-        font-weight: 800;
+        font-weight: 700;
+        letter-spacing: 0.04em;
         margin-bottom: 8px;
       }
       .chapter h2 {
         margin: 0 0 12px;
         font-family: var(--serif);
-        font-size: 42px;
-        line-height: 1.22;
+        font-size: 38px;
+        line-height: 1.24;
+        font-weight: 600;
+        letter-spacing: 0.01em;
       }
       .chapter-summary {
         margin: 0 0 20px;
         color: var(--muted);
-        font-size: 16px;
+        font-size: 15px;
         line-height: 1.8;
+        max-width: 36em;
+      }
+      .chapter > p {
+        max-width: 42em;
       }
       .chapter p,
       .learning-block p,
@@ -1615,46 +3085,157 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
         line-height: 1.85;
       }
       .learning-block {
-        margin: 22px 0;
-        border: 1px solid var(--line);
-        border-left-width: 4px;
-        border-radius: 16px;
-        padding: 18px 20px;
-        background: #fffefa;
+        margin: 34px 0 0;
+        border: 0;
+        border-top: 1px solid var(--line);
+        border-radius: 0;
+        padding: 22px 0 0;
+        background: transparent;
       }
       .learning-block h4 {
-        margin: 0 0 12px;
-        font-size: 16px;
+        margin: 0 0 14px;
+        font-family: var(--serif);
+        font-size: 24px;
+        line-height: 1.3;
+        font-weight: 600;
+        letter-spacing: 0.01em;
       }
-      .learning-block.retrieval { border-left-color: var(--accent); }
-      .learning-block.worked { border-left-color: var(--amber); background: #fbf6ec; }
+      .learning-block.retrieval,
+      .learning-block.worked,
+      .learning-block.visual {
+        border-top-color: rgba(239,123,67,0.2);
+      }
+      .learning-block.visual {
+        padding-top: 26px;
+      }
+      .visual-header {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 18px;
+      }
+      .visual-kicker {
+        color: var(--accent-deep);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+      }
+      .visual-header h4 {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.28;
+        font-weight: 600;
+      }
+      .visual-grid {
+        display: grid;
+        gap: 26px;
+      }
+      .visual-grid.has-image {
+        grid-template-columns: minmax(0, 1.28fr) minmax(240px, 320px);
+        align-items: start;
+      }
+      .visual-copy {
+        display: grid;
+        gap: 0;
+        border-left: 1px solid var(--line);
+        padding-left: 22px;
+      }
+      .visual-note {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        padding: 0 0 16px;
+      }
+      .visual-note + .visual-note {
+        border-top: 1px solid rgba(121, 151, 194, 0.22);
+        padding-top: 16px;
+      }
+      .visual-label {
+        color: var(--accent-deep);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        margin-bottom: 8px;
+      }
+      .visual-note p {
+        margin: 0;
+      }
+      .visual-takeaways {
+        margin: 0;
+        padding-left: 20px;
+      }
+      .visual-figure {
+        margin: 0;
+        border: 1px solid rgba(121, 151, 194, 0.2);
+        border-radius: 16px;
+        overflow: hidden;
+        background: rgba(255,255,255,0.98);
+        box-shadow: 0 18px 42px rgba(91, 126, 177, 0.08);
+      }
+      .visual-figure img {
+        display: block;
+        width: 100%;
+        height: auto;
+        background:
+          linear-gradient(90deg, rgba(95, 129, 181, 0.07) 0 1px, transparent 1px 100%),
+          linear-gradient(rgba(95, 129, 181, 0.07) 0 1px, transparent 1px 100%),
+          #f8fbff;
+        background-size: 24px 24px, 24px 24px, auto;
+      }
+      .visual-figure figcaption {
+        padding: 12px 14px 14px;
+        border-top: 1px solid rgba(121, 151, 194, 0.16);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
       .retrieval-item {
         border-top: 1px solid var(--line);
-        padding: 10px 0;
+        padding: 16px 0;
       }
       .retrieval-item:first-of-type { border-top: 0; }
       .retrieval-item summary {
         cursor: pointer;
-        font-weight: 750;
+        font-weight: 650;
         line-height: 1.6;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
       }
       .retrieval-item summary span {
         display: inline-flex;
-        margin-right: 8px;
         color: var(--accent);
         font-family: var(--mono);
-        font-size: 12px;
+        font-size: 11px;
+        min-width: 24px;
+        padding-top: 2px;
       }
       .retrieval-hint,
-      .retrieval-answer,
-      .worked-principle {
+      .retrieval-answer {
         color: var(--muted);
         line-height: 1.7;
         margin-top: 8px;
+        margin-left: 34px;
       }
-      .worked-item + .worked-item { margin-top: 14px; }
+      .worked-item {
+        padding: 18px 0;
+        border-top: 1px solid var(--line);
+      }
+      .worked-item:first-of-type {
+        padding-top: 6px;
+        border-top: 0;
+      }
       .worked-title {
-        font-weight: 800;
+        font-family: var(--serif);
+        font-size: 24px;
+        font-weight: 600;
+        line-height: 1.35;
+      }
+      .worked-principle {
+        color: var(--muted);
+        line-height: 1.7;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(239,123,67,0.16);
       }
       ol,
       ul {
@@ -1664,42 +3245,62 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
       }
       .chapter-evidence {
         display: block;
-        margin-top: 20px;
-        padding-top: 14px;
+        margin-top: 24px;
+        padding-top: 16px;
         border-top: 1px solid var(--line);
       }
       .chapter-evidence summary {
         cursor: pointer;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted);
       }
-      .chapter-evidence summary > span {
+      .evidence-summary-title {
+        color: var(--accent-deep);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      .evidence-summary-count {
         color: var(--muted);
         font-size: 12px;
-        font-weight: 800;
-        text-transform: uppercase;
-        margin-right: 8px;
       }
       .evidence-mini-list {
         display: grid;
-        gap: 8px;
-        margin-top: 10px;
+        gap: 0;
+        margin-top: 12px;
       }
       .evidence-mini-card {
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: rgba(255,255,255,0.72);
-        padding: 10px;
+        border: 0;
+        border-top: 1px solid rgba(121, 151, 194, 0.16);
+        border-radius: 0;
+        background: transparent;
+        padding: 12px 0;
+      }
+      .evidence-mini-card:first-child {
+        border-top: 0;
+        padding-top: 0;
       }
       .evidence-mini-card strong,
       .evidence-mini-card span {
         display: block;
       }
+      .evidence-mini-card strong {
+        font-weight: 650;
+        font-size: 14px;
+        line-height: 1.5;
+      }
       .evidence-mini-card span {
         color: var(--muted);
-        font-size: 12px;
-        margin-top: 3px;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.02em;
+        margin-top: 4px;
       }
       .evidence-mini-card p {
-        margin: 8px 0 0;
+        margin: 6px 0 0;
         color: var(--muted);
         font-size: 13px;
         line-height: 1.6;
@@ -1803,11 +3404,23 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
         .reader { height: auto; }
         .reader-scroll { height: auto; overflow: visible; }
         .chapter { min-height: auto; padding: 24px 20px 30px; }
+        .visual-grid.has-image { grid-template-columns: 1fr; }
+        .visual-copy {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+          padding-left: 0;
+          padding-top: 18px;
+        }
       }
       @media (max-width: 700px) {
         .reader-header { padding: 18px 20px 12px; }
         h1 { font-size: 30px; }
         .chapter h2 { font-size: 28px; }
+        .learning-block h4,
+        .visual-header h4,
+        .worked-title {
+          font-size: 24px;
+        }
         .stat-grid { grid-template-columns: 1fr; }
         .controls { display: grid; gap: 12px; }
         .chapter { padding: 30px 22px 38px; }
@@ -1820,11 +3433,8 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
         <p class="toc-title">书籍大纲</p>
         <p class="toc-subtitle">最多三层展开。先读章名，再进入心法、练习与示例。</p>
         <ol class="outline-list">
-          ${outline.length > 0 ? outline.map((node, index) => formatLearningOutlineNode(node, `${index + 1}`)).join('\n') : '<li><span class="outline-jump"><span class="outline-number">0</span><span class="outline-copy"><strong>证据包待写作</strong><small>正文完成后显示目录</small></span></span></li>'}
+          ${outline.length > 0 ? outline.map((node, index) => formatLearningOutlineNode(node, `${index + 1}`, initialChapterId)).join('\n') : '<li><span class="outline-jump"><span class="outline-number">0</span><span class="outline-copy"><strong>证据包待写作</strong><small>正文完成后显示目录</small></span></span></li>'}
         </ol>
-        <div class="stat-grid">
-          <div class="stat"><div class="stat-value">${chapters.length}</div><div class="stat-label">${isAwaitingAgent ? `待 Agent 写作 · ${sources.length} 份证据` : `章 · ${retrievalCount} 道检索 · ${workedCount} 个示例`}</div></div>
-        </div>
       </aside>
 
       <article class="reader">
@@ -1843,8 +3453,8 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
           </details>
           <div class="controls">
             <div class="button-row">
-              <button type="button" id="prevChapter"${chapters.length === 0 ? ' disabled' : ''}>上一章</button>
-              <button type="button" id="nextChapter"${chapters.length === 0 ? ' disabled' : ''}>下一章</button>
+              <button type="button" id="prevChapter" disabled>上一章</button>
+              <button type="button" id="nextChapter"${chapters.length <= 1 ? ' disabled' : ''}>下一章</button>
               <button type="button" id="smallerText">A-</button>
               <button type="button" id="largerText">A+</button>
             </div>
@@ -1853,7 +3463,7 @@ export function renderLearningArtifact({ packageMeta, content, evidenceManifest 
                 <span id="progressTitle">阅读进度</span>
                 <span id="progressText">${chapters.length > 0 ? `1/${chapters.length}` : '0/0'}</span>
               </div>
-              <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+              <div class="progress-track"><div class="progress-bar" id="progressBar" style="width: ${initialProgressPercent}%"></div></div>
             </div>
           </div>
         </header>
@@ -1965,9 +3575,80 @@ export async function openArtifactInBrowser(filePath) {
   child.unref();
 }
 
-export function defaultClarifyArtifactPath(ws) {
-  return cjoin(ws.workspaceRoot, 'engagements', 'active', 'clarify.html');
+export function canonicalReviewPath(ws, versionId) {
+  return cjoin(ws.workspaceRoot, 'reviews', `${slugify(versionId, 'review')}.html`);
 }
+
+function toRelativeHref(fromFilePath, targetFilePath) {
+  const relative = path.relative(path.dirname(fromFilePath), targetFilePath) || path.basename(targetFilePath);
+  return relative.split(path.sep).join('/');
+}
+
+export function renderReviewEntryHtml({ entryPath, reviewPath, title = 'OpenPrd Review' }) {
+  const href = escapeHtml(toRelativeHref(entryPath, reviewPath));
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="refresh" content="0; url=${href}" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --text: #111827;
+        --muted: #6b7280;
+        --line: rgba(17,24,39,0.12);
+        --accent: #2563eb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+        color: var(--text);
+        font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      }
+      .panel {
+        width: min(560px, calc(100vw - 32px));
+        padding: 28px 24px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--panel);
+        box-shadow: 0 18px 40px rgba(15,23,42,0.08);
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 24px;
+        line-height: 1.25;
+      }
+      p {
+        margin: 0 0 12px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      a {
+        color: var(--accent);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <h1>${escapeHtml(title)}</h1>
+      <p>这个入口只保留当前评审稿的固定路径，页面会自动跳转到最新的版本化评审文件。</p>
+      <p><a href="${href}">如果没有自动跳转，点这里打开评审面板</a></p>
+    </main>
+  </body>
+</html>`;
+}
+
 
 export function defaultReviewArtifactPath(ws) {
   return cjoin(ws.workspaceRoot, 'engagements', 'active', 'review.html');
@@ -1996,6 +3677,7 @@ export function learningPackagePaths(ws, packageId) {
   return {
     dir,
     readerHtml: cjoin(dir, 'reader.html'),
+    assetsDir: cjoin(dir, 'assets'),
     packageJson: cjoin(dir, 'learning-package.json'),
     contentJson: cjoin(dir, 'learning-content.json'),
     contentMarkdown: cjoin(dir, 'learning-content.md'),

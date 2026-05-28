@@ -430,7 +430,7 @@ export function buildArchitectureDiagramModel(snapshot) {
     generatedAt: timestamp(),
     locale: 'zh-CN',
     title: '架构评审',
-    subtitle: '在 freeze 前评审系统边界、依赖和交接形态。',
+    subtitle: '在需求定稿前评审系统边界、依赖和交接形态。',
     components: buildArchitectureComponents(snapshot),
     flows: [
       { source: 'users', target: 'experience', label: trimText(primaryFlows[0] ?? '用户进入产品流程', 40), type: 'standard' },
@@ -466,7 +466,7 @@ export function buildArchitectureDiagramModel(snapshot) {
         items: [
           `确认缺失假设: ${assumptions.join(' / ')}`,
           `开放问题: ${openQuestions.join(' / ')}`,
-          '在 freeze 前请用户确认模块、边界和缺失系统。',
+          '在需求定稿前请用户确认模块、边界和缺失系统。',
         ],
       },
     ],
@@ -478,7 +478,7 @@ export function buildArchitectureDiagramModel(snapshot) {
         items: [
           '确认这些模块是否反映澄清后的目标架构。',
           '标记缺失系统、边界或外部依赖。',
-          '在 freeze 前验证可靠性、合规和交接预期。',
+          '在需求定稿前验证可靠性、合规和交接预期。',
         ],
       },
     ],
@@ -623,7 +623,7 @@ export function buildProductFlowDiagramModel(snapshot) {
     generatedAt: timestamp(),
     locale: 'zh-CN',
     title: '产品流程评审',
-    subtitle: '在 freeze 前评审主要旅程、决策点和恢复路径。',
+    subtitle: '在需求定稿前评审主要旅程、决策点和恢复路径。',
     actors: primaryUsers,
     steps,
     transitions: [
@@ -657,7 +657,7 @@ export function buildProductFlowDiagramModel(snapshot) {
         items: [
           `目标: ${goals.join(' / ')}`,
           `成功指标: ${successMetrics.join(' / ')}`,
-          '在 freeze 前确认步骤、决策点和缺失的恢复路径。',
+          '在需求定稿前确认步骤、决策点和缺失的恢复路径。',
         ],
       },
     ],
@@ -669,7 +669,7 @@ export function buildProductFlowDiagramModel(snapshot) {
         items: [
           '确认用户旅程和系统响应顺序是否正确。',
           '标记缺失的决策点、失败路径和恢复步骤。',
-          '确认该流程是否足以支持 freeze。',
+          '确认该流程是否足以支持进入实现前确认。',
         ],
       },
     ],

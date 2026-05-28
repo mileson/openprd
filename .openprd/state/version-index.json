@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "versionNumber": 1,
+    "versionId": "v0001",
+    "createdAt": "2026-05-24 01:56:48",
+    "title": "Verify 边界与历史项目刷新",
+    "owner": "Codex",
+    "productType": "agent",
+    "templatePack": "agent",
+    "status": "synthesized",
+    "digest": "dc988d7a94c07d2a8070968a71ddacffb374eaeee12aa85eb93231e06dd7b077",
+    "workUnitId": "wu-20260524015648-6d33ded7",
+    "targetRoot": "/Users/chaojifeng/Projects/harness-engineer/openprd"
+  }
+]

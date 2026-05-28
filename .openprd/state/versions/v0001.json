@@ -1,0 +1,121 @@
+{
+  "versionNumber": 1,
+  "versionId": "v0001",
+  "createdAt": "2026-05-24 01:56:48",
+  "projectRoot": "/Users/chaojifeng/Projects/harness-engineer/openprd",
+  "workspaceRoot": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd",
+  "schema": "prd-core",
+  "templatePack": "agent",
+  "productType": "agent",
+  "title": "Verify 边界与历史项目刷新",
+  "owner": "Codex",
+  "status": "synthesized",
+  "sections": {
+    "meta": {
+      "title": "Verify 边界与历史项目刷新",
+      "owner": "Codex",
+      "status": "classified",
+      "version": "v0001",
+      "productType": "agent",
+      "date": "2026-05-24"
+    },
+    "problem": {
+      "problemStatement": "修复 OpenPrd verify 边界，避免外部参考目录和 reference discovery 污染主验证，并刷新历史项目生成物。",
+      "whyNow": "历史项目的 verify 正在被参考目录噪音阻塞，需要尽快恢复 run/verify 的可信度。",
+      "evidence": []
+    },
+    "users": {
+      "primaryUsers": [
+        "维护 OpenPrd 的 Agent 工程师",
+        "使用 OpenPrd 管理历史项目的项目维护者"
+      ],
+      "secondaryUsers": [],
+      "stakeholders": []
+    },
+    "goals": {
+      "goals": [
+        "让主验证只关注当前项目源码和当前实现门禁",
+        "让历史项目刷新后默认获得更干净的 verify 体验"
+      ],
+      "successMetrics": [
+        "存在 reference discovery 时 openprd run . --context 不再默认展示它",
+        "仓库内常见外部参考目录在未人工归类前不再直接把 standards verify 阻塞成大面积说明书噪音",
+        "openprd fleet 更新后历史项目生成物包含这次修复"
+      ],
+      "acceptanceGoals": [
+        "run/verify 的默认结果不再把 reference discovery 或明显外部参考目录当成主门禁噪音",
+        "历史项目刷新后生成物能承接这次边界修复",
+        "对需要人工确认的 external reference 仍保留显式 classify-external 路径"
+      ]
+    },
+    "scope": {
+      "inScope": [
+        "调整 run context 与 run verify 对 discovery 的纳入规则",
+        "调整 standards/source-manual 默认对明显外部参考目录的处理策略",
+        "为历史项目执行 openprd fleet 更新与必要回填"
+      ],
+      "outOfScope": [
+        "不自动替每个历史项目猜测所有业务目录的 externalReferences 清单",
+        "不修改历史项目的业务代码或需求内容",
+        "不把人工确认 external reference 的能力删除"
+      ]
+    },
+    "scenarios": {
+      "primaryFlows": [
+        "维护者运行 openprd run . --context 或 openprd run . --verify 时，只看到当前项目主验证状态；仓库中存在 research、toolkit-sources、marketplace-candidates 等参考目录时，默认不会被当成本项目源码说明书缺口直接淹没结果；维护者可以继续按需显式 classify-external。"
+      ],
+      "edgeCases": [],
+      "failureModes": [
+        "reference discovery 仍然混入 run context 或 run verify",
+        "standards verify 继续被 research 或 toolkit-sources 之类参考目录的说明书缺口淹没",
+        "fleet 更新后历史项目仍保留旧的 verify 噪音行为"
+      ]
+    },
+    "requirements": {
+      "functional": [],
+      "nonFunctional": [],
+      "businessRules": []
+    },
+    "businessGuardrails": {
+      "costDrivers": [],
+      "usageLimits": [],
+      "abusePrevention": [],
+      "monitoringSignals": [],
+      "alertThresholds": [],
+      "stopLossActions": []
+    },
+    "constraints": {
+      "technical": [],
+      "compliance": [],
+      "dependencies": []
+    },
+    "risks": {
+      "assumptions": [],
+      "risks": [],
+      "openQuestions": [
+        "本次只收敛默认边界，不自动猜测每个历史项目全部 external reference 清单；如果某些项目还需要更细的目录级归类，仍由维护者显式确认和补充"
+      ]
+    },
+    "handoff": {
+      "owner": "Codex",
+      "nextStep": "评审已生成的 PRD，并准备交接。",
+      "targetSystem": "OpenSpec"
+    },
+    "typeSpecific": {
+      "kind": "agent",
+      "title": "Agent 专项",
+      "fields": {
+        "humanAgentContract": "Agent 可以识别并提示 reference discovery 与外部参考目录边界，但把目录正式归类为 external reference 仍需要人确认；批量刷新历史项目可以自动执行。",
+        "autonomyBoundary": "Agent 可以修改 OpenPrd CLI、补测试、更新文档、运行 fleet dry-run 与 update-openprd/backfill-work-units，并验证结果；不得静默把任意历史目录永久归类为 external reference。",
+        "toolBoundary": "使用本地代码检索、OpenPrd CLI、自带测试、fleet 更新、doctor 与 verify 完成实现和验证；本次不需要外部第三方文档调研。",
+        "stateModel": "需要保留三类状态：当前项目源码验证状态、reference discovery 状态、standards external reference 显式配置；主 run/verify 只默认消费第一类，其他两类按边界显式暴露。",
+        "evalPlan": "通过针对 run-harness、standards 和 fleet 的单测与集成验证评估；再用历史项目 dry-run 与 update-openprd/backfill-work-units 验证刷新结果。"
+      }
+    }
+  },
+  "reviewPresentation": null,
+  "workUnitId": "wu-20260524015648-6d33ded7",
+  "targetRoot": "/Users/chaojifeng/Projects/harness-engineer/openprd",
+  "content": "# Verify 边界与历史项目刷新\n> 语言规则：除 PRD、OpenPrd、OpenSpec、API、SDK、CLI、TypeScript、JSON、HTTP、WebSocket、字段 key、命令名、产品名和协议名等必要专有名词外，用户可见内容应使用简体中文。\n- 版本: v0001\n- 负责人: Codex\n- 产品类型: agent\n- 模板包: agent\n- 状态: synthesized\n- 生成时间: 2026-05-24 01:56:48\n## 元信息\n\n- 标题: Verify 边界与历史项目刷新\n- 负责人: Codex\n- 状态: classified\n- 版本: v0001\n- 产品类型: agent\n- 日期: 2026-05-24\n\n## 问题\n\n- 问题陈述: 修复 OpenPrd verify 边界，避免外部参考目录和 reference discovery 污染主验证，并刷新历史项目生成物。\n- 为什么是现在: 历史项目的 verify 正在被参考目录噪音阻塞，需要尽快恢复 run/verify 的可信度。\n- 证据:\n  - 待补充\n\n## 用户与相关方\n\n- 主要用户:\n  - 维护 OpenPrd 的 Agent 工程师\n  - 使用 OpenPrd 管理历史项目的项目维护者\n- 次要用户:\n  - 待补充\n- 相关方:\n  - 待补充\n\n## 目标与成功标准\n\n- 目标:\n  - 让主验证只关注当前项目源码和当前实现门禁\n  - 让历史项目刷新后默认获得更干净的 verify 体验\n- 成功指标:\n  - 存在 reference discovery 时 openprd run . --context 不再默认展示它\n  - 仓库内常见外部参考目录在未人工归类前不再直接把 standards verify 阻塞成大面积说明书噪音\n  - openprd fleet 更新后历史项目生成物包含这次修复\n- 验收目标:\n  - run/verify 的默认结果不再把 reference discovery 或明显外部参考目录当成主门禁噪音\n  - 历史项目刷新后生成物能承接这次边界修复\n  - 对需要人工确认的 external reference 仍保留显式 classify-external 路径\n\n## 范围与非目标\n\n- 范围内:\n  - 调整 run context 与 run verify 对 discovery 的纳入规则\n  - 调整 standards/source-manual 默认对明显外部参考目录的处理策略\n  - 为历史项目执行 openprd fleet 更新与必要回填\n- 范围外:\n  - 不自动替每个历史项目猜测所有业务目录的 externalReferences 清单\n  - 不修改历史项目的业务代码或需求内容\n  - 不把人工确认 external reference 的能力删除\n\n## 场景与流程\n\n- 主流程:\n  - 维护者运行 openprd run . --context 或 openprd run . --verify 时，只看到当前项目主验证状态；仓库中存在 research、toolkit-sources、marketplace-candidates 等参考目录时，默认不会被当成本项目源码说明书缺口直接淹没结果；维护者可以继续按需显式 classify-external。\n- 边界情况:\n  - 待补充\n- 失败模式:\n  - reference discovery 仍然混入 run context 或 run verify\n  - standards verify 继续被 research 或 toolkit-sources 之类参考目录的说明书缺口淹没\n  - fleet 更新后历史项目仍保留旧的 verify 噪音行为\n\n## 可视化图表\n\n### 产品流程\n\n```mermaid\nflowchart LR\n  entry[\"入口触发<br/>维护者运行 openprd run . --context 或 openprd run . --verify 时，只看到当前项…\"]\n  experience[\"产品内步骤<br/>修复 OpenPrd verify 边界，避免外部参考目录和 reference discovery 污染主验证，并刷新历史项…\"]\n  decision{\"决策点<br/>边界情况仍需澄清\"}\n  success([\"成功结果<br/>存在 reference discovery 时 openprd run . --context 不再默认展示它\"])\n  failure[[\"失败与恢复<br/>reference discovery 仍然混入 run context 或 run verify\"]]\n  entry -->|\"维护者运行 openprd run . --context 或 openprd r…\"| experience\n  experience -->|\"系统处理请求\"| decision\n  decision -->|\"让主验证只关注当前项目源码和当前实现门禁\"| success\n  decision -.->|\"reference discovery 仍然混入 run context 或 ru…\"| failure\n```\n\n### 架构\n\n```mermaid\nflowchart LR\n  users[\"主要用户<br/>维护 OpenPrd 的 Agent 工程师 · 使用 OpenPrd 管理历史项目的项目维护者\"]\n  subgraph solution[\"方案边界\"]\n    experience[\"Agent 运行层<br/>维护者运行 openprd run . --context 或 openprd run . --verify 时，只看到当前项…\"]\n    core[\"核心产品逻辑<br/>修复 OpenPrd verify 边界，避免外部参考目录和 reference discovery 污染主验证，并刷新历史项…\"]\n    integrations[\"依赖与集成<br/>暂无外部依赖记录\"]\n    governance[[\"约束与可靠性<br/>暂无明确约束\"]]\n    delivery[\"验证与交接<br/>存在 reference discovery 时 openprd run . --context 不再默认展示它 · 仓库内常…\"]\n  end\n  users -->|\"维护者运行 openprd run . --context 或 openprd…\"| experience\n  experience -->|\"产品动作与编排\"| core\n  core -->|\"依赖与外部服务\"| integrations\n  core -.->|\"策略、可靠性与合规\"| governance\n  core -->|\"成功标准与交接\"| delivery\n  integrations -->|\"运营就绪\"| delivery\n  governance -.->|\"评审与确认\"| delivery\n```\n\n## 需求\n\n- 功能需求:\n  - 待补充\n- 非功能需求:\n  - 待补充\n- 业务规则:\n  - 待补充\n\n## 业务护栏\n\n- 成本来源:\n  - 待补充\n- 额度与限制:\n  - 待补充\n- 滥用防护:\n  - 待补充\n- 监控信号:\n  - 待补充\n- 报警阈值:\n  - 待补充\n- 止损动作:\n  - 待补充\n\n## 约束、依赖与风险\n\n- 技术约束:\n  - 待补充\n- 合规要求:\n  - 待补充\n- 依赖:\n  - 待补充\n- 假设:\n  - 待补充\n- 风险:\n  - 待补充\n- 开放问题:\n  - 本次只收敛默认边界，不自动猜测每个历史项目全部 external reference 清单；如果某些项目还需要更细的目录级归类，仍由维护者显式确认和补充\n\n## 类型专项模块\n\n- 类型: Agent 专项\n- humanAgentContract: Agent 可以识别并提示 reference discovery 与外部参考目录边界，但把目录正式归类为 external reference 仍需要人确认；批量刷新历史项目可以自动执行。\n- autonomyBoundary: Agent 可以修改 OpenPrd CLI、补测试、更新文档、运行 fleet dry-run 与 update-openprd/backfill-work-units，并验证结果；不得静默把任意历史目录永久归类为 external reference。\n- toolBoundary: 使用本地代码检索、OpenPrd CLI、自带测试、fleet 更新、doctor 与 verify 完成实现和验证；本次不需要外部第三方文档调研。\n- stateModel: 需要保留三类状态：当前项目源码验证状态、reference discovery 状态、standards external reference 显式配置；主 run/verify 只默认消费第一类，其他两类按边界显式暴露。\n- evalPlan: 通过针对 run-harness、standards 和 fleet 的单测与集成验证评估；再用历史项目 dry-run 与 update-openprd/backfill-work-units 验证刷新结果。\n\n## 交接\n\n- 负责人: Codex\n- 下一步: 评审已生成的 PRD，并准备交接。\n- 目标系统: OpenSpec\n",
+  "digest": "dc988d7a94c07d2a8070968a71ddacffb374eaeee12aa85eb93231e06dd7b077"
+}

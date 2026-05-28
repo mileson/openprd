@@ -34,7 +34,7 @@ This avoids one oversized skill and keeps trigger logic precise.
 ### Benchmark Router
 
 - best-practice and benchmark trigger recognition
-- source selection for OpenPrd, CLI, skills, long-running agents, harnesses, context engineering, and prompt engineering
+- source selection for OpenPrd, CLI, skills, long-running agents, harnesses, context engineering, prompt engineering, and icon resources
 - DeepWiki / Context7 / official-source routing before design conclusions
 - mapping benchmark findings back to OpenPrd generated skills, agent contracts, hooks, CLI behavior, or tests
 

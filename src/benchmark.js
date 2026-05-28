@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { cjoin, exists, readText, readYaml, writeText, writeYaml } from './fs-utils.js';
 import { timestamp } from './time.js';
 
@@ -167,11 +168,18 @@ function inferScenarios(text) {
   if (/(harness|agent|long-running|workflow loop|managed agents)/i.test(normalized)) {
     add('agent-harness');
   }
+  if (/(code review|pr review|pull request review|review lane|reviewer agreement|false positive|hallucination filter|merge recommendation|critical\/high\/medium\/low|deep review|independent reviewers|交叉验证|误报过滤|合并建议|深度代码审查|并行审查|审查分级|独立审查|reviewer agreement)/i.test(normalized)) {
+    add('pr-review-harness');
+    add('agent-harness');
+  }
   if (/(context engineering|context window|context registry|retrieval)/i.test(normalized)) {
     add('context-engineering');
   }
   if (/(prompt engineering|prompting|system prompt|prompt guidance)/i.test(normalized)) {
     add('prompt-engineering');
+  }
+  if (/(icon|icons|iconfont|lucide|tabler|react icons|phosphor|lobehub|techicons|thiings|图标|图标站|图标库|视觉资产)/i.test(normalized)) {
+    add('icon-resources');
   }
 
   return scenarios;
@@ -192,6 +200,9 @@ function inferTriggerWhen(scenarios) {
     if (scenario === 'agent-harness') {
       lines.push('设计 Agent harness、长程任务、状态持久化、验证门禁或人工接管');
     }
+    if (scenario === 'pr-review-harness') {
+      lines.push('设计 merge 前高风险复核、独立 reviewer 交叉验证、误报过滤、reviewer agreement 或 merge recommendation');
+    }
     if (scenario === 'context-engineering') {
       lines.push('设计上下文常驻、按需检索、registry/索引或证据优先级');
     }
@@ -200,6 +211,9 @@ function inferTriggerWhen(scenarios) {
     }
     if (scenario === 'developer-experience') {
       lines.push('设计开发者体验、命令组合方式、输出结构或错误恢复路径');
+    }
+    if (scenario === 'icon-resources') {
+      lines.push('选择 UI、AI、技术栈、3D 或功能图标资源站，或选择 Lucide、Tabler、React Icons 等实现库');
     }
   }
   return dedupe(lines).slice(0, 3);
@@ -216,8 +230,16 @@ function inferNotFor(scenarios) {
   if (!scenarios.includes('agent-harness')) {
     exclusions.push('单次脚本报错或纯环境权限问题');
   }
+  if (!scenarios.includes('pr-review-harness')) {
+    exclusions.push('与 PR 审查 lane 无关的普通实现任务');
+  } else {
+    exclusions.push('默认给每个低风险 PR 拉起多 reviewer 并行审查');
+  }
   if (!scenarios.includes('prompt-engineering')) {
     exclusions.push('不涉及提示词或上下文工程的纯实现细节');
+  }
+  if (scenarios.includes('icon-resources')) {
+    exclusions.push('不涉及图标、视觉资产或图标实现库选型的任务');
   }
   return dedupe(exclusions).slice(0, 3);
 }
@@ -578,35 +600,107 @@ export async function approveBenchmarkWorkspace(projectRoot, options = {}) {
   };
 }
 
-async function probeRemoteSource(urlString) {
+async function fetchWithTimeout(urlString, method, timeoutMs = 4000) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 1500);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const headResponse = await fetch(urlString, {
-      method: 'HEAD',
+    return await fetch(urlString, {
+      method,
       redirect: 'follow',
       signal: controller.signal,
     });
-    if (headResponse.ok || headResponse.status === 405) {
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isReachableProbeStatus(status) {
+  return (status >= 200 && status < 400) || status === 401 || status === 403 || status === 405;
+}
+
+async function probeRemoteSourceWithCurl(urlString, timeoutMs = 6000) {
+  return await new Promise((resolve) => {
+    const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+    const child = spawn(
+      'curl',
+      [
+        '-L',
+        '-o',
+        '/dev/null',
+        '-s',
+        '-w',
+        '%{http_code}',
+        '--max-time',
+        String(timeoutSeconds),
+        urlString,
+      ],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    const timeout = setTimeout(() => {
+      child.kill('SIGKILL');
+      settle({ ok: false, reason: 'curl probe timeout' });
+    }, timeoutMs + 250);
+
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('error', (error) => {
+      clearTimeout(timeout);
+      settle({ ok: false, reason: error instanceof Error ? error.message : String(error) });
+    });
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+      const status = Number.parseInt(stdout.trim(), 10);
+      if (Number.isInteger(status) && isReachableProbeStatus(status)) {
+        settle({ ok: true, status, via: 'curl' });
+        return;
+      }
+      if (Number.isInteger(status) && status > 0) {
+        settle({ ok: false, status, reason: `HTTP ${status}` });
+        return;
+      }
+      const detail = stderr.trim() || `curl exit ${code ?? 'unknown'}`;
+      settle({ ok: false, reason: detail });
+    });
+  });
+}
+
+async function probeRemoteSource(urlString) {
+  try {
+    const headResponse = await fetchWithTimeout(urlString, 'HEAD');
+    if (isReachableProbeStatus(headResponse.status)) {
       return { ok: true, status: headResponse.status };
     }
     return { ok: false, status: headResponse.status, reason: `HTTP ${headResponse.status}` };
   } catch {
     try {
-      const getResponse = await fetch(urlString, {
-        method: 'GET',
-        redirect: 'follow',
-        signal: controller.signal,
-      });
-      if (getResponse.ok) {
+      const getResponse = await fetchWithTimeout(urlString, 'GET', 5000);
+      if (isReachableProbeStatus(getResponse.status)) {
         return { ok: true, status: getResponse.status };
       }
       return { ok: false, status: getResponse.status, reason: `HTTP ${getResponse.status}` };
     } catch (error) {
-      return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+      const fallback = await probeRemoteSourceWithCurl(urlString);
+      if (fallback.ok) {
+        return fallback;
+      }
+      return { ok: false, reason: fallback.reason ?? (error instanceof Error ? error.message : String(error)) };
     }
-  } finally {
-    clearTimeout(timeout);
   }
 }
 

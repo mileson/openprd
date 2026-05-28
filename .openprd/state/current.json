@@ -1,25 +1,169 @@
 {
   "version": 1,
-  "status": "seed",
+  "status": "synthesized",
   "activeEngagement": "active",
-  "prdVersion": 0,
-  "productType": null,
-  "templatePack": "base",
-  "projectRoot": "/Users/mileson/Workspace/AI工作室/OpenPrd",
-  "workspaceRoot": "/Users/mileson/Workspace/AI工作室/OpenPrd/.openprd",
+  "prdVersion": 1,
+  "productType": "agent",
+  "templatePack": "agent",
+  "projectRoot": ".",
+  "workspaceRoot": ".openprd",
   "createdAt": "2026-04-12T00:00:00.000Z",
   "learningReview": {
     "enabled": true,
     "defaultGenre": "internet-product",
     "autoOpen": true,
-    "sourceScope": "workspace",
-    "lastPackageId": "lr-20260513-171625-空-reader-复核",
-    "lastGeneratedAt": "2026-05-13 17:16:25",
+    "sourceScope": "docs",
+    "lastPackageId": "lr-20260528-223815-openprd-典型协作场景",
+    "lastGeneratedAt": "2026-05-28 22:38:15",
     "lastGenreId": "internet-product",
-    "lastTopic": "空 reader 复核",
+    "lastTopic": "OpenPrd 典型协作场景",
     "lastTrigger": "manual",
-    "lastOpened": false,
-    "lastStyleId": "default",
-    "lastAuthoringStatus": "awaiting-agent-content"
-  }
+    "lastOpened": true,
+    "lastStyleId": "teaching-brief",
+    "lastAuthoringStatus": "agent-authored"
+  },
+  "captureMeta": {
+    "meta.productType": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:55:15"
+    },
+    "problem.problemStatement": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:48"
+    },
+    "problem.whyNow": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:48"
+    },
+    "users.primaryUsers": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:55:27"
+    },
+    "goals.goals": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:55:31"
+    },
+    "goals.successMetrics": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:55:36"
+    },
+    "scope.inScope": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:55:40"
+    },
+    "scope.outOfScope": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:55:44"
+    },
+    "scenarios.primaryFlows": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:55:49"
+    },
+    "goals.acceptanceGoals": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:11"
+    },
+    "scenarios.failureModes": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:15"
+    },
+    "risks.openQuestions": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:20"
+    },
+    "typeSpecific.fields.humanAgentContract": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:24"
+    },
+    "typeSpecific.fields.autonomyBoundary": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:28"
+    },
+    "typeSpecific.fields.toolBoundary": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:32"
+    },
+    "typeSpecific.fields.stateModel": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:37"
+    },
+    "typeSpecific.fields.evalPlan": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:41"
+    },
+    "meta.title": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:48"
+    },
+    "meta.owner": {
+      "source": "user-confirmed",
+      "capturedAt": "2026-05-24 01:56:48"
+    }
+  },
+  "classifiedAt": "2026-05-24 01:55:15",
+  "problemStatement": "修复 OpenPrd 的 verify 边界，让 run/verify 和 standards/quality 默认不再把仓库中的外部参考目录当作当前项目源码或 reference discovery 结果混入主验证。",
+  "lastCapturedAt": "2026-05-24 01:56:41",
+  "whyNow": "现有行为会让历史项目的 verify 被外部参考目录噪音阻塞，也会把 reference discovery 直接带进 run 上下文，影响可用性和对门禁结果的信任。",
+  "primaryUsers": [
+    "维护 OpenPrd 的 Agent 工程师",
+    "使用 OpenPrd 管理历史项目的项目维护者"
+  ],
+  "goals": [
+    "让主验证只关注当前项目源码和当前实现门禁",
+    "让历史项目刷新后默认获得更干净的 verify 体验"
+  ],
+  "successMetrics": [
+    "存在 reference discovery 时 openprd run . --context 不再默认展示它",
+    "仓库内常见外部参考目录在未人工归类前不再直接把 standards verify 阻塞成大面积说明书噪音",
+    "openprd fleet 更新后历史项目生成物包含这次修复"
+  ],
+  "inScope": [
+    "调整 run context 与 run verify 对 discovery 的纳入规则",
+    "调整 standards/source-manual 默认对明显外部参考目录的处理策略",
+    "为历史项目执行 openprd fleet 更新与必要回填"
+  ],
+  "outOfScope": [
+    "不自动替每个历史项目猜测所有业务目录的 externalReferences 清单",
+    "不修改历史项目的业务代码或需求内容",
+    "不把人工确认 external reference 的能力删除"
+  ],
+  "primaryFlows": [
+    "维护者运行 openprd run . --context 或 openprd run . --verify 时，只看到当前项目主验证状态；仓库中存在 research、toolkit-sources、marketplace-candidates 等参考目录时，默认不会被当成本项目源码说明书缺口直接淹没结果；维护者可以继续按需显式 classify-external。"
+  ],
+  "acceptanceGoals": [
+    "run/verify 的默认结果不再把 reference discovery 或明显外部参考目录当成主门禁噪音",
+    "历史项目刷新后生成物能承接这次边界修复",
+    "对需要人工确认的 external reference 仍保留显式 classify-external 路径"
+  ],
+  "failureModes": [
+    "reference discovery 仍然混入 run context 或 run verify",
+    "standards verify 继续被 research 或 toolkit-sources 之类参考目录的说明书缺口淹没",
+    "fleet 更新后历史项目仍保留旧的 verify 噪音行为"
+  ],
+  "openQuestions": [
+    "本次只收敛默认边界，不自动猜测每个历史项目全部 external reference 清单；如果某些项目还需要更细的目录级归类，仍由维护者显式确认和补充"
+  ],
+  "humanAgentContract": "Agent 可以识别并提示 reference discovery 与外部参考目录边界，但把目录正式归类为 external reference 仍需要人确认；批量刷新历史项目可以自动执行。",
+  "autonomyBoundary": "Agent 可以修改 OpenPrd CLI、补测试、更新文档、运行 fleet dry-run 与 update-openprd/backfill-work-units，并验证结果；不得静默把任意历史目录永久归类为 external reference。",
+  "toolBoundary": "使用本地代码检索、OpenPrd CLI、自带测试、fleet 更新、doctor 与 verify 完成实现和验证；本次不需要外部第三方文档调研。",
+  "stateModel": "需要保留三类状态：当前项目源码验证状态、reference discovery 状态、standards external reference 显式配置；主 run/verify 只默认消费第一类，其他两类按边界显式暴露。",
+  "evalPlan": "通过针对 run-harness、standards 和 fleet 的单测与集成验证评估；再用历史项目 dry-run 与 update-openprd/backfill-work-units 验证刷新结果。",
+  "latestVersionId": "v0001",
+  "latestVersionDigest": "dc988d7a94c07d2a8070968a71ddacffb374eaeee12aa85eb93231e06dd7b077",
+  "activeWorkUnitId": "wu-20260524015648-6d33ded7",
+  "targetRoot": "/Users/chaojifeng/Projects/harness-engineer/openprd",
+  "reviewStatus": {
+    "versionId": "v0001",
+    "workUnitId": "wu-20260524015648-6d33ded7",
+    "status": "confirmed",
+    "artifact": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/review.html",
+    "stableArtifact": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/reviews/v0001.html",
+    "updatedAt": "2026-05-24 01:56:54",
+    "notes": "用户已明确要求直接修复 verify 边界并刷新历史项目。",
+    "reviewPath": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/reviews/v0001.html",
+    "entryPath": "/Users/chaojifeng/Projects/harness-engineer/openprd/.openprd/engagements/active/review.html"
+  },
+  "title": "Verify 边界与历史项目刷新",
+  "owner": "Codex",
+  "synthesizedAt": "2026-05-24 01:56:48"
 }

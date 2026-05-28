@@ -24,6 +24,7 @@ The Agent may rewrite:
 - outline labels
 - chapter titles
 - chapter summaries
+- chapter `visualExplainer`
 - paragraphs
 - retrieval prompts
 - worked-example framing
@@ -55,7 +56,7 @@ Each style pack should define:
 3. Load the selected prompt pack by `genre.style`.
 4. Use `titlePrompt` to create a book-like title and subtitle.
 5. Use `outlinePrompt` to build a three-level outline at most, but keep retrieval questions in the body rather than the outline.
-6. Use `chapterPrompt` and `proseRewritePrompt` to migrate each chapter into the style.
+6. Use `chapterPrompt` and `proseRewritePrompt` to migrate each chapter into the style, and create `visualExplainer` cards when they help non-technical readers.
 7. Use `evidenceBindingPrompt` to preserve every source anchor.
 8. Use `qualityReviewPrompt` to check style fit and fact drift.
 9. Render `reader.html` only after the quality checks pass.
@@ -65,5 +66,6 @@ Each style pack should define:
 - The result should feel like a readable book, not a decorated report.
 - The outline should support scanning before reading.
 - The style should be visible in title, outline, rhythm, and paragraph movement.
+- If visual explainers are used, they should reduce understanding cost instead of restating the chapter mechanically.
 - Every important claim should still point back to evidence.
 - Evidence should be available but should not dominate the reading surface.

@@ -10,7 +10,12 @@ node_modules/
 .codex/
 .claude/
 .cursor/
+.openprd/artifacts/
 .openprd/harness/
+.openprd/growth/preferences.local.json
+.openprd/learning/
+.openprd/quality/evidence/
+.openprd/quality/reports/
 CLAUDE.md
 
 # local demo artifacts

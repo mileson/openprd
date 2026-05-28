@@ -3,14 +3,17 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { defaultRegressionArtifactPath, renderRegressionArtifact, writeHtmlArtifact } from './html-artifacts.js';
+import { OPENPRD_HARNESS_TURN_STATE, recordKnowledgeReviewSignal, reviewKnowledgeWorkspace } from './knowledge.js';
 import { generateLearningReviewWorkspace } from './learning-review.js';
 import { listOpenSpecTaskWorkspace, advanceOpenSpecTaskWorkspace, verifyOpenSpecTaskWorkspace } from './openspec/execute.js';
 import { validateOpenSpecChangeWorkspace } from './openspec/change-validate.js';
+import { verifyQualityWorkspace } from './quality.js';
 import { timestamp } from './time.js';
 
 const LOOP_FEATURE_LIST = path.join('.openprd', 'harness', 'feature-list.json');
 const LOOP_STATE = path.join('.openprd', 'harness', 'loop-state.json');
 const LOOP_PROGRESS = path.join('.openprd', 'harness', 'progress.md');
+const LOOP_FAILED_APPROACHES = path.join('.openprd', 'harness', 'failed-approaches.md');
 const LOOP_SESSIONS = path.join('.openprd', 'harness', 'agent-sessions.jsonl');
 const LOOP_BOOTSTRAP = path.join('.openprd', 'harness', 'bootstrap.sh');
 const LOOP_PROMPTS_DIR = path.join('.openprd', 'harness', 'loop-prompts');
@@ -62,6 +65,43 @@ function normalizeAgent(agent = 'codex') {
   return agent;
 }
 
+function slugifyLoopToken(value, fallback = 'task') {
+  const slug = String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return slug || fallback;
+}
+
+function buildTaskHandle(changeId, task) {
+  return [
+    slugifyLoopToken(changeId ?? 'change', 'change'),
+    String(task.id ?? 'task').trim() || 'task',
+    slugifyLoopToken(task.title ?? task.id ?? 'task', 'task'),
+  ].join(':');
+}
+
+function normalizeTaskReference(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase();
+}
+
+function taskReferenceCandidates(task) {
+  return new Set([
+    task.id,
+    task.title,
+    task.taskHandle,
+    task.taskSlug,
+    task.changeId && task.id ? `${task.changeId}:${task.id}` : null,
+    task.id && task.taskSlug ? `${task.id}:${task.taskSlug}` : null,
+  ].filter(Boolean).map((item) => normalizeTaskReference(item)));
+}
+
 function bootstrapScript() {
   return [
     '#!/usr/bin/env bash',
@@ -89,6 +129,12 @@ async function ensureLoopFiles(projectRoot) {
   if (!(await exists(harnessPath(projectRoot, LOOP_PROGRESS)))) {
     await writeText(harnessPath(projectRoot, LOOP_PROGRESS), '# OpenPrd Loop Progress\n\n');
   }
+  if (!(await exists(harnessPath(projectRoot, LOOP_FAILED_APPROACHES)))) {
+    await writeText(
+      harnessPath(projectRoot, LOOP_FAILED_APPROACHES),
+      '# OpenPrd Failed Approaches\n\nRecord dead ends, mismatches, and why they were rejected so the next session does not repeat them.\n',
+    );
+  }
   if (!(await exists(harnessPath(projectRoot, LOOP_SESSIONS)))) {
     await writeText(harnessPath(projectRoot, LOOP_SESSIONS), '');
   }
@@ -97,6 +143,8 @@ async function ensureLoopFiles(projectRoot) {
       version: 1,
       active: true,
       currentTaskId: null,
+      currentTaskHandle: null,
+      currentTaskTitle: null,
       completedTaskIds: [],
       lastAgent: null,
       lastSessionAt: null,
@@ -113,23 +161,72 @@ function taskDeps(task) {
     .filter(Boolean);
 }
 
+function combinedLoopEvidenceText(options = {}) {
+  return [options.notes, options.evidence]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function validateLoopFinishEvidence(task, options = {}) {
+  const evidenceText = combinedLoopEvidenceText(options);
+  if (!task.oracle) {
+    return { ok: true, evidenceText };
+  }
+  if (evidenceText) {
+    return { ok: true, evidenceText };
+  }
+  return {
+    ok: false,
+    evidenceText,
+    error: `任务 ${task.id} 定义了 oracle/reference 对照基准；loop finish 时必须通过 --notes 或 --evidence 记录本轮对照结果。`,
+  };
+}
+
+function renderFailedApproachEntry({ task, stage, reason, verification, notes, evidence }) {
+  return [
+    `\n## ${timestamp()} ${task.id} ${task.title}`,
+    '',
+    `- 阶段: ${stage}`,
+    task.oracle ? `- 对照基准: ${task.oracle}` : null,
+    verification?.command ? `- 自测命令: ${verification.command}` : null,
+    `- 原因: ${reason}`,
+    notes ? `- 备注: ${notes}` : null,
+    evidence ? `- 补充证据: ${evidence}` : null,
+    verification?.stdout ? `- 输出摘要: ${trimOutput(verification.stdout).replace(/\s+/g, ' ')}` : null,
+    verification?.stderr ? `- 错误摘要: ${trimOutput(verification.stderr).replace(/\s+/g, ' ')}` : null,
+    '',
+  ].filter(Boolean).join('\n');
+}
+
+async function appendFailedApproach(projectRoot, payload) {
+  await appendText(harnessPath(projectRoot, LOOP_FAILED_APPROACHES), renderFailedApproachEntry(payload));
+}
+
 function featureTaskFromOpenSpecTask(task, changeId) {
   const deps = taskDeps(task);
+  const taskSlug = slugifyLoopToken(task.title ?? task.id ?? 'task', 'task');
   return {
     id: task.id,
     title: task.title,
+    taskSlug,
+    taskHandle: buildTaskHandle(changeId, task),
     status: task.checked ? 'done' : 'pending',
     changeId,
     sourceTaskId: task.id,
     sourcePath: task.relativePath,
     sourceLine: task.lineNumber,
     deps,
+    type: task.metadata?.type ?? task.metadata?.category ?? task.metadata?.kind ?? null,
     done: task.metadata?.done ?? null,
     verify: task.metadata?.verify ?? null,
+    oracle: task.metadata?.oracle ?? null,
     commitMessage: `Complete ${task.id}: ${task.title}`,
     sessionScope: [
       '只处理这个任务，不要在同一会话继续下一个任务。',
       '完成代码后必须先自测，失败就修复并重新自测。',
+      '代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 `openprd dev-check . <file...>`；若出现 attention 或 warning，说明局部职责、影响范围，以及是否已拆分或为什么窄修暂不拆。',
       '涉及前端界面时，在 Codex 客户端优先使用 Computer Use；在 Codex CLI 或 Claude Code 中优先使用 Playwright、MCP 或等价浏览器自动化。',
       '纯后端、脚本或库任务使用最贴近项目的脚本、单测、集成测试或命令行验证。',
       '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面；检查命令入口、参数、输出契约、`help`/`doctor`/`dry-run`/`status` 与接口协议、返回结构、身份边界是否受影响，并同步更新 `docs/basic/backend-structure.md`；若某一面不适用也要明确写原因。',
@@ -148,6 +245,7 @@ function mergeExistingTaskState(existing, nextTask) {
     ...nextTask,
     status: nextTask.status === 'done' ? 'done' : preservedStatus,
     lastSessionId: existing.lastSessionId ?? null,
+    lastSessionAt: existing.lastSessionAt ?? null,
     lastVerifiedAt: existing.lastVerifiedAt ?? null,
     lastCommittedAt: existing.lastCommittedAt ?? null,
     commitSha: existing.commitSha ?? null,
@@ -193,13 +291,23 @@ function dependencyState(task, tasks) {
   };
 }
 
+function resolveLoopTask(featureList, requestedRef) {
+  const tasks = featureList?.tasks ?? [];
+  const normalized = normalizeTaskReference(requestedRef);
+  const matches = tasks.filter((task) => taskReferenceCandidates(task).has(normalized));
+  if (matches.length === 1) {
+    return matches[0];
+  }
+  if (matches.length > 1) {
+    throw new Error(`Ambiguous OpenPrd loop task reference: ${requestedRef}`);
+  }
+  throw new Error(`Unknown OpenPrd loop task: ${requestedRef}`);
+}
+
 function nextLoopTask(featureList, requestedId = null) {
   const tasks = featureList?.tasks ?? [];
   if (requestedId) {
-    const task = tasks.find((item) => item.id === requestedId);
-    if (!task) {
-      throw new Error(`Unknown OpenPrd loop task: ${requestedId}`);
-    }
+    const task = resolveLoopTask(featureList, requestedId);
     return { task, dependencyState: dependencyState(task, tasks) };
   }
   for (const task of tasks) {
@@ -274,6 +382,7 @@ function renderLoopPrompt({ agent, projectRoot, featureList, task, dependency, m
     `项目: ${projectRoot}`,
     `变更: ${task.changeId}`,
     `任务: ${task.id} ${task.title}`,
+    `任务句柄: ${task.taskHandle}`,
     '',
     '## Harness 契约',
     '',
@@ -285,19 +394,23 @@ function renderLoopPrompt({ agent, projectRoot, featureList, task, dependency, m
     '1. 读取 `AGENTS.md`，遵守 OpenPrd managed block。',
     '2. 如存在 `.openprd/harness/bootstrap.sh`，先运行 `.openprd/harness/bootstrap.sh .`。',
     '3. 查看 `git status --short`，不要覆盖无关用户改动。',
-    '4. 读取 `.openprd/harness/feature-list.json`、`.openprd/harness/progress.md` 和本任务来源文件。',
+    '4. 读取 `.openprd/harness/feature-list.json`、`.openprd/harness/progress.md`、`.openprd/harness/failed-approaches.md` 和本任务来源文件。',
     '',
     '## 单任务边界',
     '',
     `只实现任务 ${task.id}: ${task.title}`,
+    `跨对话继续请引用: ${task.taskHandle}`,
     `完成条件: ${task.done ?? '未指定'}`,
     `自测命令: ${task.verify ?? '未指定'}`,
+    `对照基准: ${task.oracle ?? '未指定'}`,
     `依赖是否就绪: ${dependency?.ready ? '是' : '否'}`,
     dependency?.missing?.length ? `缺失依赖: ${dependency.missing.join(', ')}` : '',
     dependency?.incomplete?.length ? `未完成依赖: ${dependency.incomplete.join(', ')}` : '',
     `来源: ${task.sourcePath}:${task.sourceLine}`,
     '',
     '不要开始下一个任务。如果发现任务仍然过大，先拆分任务文件，并只完成最小可用切片。',
+    task.oracle ? '如果任务定义了对照基准，必须显式对照 reference/oracle，并把偏差、死路或替代方案记到 `.openprd/harness/failed-approaches.md`。' : '',
+    '代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 `openprd dev-check . <file...>`；若出现 attention 或 warning，说明局部职责、影响范围，以及是否已拆分或为什么窄修暂不拆。',
     '',
     '## 自测与界面验证要求',
     '',
@@ -311,7 +424,9 @@ function renderLoopPrompt({ agent, projectRoot, featureList, task, dependency, m
     '1. 确认自测、界面验证和 OpenPrd verify 都已经通过。',
     '2. 留下简洁总结，说明改动文件和验证结果。',
     '3. 如果这是手动执行 prompt，用以下命令结束任务并提交:',
-    `   openprd loop . --finish --item ${task.id} --commit --message ${JSON.stringify(task.commitMessage)}`,
+    task.oracle
+      ? `   openprd loop . --finish --item ${task.id} --commit --notes "<oracle/result summary>" --message ${JSON.stringify(task.commitMessage)}`
+      : `   openprd loop . --finish --item ${task.id} --commit --message ${JSON.stringify(task.commitMessage)}`,
     '',
     '## 任务快照',
     '',
@@ -322,10 +437,13 @@ function renderLoopPrompt({ agent, projectRoot, featureList, task, dependency, m
       task: {
         id: task.id,
         title: task.title,
+        taskHandle: task.taskHandle,
         status: task.status,
+        type: task.type,
         deps: task.deps,
         done: task.done,
         verify: task.verify,
+        oracle: task.oracle,
       },
     }, null, 2),
     '',
@@ -439,6 +557,7 @@ async function writeTestReport(projectRoot, { task, agent, advanced, change }) {
     generatedAt: timestamp(),
     kind: inferUiVerificationHint(task, agent).includes('前端界面任务') ? 'ui-regression' : 'command-regression',
     verifyCommand: advanced.verification?.command ?? task.verify ?? '未指定',
+    oracle: task.oracle ?? null,
     summary: {
       total: 1,
       passed: advanced.verification?.ok ? 1 : 0,
@@ -451,6 +570,7 @@ async function writeTestReport(projectRoot, { task, agent, advanced, change }) {
         expected: task.done ?? '满足任务完成条件',
         actual: advanced.verification?.ok ? '验证命令执行通过' : '验证命令失败或未通过',
         passed: Boolean(advanced.verification?.ok),
+        oracle: task.oracle ?? null,
         evidence: evidenceText,
       },
     ],
@@ -465,8 +585,11 @@ async function writeTestReport(projectRoot, { task, agent, advanced, change }) {
     `- 变更: ${task.changeId}`,
     `- 完成条件: ${task.done ?? '未指定'}`,
     `- 自测命令: ${advanced.verification?.command ?? task.verify ?? '未指定'}`,
+    `- 对照基准: ${task.oracle ?? '未指定'}`,
     `- 自测结果: ${advanced.verification?.ok ? '通过' : '失败或未运行'}`,
     `- Change 校验: ${change.ok ? '通过' : '失败'}`,
+    `- EVO 冒烟证据: ${advanced.verification?.ok ? 'smoke pass via task verify command' : 'smoke failed or missing'}`,
+    `- EVO 功能覆盖证据: feature coverage checked against OpenPrd task completion`,
     `- 界面验证策略: ${inferUiVerificationHint(task, agent)}`,
     `- 补充证据: ${evidenceText}`,
     `- 备注: ${notesText}`,
@@ -539,6 +662,7 @@ export async function initLoopWorkspace(projectRoot, options = {}) {
       featureList: LOOP_FEATURE_LIST,
       loopState: LOOP_STATE,
       progress: LOOP_PROGRESS,
+      failedApproaches: LOOP_FAILED_APPROACHES,
       sessions: LOOP_SESSIONS,
       bootstrap: LOOP_BOOTSTRAP,
       testReports: LOOP_TEST_REPORTS_DIR,
@@ -615,6 +739,7 @@ export async function statusLoopWorkspace(projectRoot) {
     files: {
       featureList: LOOP_FEATURE_LIST,
       progress: LOOP_PROGRESS,
+      failedApproaches: LOOP_FAILED_APPROACHES,
       sessions: LOOP_SESSIONS,
     },
   };
@@ -761,47 +886,97 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     };
   }
 
+  const verification = await verifyOpenSpecTaskWorkspace(projectRoot, {
+    change: task.changeId,
+    item: task.sourceTaskId,
+    evidence: options.evidence,
+    notes: options.notes,
+  });
+  if (!verification.ok) {
+    const failureReason = verification.verification?.stderr || verification.verification?.stdout || '自测失败';
+    const failedList = updateTask(featureList, task.id, { status: 'failed', lastError: failureReason });
+    await writeFeatureList(projectRoot, failedList);
+    await appendFailedApproach(projectRoot, {
+      task,
+      stage: 'task-verify',
+      reason: failureReason,
+      verification: verification.verification,
+      notes: options.notes ?? null,
+      evidence: options.evidence ?? null,
+    });
+    return {
+      ok: false,
+      action: 'loop-finish',
+      projectRoot,
+      task,
+      verification,
+      errors: [failureReason || `任务 ${task.id} 自测失败。`],
+    };
+  }
+
+  const finishEvidence = validateLoopFinishEvidence(task, options);
+  if (!finishEvidence.ok) {
+    const failedList = updateTask(featureList, task.id, { status: 'failed', lastError: finishEvidence.error });
+    await writeFeatureList(projectRoot, failedList);
+    await appendFailedApproach(projectRoot, {
+      task,
+      stage: 'finish-evidence',
+      reason: finishEvidence.error,
+      verification: verification.verification,
+      notes: options.notes ?? null,
+      evidence: options.evidence ?? null,
+    });
+    return {
+      ok: false,
+      action: 'loop-finish',
+      projectRoot,
+      task,
+      verification,
+      errors: [finishEvidence.error],
+    };
+  }
+
   const advanced = await advanceOpenSpecTaskWorkspace(projectRoot, {
     change: task.changeId,
     item: task.sourceTaskId,
-    verify: true,
+    verify: false,
     evidence: options.evidence,
     notes: options.notes,
   });
   if (!advanced.ok) {
-    const failedList = updateTask(featureList, task.id, { status: 'failed', lastError: advanced.verification?.stderr || advanced.verification?.stdout || '自测失败' });
+    const failureReason = advanced.errors?.[0] ?? `任务 ${task.id} 标记完成失败。`;
+    const failedList = updateTask(featureList, task.id, { status: 'failed', lastError: failureReason });
     await writeFeatureList(projectRoot, failedList);
+    await appendFailedApproach(projectRoot, {
+      task,
+      stage: 'task-advance',
+      reason: failureReason,
+      verification: verification.verification,
+      notes: options.notes ?? null,
+      evidence: options.evidence ?? null,
+    });
     return {
       ok: false,
       action: 'loop-finish',
       projectRoot,
       task,
+      verification,
       advanced,
-      errors: [advanced.verification?.stderr || advanced.verification?.stdout || `任务 ${task.id} 自测失败。`],
+      errors: [failureReason],
     };
   }
-
-  const change = await validateOpenSpecChangeWorkspace(projectRoot, { change: task.changeId });
-  if (!change.ok) {
-    const failedList = updateTask(featureList, task.id, { status: 'failed', lastError: change.errors.join('; ') });
-    await writeFeatureList(projectRoot, failedList);
-    return {
-      ok: false,
-      action: 'loop-finish',
-      projectRoot,
-      task,
-      advanced,
-      change,
-      errors: change.errors,
-    };
-  }
+  const change = beforeChange;
+  const finishResult = {
+    ...advanced,
+    verification: verification.verification,
+  };
 
   let commit = null;
   const testReport = await writeTestReport(projectRoot, {
     task,
     agent: options.agent ?? 'codex',
     advanced: {
-      ...advanced,
+      ...finishResult,
       evidence: options.evidence ?? null,
       notes: options.notes ?? null,
     },
@@ -815,7 +990,7 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
         action: 'loop-finish',
         projectRoot,
         task,
-        advanced,
+        advanced: finishResult,
         change,
         commit,
         errors: [commit.message],
@@ -830,6 +1005,51 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     commitSha: commit?.sha ?? null,
     lastTestReport: testReport.markdownPath,
   });
+  const nextAfterFinish = nextLoopTask(updatedList).task;
+  let quality = null;
+  if (!nextAfterFinish) {
+    quality = await verifyQualityWorkspace(projectRoot, { strict: true }).catch((error) => ({
+      ok: false,
+      action: 'quality-verify',
+      errors: [error instanceof Error ? error.message : String(error)],
+    }));
+    const productionReady = quality.report?.readiness?.productionReady ?? null;
+    if (!quality.ok || productionReady === false) {
+      const attentionGates = quality.report?.readiness?.attentionGates ?? [];
+      const qualityError = [
+        'Final EVO quality gate is not production-ready.',
+        attentionGates.length > 0 ? `Attention gates: ${attentionGates.join(', ')}` : null,
+        quality.htmlPath ? `HTML report: ${path.relative(projectRoot, quality.htmlPath)}` : null,
+      ].filter(Boolean).join(' ');
+      const failedList = updateTask(featureList, task.id, {
+        status: 'failed',
+        lastError: qualityError,
+        lastTestReport: testReport.markdownPath,
+      });
+      await writeFeatureList(projectRoot, failedList);
+      await appendFailedApproach(projectRoot, {
+        task,
+        stage: 'final-quality',
+        reason: qualityError,
+        verification: verification.verification,
+        notes: options.notes ?? null,
+        evidence: options.evidence ?? null,
+      });
+      return {
+        ok: false,
+        action: 'loop-finish',
+        projectRoot,
+        task,
+        advanced: finishResult,
+        change,
+        commit,
+        testReport: testReport.markdownPath,
+        regressionHtml: testReport.htmlPath,
+        quality,
+        errors: [qualityError, ...(quality.errors ?? [])],
+      };
+    }
+  }
   await writeFeatureList(projectRoot, updatedList);
   let learningReview = null;
   try {
@@ -840,7 +1060,7 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
       respectConfig: true,
       taskId: task.id,
       changeId: task.changeId,
-      verifyCommand: advanced.verification?.command ?? task.verify ?? null,
+      verifyCommand: finishResult.verification?.command ?? task.verify ?? null,
       testReport: testReport.markdownPath,
       commitSha: commit?.sha ?? null,
     });
@@ -863,12 +1083,40 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
         ...(learningReview.packagePaths?.agentPrompt ? [`Agent 写作提示: ${path.relative(projectRoot, learningReview.packagePaths.agentPrompt)}。`] : []),
       ]
       : [`复盘学习: 生成失败 (${learningReview?.errors?.[0] ?? 'unknown'})。`];
+  const knowledgeSignal = {
+    kind: 'loop-finish',
+    ok: true,
+    productionReady: quality?.report?.readiness?.productionReady ?? null,
+    attentionGates: quality?.report?.readiness?.attentionGates ?? [],
+    summary: `loop finish ${task.id}: ${task.title}`,
+  };
+  await recordKnowledgeReviewSignal(projectRoot, knowledgeSignal).catch(() => null);
+  const knowledgeReviewSource = (await exists(cjoin(projectRoot, OPENPRD_HARNESS_TURN_STATE)))
+    ? OPENPRD_HARNESS_TURN_STATE
+    : (quality?.reportPath ?? null);
+  const knowledgeReview = await reviewKnowledgeWorkspace(projectRoot, {
+    from: knowledgeReviewSource,
+    signal: knowledgeSignal,
+  }).catch((error) => ({
+    ok: false,
+    action: 'quality-knowledge-review',
+    skipped: false,
+    errors: [error instanceof Error ? error.message : String(error)],
+  }));
   await appendText(harnessPath(projectRoot, LOOP_PROGRESS), renderProgressEntry(timestamp(), [
     `已完成 ${task.id}: ${task.title}。`,
-    `自测: ${advanced.verification?.ok ? '通过' : '未运行'}。`,
+    `自测: ${finishResult.verification?.ok ? '通过' : '未运行'}。`,
+    task.oracle ? `对照基准: ${task.oracle}。` : null,
     `测试报告: ${testReport.markdownPath}。`,
     `HTML 回归报告: ${testReport.htmlPath}。`,
+    ...(quality ? [
+      `最终 EVO: ${quality.report?.readiness?.productionReady ? 'production-ready' : 'needs-attention'}。`,
+      ...(quality.htmlPath ? [`EVO 报告: ${path.relative(projectRoot, quality.htmlPath)}。`] : []),
+    ] : []),
     ...learningProgress,
+    knowledgeReview?.skipped
+      ? null
+      : `项目经验草案: ${path.relative(projectRoot, knowledgeReview.files?.draftSkill ?? knowledgeReview.files?.candidateDir ?? '') || '已生成'}。`,
     commit ? `Commit: ${commit.skipped ? '跳过' : commit.sha}` : 'Commit: 未请求。',
   ]));
   await appendJsonl(harnessPath(projectRoot, LOOP_SESSIONS), {
@@ -876,11 +1124,38 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     at: timestamp(),
     action: 'finish',
     taskId: task.id,
+    taskHandle: task.taskHandle,
+    taskTitle: task.title,
     changeId: task.changeId,
     ok: true,
+    oracle: task.oracle ?? null,
     commit: commit ? { ok: commit.ok, skipped: commit.skipped, sha: commit.sha ?? null } : null,
     testReport: testReport.markdownPath,
     regressionHtml: testReport.htmlPath,
+    quality: quality
+      ? {
+        ok: quality.ok,
+        productionReady: quality.report?.readiness?.productionReady ?? null,
+        reportPath: quality.reportPath ?? null,
+        htmlPath: quality.htmlPath ?? null,
+        attentionGates: quality.report?.readiness?.attentionGates ?? [],
+      }
+      : null,
+    knowledgeReview: knowledgeReview?.skipped
+      ? {
+          ok: true,
+          skipped: true,
+          reason: knowledgeReview.reason ?? 'skipped',
+        }
+      : knowledgeReview
+        ? {
+            ok: knowledgeReview.ok !== false,
+            skipped: false,
+            candidateId: knowledgeReview.candidateId ?? null,
+            draftSkill: knowledgeReview.files?.draftSkill ?? null,
+            candidateDir: knowledgeReview.files?.candidateDir ?? null,
+          }
+        : null,
     learningReview: learningReview?.ok
       ? {
         ok: true,
@@ -895,7 +1170,9 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
       },
   });
   await updateLoopState(projectRoot, {
-    currentTaskId: advanced.nextTask?.id ?? null,
+    currentTaskId: nextAfterFinish?.id ?? null,
+    currentTaskHandle: nextAfterFinish?.taskHandle ?? null,
+    currentTaskTitle: nextAfterFinish?.title ?? null,
     completedTaskIds: updatedList.tasks.filter((item) => item.status === 'done').map((item) => item.id),
   });
   return {
@@ -908,9 +1185,11 @@ export async function finishLoopWorkspace(projectRoot, options = {}) {
     commit,
     testReport: testReport.markdownPath,
     regressionHtml: testReport.htmlPath,
+    quality,
+    knowledgeReview,
     learningReview,
     summary: buildLoopSummary(updatedList),
-    next: nextLoopTask(updatedList).task,
+    next: nextAfterFinish,
   };
 }
 
@@ -937,6 +1216,8 @@ export async function runLoopWorkspace(projectRoot, options = {}) {
     action: options.dryRun ? 'run-dry-run' : 'run',
     agent,
     taskId: promptResult.task.id,
+    taskHandle: promptResult.task.taskHandle,
+    taskTitle: promptResult.task.title,
     changeId: promptResult.task.changeId,
     promptPath: promptResult.promptPath,
     invocation: invocation.display,
@@ -944,6 +1225,8 @@ export async function runLoopWorkspace(projectRoot, options = {}) {
   await appendJsonl(harnessPath(projectRoot, LOOP_SESSIONS), sessionEvent);
   await updateLoopState(projectRoot, {
     currentTaskId: promptResult.task.id,
+    currentTaskHandle: promptResult.task.taskHandle,
+    currentTaskTitle: promptResult.task.title,
     lastAgent: agent,
     lastSessionAt: sessionEvent.at,
   });
@@ -971,6 +1254,8 @@ export async function runLoopWorkspace(projectRoot, options = {}) {
     action: 'agent-exit',
     agent,
     taskId: promptResult.task.id,
+    taskHandle: promptResult.task.taskHandle,
+    taskTitle: promptResult.task.title,
     ok: run.ok,
     status: run.status,
   });

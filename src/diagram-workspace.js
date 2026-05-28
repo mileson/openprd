@@ -236,8 +236,8 @@ async function diagramWorkspace(projectRoot, options = {}) {
   await appendDecision(ws, [
     `已为 ${snapshot.title} 创建 ${label} 图表评审产物。`,
     type === 'product-flow'
-      ? '请在 freeze 前使用该产物确认步骤、决策点和恢复路径。'
-      : '请在 freeze 前使用该产物确认组件、边界和缺失系统。',
+      ? '请在需求定稿前使用该产物确认步骤、决策点和恢复路径。'
+      : '请在需求定稿前使用该产物确认组件、边界和缺失系统。',
   ]);
 
   if (options.open) {

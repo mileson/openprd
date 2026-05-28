@@ -1,8 +1,8 @@
 {
   "version": 1,
   "schema": "openprd.quality.v1",
-  "updatedAt": "2026-05-13 14:08:50",
-  "enforcement": "advisory",
+  "updatedAt": "2026-05-20 17:20:41",
+  "enforcement": "blocking",
   "observability": {
     "centralizedLoggingRequired": true,
     "requiredSignals": [
@@ -34,6 +34,52 @@
     "featureCoverageRequired": true,
     "normalPerformanceRequired": true,
     "extremePerformanceRequired": true,
+    "currentEvidenceRequired": true,
+    "evidenceSources": [
+      ".openprd/harness/test-reports",
+      ".openprd/quality/evidence",
+      "test-results",
+      "tests/reports",
+      "coverage"
+    ],
+    "scenarioProfiles": {
+      "core": [
+        "smoke",
+        "feature-coverage"
+      ],
+      "frontend": [
+        "smoke"
+      ],
+      "desktop": [
+        "smoke"
+      ],
+      "backend": [
+        "smoke",
+        "traceability"
+      ],
+      "businessCost": [
+        "business-guardrails"
+      ],
+      "security": [
+        "redaction"
+      ],
+      "performance": [
+        "normal-performance"
+      ],
+      "extreme": [
+        "extreme-performance"
+      ],
+      "release": [
+        "traceability",
+        "redaction",
+        "business-guardrails",
+        "smoke",
+        "feature-coverage",
+        "normal-performance",
+        "extreme-performance",
+        "knowledge"
+      ]
+    },
     "reportFormat": "html",
     "baselinePolicy": "agent-initialized average baseline; user may override; agent ratchet may only tighten thresholds",
     "projectBaseline": {
