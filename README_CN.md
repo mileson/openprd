@@ -1,6 +1,6 @@
 # OpenPrd
 
-English | [简体中文](./README_CN.md)
+[English](./README.md) | 简体中文
 
 > 面向需求澄清、HTML 优先评审、图形确认与交接的 AI 原生 PRD 工作区与 CLI。
 
@@ -82,11 +82,11 @@ OpenPrd 会生成可以直接分享的 HTML 面板，让产品、研发和 Agent
 
 ![OpenPrd quality HTML](./docs/assets/openprd-quality-html.png)
 
-### `visual-compare` 案例图
+### 效果图与截图拼图对比，自动优化
 
 把效果图和实现截图放进同一张左右对比图里，适合登录入口改造、条款页本地化、弹窗复刻这类阶段性评审。
 
-![OpenPrd visual compare case study](./docs/assets/openprd-visual-compare-case-study-zh.png)
+![效果图与截图拼图对比，自动优化](./docs/assets/openprd-visual-compare-case-study-zh.png)
 
 ## 自我成长机制
 
@@ -330,7 +330,7 @@ OpenPrd 生成的 change 会包含标准化维护任务，change 校验也会检
 或产品行为变化影响，也必须同步更新。如果无需更新，应说明已经完成影响判定以及
 为什么现有文档仍然准确。
 
-## 界面视觉对比
+## 效果图与截图拼图对比，自动优化
 
 当界面任务已经有效果图、设计稿、用户给图或 Agent 自己生成的 mock 时，Agent
 在阶段性完成后应先截实现图，再生成左右对比图，不能只靠主观印象判断是否一致：
