@@ -1,6 +1,6 @@
 function parseCommandArgs(argv) {
   const args = [...argv];
-  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, review: false, reject: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, write: false, dryRun: false, updateOpenprd: false, backfillWorkUnits: false, syncRegistry: false, setupMissing: false, doctor: false, context: false, recordHook: false, plan: false, prompt: false, loopRun: false, finish: false, commit: false, html: false, template: false, failOnViolation: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, artifactMarkdown: null, contentJson: null, presentation: null, source: null, reference: null, actual: null, out: null, format: null, quality: null, maxPanelWidth: null, referenceLabel: null, actualLabel: null, classifyExternal: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', hookProfile: null, templatePack: null, target: 'openprd', targetRoot: null, path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, version: null, digest: null, workUnit: null, event: null, risk: null, outcome: null, preview: null, learn: null, genre: null, style: null, topic: null, enable: false, disable: false, agent: 'codex', agentCommand: null, message: null };
+  const flags = { json: false, force: false, open: false, append: false, init: false, check: false, review: false, reject: false, resume: false, advance: false, verify: false, next: false, generate: false, validate: false, apply: false, archive: false, activate: false, close: false, keep: false, write: false, dryRun: false, updateOpenprd: false, backfillWorkUnits: false, syncRegistry: false, setupMissing: false, doctor: false, context: false, recordHook: false, plan: false, prompt: false, loopRun: false, finish: false, commit: false, html: false, template: false, failOnViolation: false, mark: null, type: 'architecture', mode: 'auto', input: null, field: null, value: null, jsonFile: null, artifactMarkdown: null, contentJson: null, presentation: null, source: null, reference: null, actual: null, before: null, after: null, out: null, format: null, quality: null, maxPanelWidth: null, referenceLabel: null, actualLabel: null, classifyExternal: null, maxIterations: null, maxDepth: null, include: null, exclude: null, report: null, item: null, id: null, status: null, claim: null, notes: null, confidence: null, change: null, tools: 'all', hookProfile: null, templatePack: null, target: 'openprd', targetRoot: null, path: null, productType: null, title: null, owner: null, problem: null, whyNow: null, evidence: null, from: null, to: null, version: null, digest: null, workUnit: null, event: null, risk: null, outcome: null, preview: null, learn: null, genre: null, style: null, topic: null, enable: false, disable: false, agent: 'codex', agentCommand: null, message: null };
   const positionals = [];
 
   while (args.length > 0) {
@@ -233,6 +233,14 @@ function parseCommandArgs(argv) {
       flags.actual = args.shift() ?? null;
       continue;
     }
+    if (arg === '--before') {
+      flags.before = args.shift() ?? null;
+      continue;
+    }
+    if (arg === '--after') {
+      flags.after = args.shift() ?? null;
+      continue;
+    }
     if (arg === '--out') {
       flags.out = args.shift() ?? null;
       continue;
@@ -426,7 +434,7 @@ function usage() {
     '  openprd playground [path] [--open] [--json]',
     '  openprd learn [path] [--topic <text>] [--genre <internet-product|scientific|fairy-tale|web-novel|xianxia>] [--style <substyle>] [--source <workspace|docs|loop|all>] [--content-json <file>] [--open] [--enable|--disable] [--json]',
     '  openprd quality [path] [--init|--verify|--report --html|--learn [--review] --from <report-id-or-json-or-diagnostics-or-turn-state>] [--force] [--json]',
-    '  openprd visual-compare [path] --reference <effect-image> --actual <screenshot-image> [--out <file.jpg>] [--format <jpg|png|webp>] [--quality <1..100>] [--max-panel-width <px>] [--json]',
+    '  openprd visual-compare [path] (--reference <effect-image> --actual <screenshot-image> | --before <before-screenshot> --after <after-screenshot>) [--out <file.jpg>] [--format <jpg|png|webp>] [--quality <1..100>] [--max-panel-width <px>] [--json]',
     '  openprd dev-check [path] <file...> [--json]',
     '  openprd grow [path] [--review|--apply --id <candidate-id>|--reject --id <candidate-id>|--init|--check] [--notes <text>] [--json]',
     '  openprd benchmark <add|list|approve|verify> [target-or-id] [path-for-list-or-verify] [--path <project>] [--notes <text>] [--id <benchmark-id>] [--json]',

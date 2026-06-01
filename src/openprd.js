@@ -636,6 +636,8 @@ export async function main(argv = process.argv.slice(2)) {
       const result = await visualCompareWorkspace(projectPath, {
         reference: flags.reference,
         actual: flags.actual,
+        before: flags.before,
+        after: flags.after,
         out: flags.out,
         format: flags.format,
         quality: flags.quality,

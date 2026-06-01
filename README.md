@@ -402,6 +402,22 @@ obvious visual differences. The final response for reference-driven UI work
 should include the generated review image path and note whether differences
 remain.
 
+When UI work has no reference image, capture the current interface first,
+implement the change, capture the same entry, viewport, account, and data state
+again, then generate a before/after self-check:
+
+```bash
+openprd visual-compare /path/to/project \
+  --before before-screenshot.png \
+  --after after-screenshot.jpg
+```
+
+The output uses `修改前` / `修改后` labels and a
+`visual-before-after-*.jpg` filename. Agents should inspect it for the intended
+change and for unexpected drift in unchanged regions. Large directional UI
+redesigns still need a design review before implementation; before/after is for
+checking changes to an existing interface.
+
 ## Quality Regression Reports
 
 `openprd init` also creates a quality contract:

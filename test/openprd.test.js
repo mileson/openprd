@@ -1785,6 +1785,23 @@ test('visual-compare writes side-by-side review images', async () => {
   assert.equal(relativeOutResult.format, 'webp');
   assert.equal((await sharp(relativeOutResult.outputPath).metadata()).format, 'webp');
 
+  const beforeAfterResult = await visualCompareWorkspace(project, {
+    before: reference,
+    after: actual,
+    maxPanelWidth: 100,
+  });
+  assert.equal(beforeAfterResult.ok, true);
+  assert.equal(beforeAfterResult.mode, 'before-after');
+  assert.equal(beforeAfterResult.labels.reference, '修改前');
+  assert.equal(beforeAfterResult.labels.actual, '修改后');
+  assert.equal(beforeAfterResult.outputPath.includes('visual-before-after-'), true);
+  assert.ok(beforeAfterResult.nextActions.some((action) => action.includes('未改区域')));
+
+  await assert.rejects(
+    visualCompareWorkspace(project, { reference, actual, before: reference, after: actual }),
+    /Use either --reference\/--actual or --before\/--after/,
+  );
+
   const cliOut = path.join(project, '.openprd', 'harness', 'visual-reviews', 'cli.jpg');
   const logs = [];
   const originalLog = console.log;
@@ -1812,6 +1829,30 @@ test('visual-compare writes side-by-side review images', async () => {
   assert.equal(cliResult.outputPath, cliOut);
   assert.equal(cliResult.quality, 82);
   assert.equal((await sharp(cliOut).metadata()).format, 'jpeg');
+
+  const beforeAfterCliOut = path.join(project, '.openprd', 'harness', 'visual-reviews', 'cli-before-after.jpg');
+  const beforeAfterLogs = [];
+  console.log = (...args) => beforeAfterLogs.push(args.join(' '));
+  try {
+    assert.equal(await main([
+      'visual-compare',
+      project,
+      '--before',
+      reference,
+      '--after',
+      actual,
+      '--out',
+      beforeAfterCliOut,
+      '--json',
+    ]), 0);
+  } finally {
+    console.log = originalLog;
+  }
+  const beforeAfterCliResult = JSON.parse(beforeAfterLogs.join('\n'));
+  assert.equal(beforeAfterCliResult.mode, 'before-after');
+  assert.equal(beforeAfterCliResult.labels.reference, '修改前');
+  assert.equal(beforeAfterCliResult.labels.actual, '修改后');
+  assert.equal((await sharp(beforeAfterCliOut).metadata()).format, 'jpeg');
 });
 
 test('dev-check records growth candidate for unknown code extensions', async () => {
@@ -2169,6 +2210,7 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.ok(generatedSharedSkill.includes('高置信应可成长'));
     assert.ok(generatedSharedSkill.includes('openprd update .'));
     assert.ok(generatedSharedSkill.includes('左侧标注“效果图”'));
+    assert.ok(generatedSharedSkill.includes('修改前'));
     assert.ok(generatedHarnessSkill.includes('代码修改完成后、最终回复前'));
     assert.ok(generatedHarnessSkill.includes('growth candidate'));
     assert.ok(generatedHarnessSkill.includes('主动询问用户是否做成可成长配置'));
@@ -2177,10 +2219,13 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.ok(generatedHarnessSkill.includes('主动使用 Markdown 表格'));
     assert.ok(generatedHarnessSkill.includes('.openprd/harness/visual-reviews/'));
     assert.ok(generatedHarnessSkill.includes('实现截图'));
+    assert.ok(generatedHarnessSkill.includes('--before'));
     const generatedVisualCommand = await fs.readFile(path.join(project, '.codex', 'prompts', 'openprd-visual-compare.md'), 'utf8');
     assert.ok(generatedVisualCommand.includes('side-by-side JPG'));
     assert.ok(generatedVisualCommand.includes('效果图'));
     assert.ok(generatedVisualCommand.includes('实现截图'));
+    assert.ok(generatedVisualCommand.includes('--before'));
+    assert.ok(generatedVisualCommand.includes('修改后'));
 
     const logs = [];
     const originalLog = console.log;

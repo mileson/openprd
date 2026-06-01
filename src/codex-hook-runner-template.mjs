@@ -870,7 +870,7 @@ function analyzePromptIntent(prompt) {
   const visualMockupRequest = imageGenerationTerms.test(text)
     && imageGenerationAction.test(text)
     && !codeVisualArtifactRequested;
-  const visualReview = /效果图|实现截图|视觉对比|视觉评审|对标效果图|复刻/i.test(text);
+  const visualReview = /效果图|实现截图|修改前|修改后|before\/after|视觉对比|视觉评审|对标效果图|复刻/i.test(text);
   const directBugfixExecution = explicitExecution && bugfixOrDiagnostic;
   const publicRepoResearchRequest = githubRepoPattern.test(text)
     && /(github|仓库|repo|项目|参考|对标|复刻|review|学习|架构|模块|流程|构建|测试|扩展点)/i.test(text);
@@ -1756,7 +1756,7 @@ function visualMockupMessage(intent) {
     '默认直接调用 Codex 原生 Image 2 生成图片；除非用户明确指定 HTML、SVG、CSS、Canvas、代码稿或可编辑矢量/source artifact，不要改用临时 HTML/SVG/CSS 再截图。',
     '对 logo、icon、avatar、badge 等开发素材，如果用户没有明确要求 mockup、场景图、设备框、卡片承载、名片/包装展示或参考界面复刻，默认按独立素材输出（standalone asset）处理：使用全画布单主体，不额外添加 UI frame、卡片、设备壳、名片、桌面陈列、手持实拍或其他展示容器。',
     '只有当用户明确要求 mockup、场景化效果图、容器化呈现，或参考图本身就包含这些承载结构时，才生成对应的容器或场景。',
-    'OpenPrd review.html 只用于需求评审，visual-compare 只用于实现阶段已有参考图后的实现截图对比。',
+    'OpenPrd review.html 只用于需求评审；已有参考图时用 visual-compare --reference/--actual，无参考图但改动界面时用 visual-compare --before/--after。',
   ].join('\n');
 }
 
@@ -1774,7 +1774,7 @@ function confirmationGateMessage(gate) {
   return [
     intro,
     'Implementation may proceed only within the confirmed scope, with docs/basic, file manuals, folder README docs, standards verification, and OpenPrd run verification kept up to date. For backend, script, agent, tooling, service, or data-processing changes, keep CLI and API surface review current in docs/basic/backend-structure.md.',
-    'For UI or visual work with an existing reference image, capture the implemented UI and run openprd visual-compare . --reference <effect-image> --actual <implementation-screenshot>; inspect the generated JPG before claiming the visual work is complete.',
+    'For UI or visual work with an existing reference image, capture the implemented UI and run openprd visual-compare . --reference <effect-image> --actual <implementation-screenshot>; when no reference image exists but the UI changes, capture before first, implement, capture after from the same entry, viewport, account, and data state, then run openprd visual-compare . --before <before-screenshot> --after <after-screenshot>. Inspect the generated JPG before claiming the visual work is complete.',
   ].join('\n');
 }
 
@@ -1877,7 +1877,7 @@ function contextMessage(cwd, intent = null, gate = null, progress = null) {
         '如果用户只是要求看看、规划、分析、审查、解释影响或列出文件，请保持只读并基于证据回答；不要运行 OpenPrd loop、任务推进、discovery 推进、commit 或其他写入命令。',
         '只有当用户当前明确要求开发、实现、修复、继续任务、深度调研、对标复刻或提交时，才运行 openprd loop --run、openprd tasks --advance、openprd discovery --advance、commit/push 等执行命令。',
         '代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 openprd dev-check . <file...>；attention 需说明局部职责，warning 需判断本轮是否扩大职责，扩大则先重构/拆分/解耦并复查，窄修暂不拆时说明原因和后续拆分建议。',
-        '涉及界面、页面、视觉、样式或前端体验，且已经有效果图/设计稿/用户给图并进入实现阶段时，阶段性完成后必须截图并运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；默认输出 JPG 到 .openprd/harness/visual-reviews/。查看合成图后继续对标，直到没有明显视觉差异。',
+        '涉及界面、页面、视觉、样式或前端体验，且已经有效果图/设计稿/用户给图并进入实现阶段时，阶段性完成后必须截图并运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；没有参考图但改动界面时，先截修改前，完成后截修改后，并运行 openprd visual-compare . --before <修改前截图> --after <修改后截图>。默认输出 JPG 到 .openprd/harness/visual-reviews/。查看合成图后继续对标或自检，直到没有明显视觉差异或未改区域漂移。',
         '发现配置缺口、未知代码扩展名或用户偏好时，先运行 openprd grow . --review；共享规则必须经用户确认后再 apply。',
         '维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；高置信可成长默认纳入，不确定则主动询问用户。',
         '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、help/doctor/dry-run/status 与接口协议、返回结构、身份边界是否受影响，并更新 docs/basic/backend-structure.md 或明确写不适用原因。',
@@ -1893,7 +1893,7 @@ function contextMessage(cwd, intent = null, gate = null, progress = null) {
       '如果用户只是要求看看、规划、分析、审查、解释影响或列出文件，请保持只读并基于证据回答；不要运行 OpenPrd loop、任务推进、discovery 推进、commit 或其他写入命令。',
       '只有当用户当前明确要求开发、实现、修复、继续任务、深度调研、对标复刻或提交时，才运行 openprd loop --run、openprd tasks --advance、openprd discovery --advance、commit/push 等执行命令。',
       '代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 openprd dev-check . <file...>；attention 需说明局部职责，warning 需判断本轮是否扩大职责，扩大则先重构/拆分/解耦并复查，窄修暂不拆时说明原因和后续拆分建议。',
-      '涉及界面、页面、视觉、样式或前端体验，且已经有效果图/设计稿/用户给图并进入实现阶段时，阶段性完成后必须截图并运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；默认输出 JPG 到 .openprd/harness/visual-reviews/。查看合成图后继续对标，直到没有明显视觉差异。',
+      '涉及界面、页面、视觉、样式或前端体验，且已经有效果图/设计稿/用户给图并进入实现阶段时，阶段性完成后必须截图并运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；没有参考图但改动界面时，先截修改前，完成后截修改后，并运行 openprd visual-compare . --before <修改前截图> --after <修改后截图>。默认输出 JPG 到 .openprd/harness/visual-reviews/。查看合成图后继续对标或自检，直到没有明显视觉差异或未改区域漂移。',
       '发现配置缺口、未知代码扩展名或用户偏好时，先运行 openprd grow . --review；共享规则必须经用户确认后再 apply。',
       '维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；高置信可成长默认纳入，不确定则主动询问用户。',
       '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、help/doctor/dry-run/status 与接口协议、返回结构、身份边界是否受影响，并更新 docs/basic/backend-structure.md 或明确写不适用原因。',
@@ -2328,7 +2328,7 @@ function handle(eventName, cwd, payload) {
       recordRunHook(root, baseEvent, 'allowed-medium-risk');
       updateHookState(root, baseEvent);
       recordTouchedFiles(root, payload);
-      return allowHook('OpenPrd 检测到写入动作。本轮写入完成后、最终回复前，请针对实际 touched code files 运行 openprd dev-check . <file...>；如出现 warning，判断本轮是否扩大职责，扩大则先重构/拆分/解耦并复查，窄修暂不拆时说明原因和后续拆分建议；如涉及界面视觉且已有参考效果图并进入实现阶段，阶段性完成后运行 openprd visual-compare . --reference <效果图> --actual <实现截图> 并查看 JPG 对比图；如发现配置缺口、未知代码扩展名或用户偏好，运行 openprd grow . --review，确认后再 apply；维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；声明就绪前，请同步维护 docs/basic、文件说明书、文件夹 README，以及相关 OpenPrd change/task 状态；如果涉及后端、脚本、Agent、工具链、服务或数据处理变更，还要把 CLI 与 API 视为同级接入面并更新 docs/basic/backend-structure.md。');
+      return allowHook('OpenPrd 检测到写入动作。本轮写入完成后、最终回复前，请针对实际 touched code files 运行 openprd dev-check . <file...>；如出现 warning，判断本轮是否扩大职责，扩大则先重构/拆分/解耦并复查，窄修暂不拆时说明原因和后续拆分建议；如涉及界面视觉且已有参考效果图并进入实现阶段，阶段性完成后运行 openprd visual-compare . --reference <效果图> --actual <实现截图> 并查看 JPG 对比图；如没有参考图但改动界面，先截修改前，完成后截修改后，并运行 openprd visual-compare . --before <修改前截图> --after <修改后截图> 检查预期变化和未改区域漂移；如发现配置缺口、未知代码扩展名或用户偏好，运行 openprd grow . --review，确认后再 apply；维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；声明就绪前，请同步维护 docs/basic、文件说明书、文件夹 README，以及相关 OpenPrd change/task 状态；如果涉及后端、脚本、Agent、工具链、服务或数据处理变更，还要把 CLI 与 API 视为同级接入面并更新 docs/basic/backend-structure.md。');
     }
     return allowHook();
   }

@@ -8,7 +8,7 @@
 ## 核心依赖
 
 - `yaml`: 读写 `.openprd/config.yaml`、schema 和 OpenSpec 元数据。
-- `sharp`: 读取常见图片格式、缩放截图、合成界面效果图与实现截图，并输出 JPG / PNG / WebP 视觉评审图。
+- `sharp`: 读取常见图片格式、缩放截图、合成界面效果图与实现截图或修改前后截图，并输出 JPG / PNG / WebP 视觉评审图。
 - Node.js 标准库: `fs/promises`、`path`、`crypto`、`child_process`、`url`。
 
 ## 工具链
@@ -23,7 +23,7 @@
 - `node ./bin/openprd.js fleet <root> --backfill-work-units`: 为历史 OpenPrD 工作区的既有 PRD 版本补 work unit 绑定、digest 校验命令和稳定评审 artifact；`--update-openprd` 会顺带执行该回填。
 - `node ./bin/openprd.js quality . --verify`: 生成 JSON 与 HTML 回归测试报告，展示整体回归结果、逐需求模块结果、测试块通过情况、本次执行证据、日志链路、业务成本与滥用护栏、冒烟覆盖、性能基线、极端场景和项目经验沉淀。
 - `node ./bin/openprd.js quality . --learn --from <report>`: 将审查过的问题修复抽象为 `.openprd/knowledge/skills/` 下的项目级经验 skill。
-- `node ./bin/openprd.js visual-compare . --reference <效果图> --actual <实现截图>`: 把参考图和实现截图合成左右对比图；默认输出 JPG 到 `.openprd/harness/visual-reviews/`，可用 `--format jpg|png|webp`、`--quality` 和 `--max-panel-width` 调整。
+- `node ./bin/openprd.js visual-compare . --reference <效果图> --actual <实现截图>` / `node ./bin/openprd.js visual-compare . --before <修改前截图> --after <修改后截图>`: 把参考图与实现截图，或修改前与修改后截图合成左右对比图；默认输出 JPG 到 `.openprd/harness/visual-reviews/`，可用 `--format jpg|png|webp`、`--quality` 和 `--max-panel-width` 调整。
 - `node ./bin/openprd.js run . --context`: 生成 hook-stable 执行上下文。
 - `node ./bin/openprd.js update . --hook-profile lite|guarded|full`: 刷新 agent guidance 并选择 Codex hook 重量；默认 `lite` 保留需求澄清写入门禁但不启用完整遥测。
 

@@ -355,6 +355,19 @@ openprd visual-compare /path/to/project \
   --max-panel-width 1180
 ```
 
+如果界面改动没有参考图或效果图，Agent 应先截取当前界面，再实现改动，然后用同一入口、
+视口、账号和数据状态截取修改后界面，并生成修改前后自检图：
+
+```bash
+openprd visual-compare /path/to/project \
+  --before before-screenshot.png \
+  --after after-screenshot.jpg
+```
+
+这类输出默认命名为 `visual-before-after-*.jpg`，左侧标注 `修改前`，右侧标注
+`修改后`。Agent 应检查预期变化是否出现，也要检查未改区域是否有布局、颜色、密度或状态漂移。
+大界面方向性改造仍需先做视觉方案评审，不能用 before/after 跳过用户选方向。
+
 Agent 必须查看生成图并继续对标，直到没有明显视觉差异。最终回复里应给出本次
 生成的对比图路径，并说明对比后是否仍有差异。
 

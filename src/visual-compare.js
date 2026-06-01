@@ -7,6 +7,8 @@ const DEFAULT_PANEL_WIDTH = 1180;
 const DEFAULT_QUALITY = 85;
 const DEFAULT_REFERENCE_LABEL = '效果图';
 const DEFAULT_ACTUAL_LABEL = '实现截图';
+const DEFAULT_BEFORE_LABEL = '修改前';
+const DEFAULT_AFTER_LABEL = '修改后';
 const OUTPUT_FORMATS = new Set(['jpg', 'jpeg', 'png', 'webp']);
 
 function normalizeFormat(format, outPath) {
@@ -29,13 +31,14 @@ function outputExtension(format) {
   return format === 'jpeg' ? 'jpg' : format;
 }
 
-function defaultOutputPath(projectRoot, format) {
+function defaultOutputPath(projectRoot, format, mode) {
+  const prefix = mode === 'before-after' ? 'visual-before-after' : 'visual-compare';
   return path.join(
     projectRoot,
     '.openprd',
     'harness',
     'visual-reviews',
-    `visual-compare-${compactTimestamp()}.${outputExtension(format)}`,
+    `${prefix}-${compactTimestamp()}.${outputExtension(format)}`,
   );
 }
 
@@ -117,27 +120,66 @@ function encodePipeline(image, format, quality) {
   return image.jpeg({ quality });
 }
 
+function resolveInputs(options) {
+  const hasReferenceActual = Boolean(options.reference || options.actual);
+  const hasBeforeAfter = Boolean(options.before || options.after);
+  if (hasReferenceActual && hasBeforeAfter) {
+    throw new Error('Use either --reference/--actual or --before/--after, not both.');
+  }
+  if (hasBeforeAfter) {
+    if (!options.before) {
+      throw new Error('Missing --before image path.');
+    }
+    if (!options.after) {
+      throw new Error('Missing --after image path.');
+    }
+    return {
+      mode: 'before-after',
+      left: options.before,
+      right: options.after,
+      leftLabel: options.referenceLabel || DEFAULT_BEFORE_LABEL,
+      rightLabel: options.actualLabel || DEFAULT_AFTER_LABEL,
+      nextActions: [
+        '把输出图片作为视觉改动自检证据查看：左侧修改前，右侧修改后。',
+        '检查预期变化是否出现，以及未改区域是否有布局、颜色、密度或状态漂移。',
+        '没有效果图时，这张图只证明改动前后差异已自检；大界面方向性改造仍需先完成方案评审。',
+      ],
+    };
+  }
+  if (!options.reference) {
+    throw new Error('Missing --reference image path or --before image path.');
+  }
+  if (!options.actual) {
+    throw new Error('Missing --actual image path or --after image path.');
+  }
+  return {
+    mode: 'reference-actual',
+    left: options.reference,
+    right: options.actual,
+    leftLabel: options.referenceLabel || DEFAULT_REFERENCE_LABEL,
+    rightLabel: options.actualLabel || DEFAULT_ACTUAL_LABEL,
+    nextActions: [
+      '把输出图片作为视觉评审证据查看：左侧效果图，右侧实现截图。',
+      '如果仍有明显差异，继续按效果图复刻并重新运行 visual-compare。',
+      '只有对比图确认一致后，才声明本阶段界面视觉实现完成。',
+    ],
+  };
+}
+
 async function visualCompareWorkspace(projectRoot, options = {}) {
-  const reference = options.reference;
-  const actual = options.actual;
-  if (!reference) {
-    throw new Error('Missing --reference image path.');
-  }
-  if (!actual) {
-    throw new Error('Missing --actual image path.');
-  }
+  const comparison = resolveInputs(options);
 
   const format = normalizeFormat(options.format, options.out);
   const outputPath = options.out
     ? path.resolve(projectRoot, options.out)
-    : defaultOutputPath(projectRoot, format);
+    : defaultOutputPath(projectRoot, format, comparison.mode);
   const quality = parseQuality(options.quality);
   const maxPanelWidth = parsePositiveInteger(options.maxPanelWidth, DEFAULT_PANEL_WIDTH, '--max-panel-width');
-  const referenceLabel = options.referenceLabel || DEFAULT_REFERENCE_LABEL;
-  const actualLabel = options.actualLabel || DEFAULT_ACTUAL_LABEL;
+  const referenceLabel = comparison.leftLabel;
+  const actualLabel = comparison.rightLabel;
 
-  const referencePanel = await resizePanel(reference, maxPanelWidth);
-  const actualPanel = await resizePanel(actual, maxPanelWidth);
+  const referencePanel = await resizePanel(comparison.left, maxPanelWidth);
+  const actualPanel = await resizePanel(comparison.right, maxPanelWidth);
   const panelWidth = Math.min(
     maxPanelWidth,
     Math.max(referencePanel.width, actualPanel.width),
@@ -176,6 +218,7 @@ async function visualCompareWorkspace(projectRoot, options = {}) {
   return {
     ok: true,
     action: 'visual-compare',
+    mode: comparison.mode,
     projectRoot,
     outputPath,
     format,
@@ -205,11 +248,7 @@ async function visualCompareWorkspace(projectRoot, options = {}) {
       width: canvasWidth,
       height: canvasHeight,
     },
-    nextActions: [
-      '把输出图片作为视觉评审证据查看：左侧效果图，右侧实现截图。',
-      '如果仍有明显差异，继续按效果图复刻并重新运行 visual-compare。',
-      '只有对比图确认一致后，才声明本阶段界面视觉实现完成。',
-    ],
+    nextActions: comparison.nextActions,
   };
 }
 
