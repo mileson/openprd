@@ -242,6 +242,8 @@ openprd release /path/to/project
 
 `release` manages the project-level version ledger, not the internal OpenPrd PRD version such as `v0004`. Once enabled, handoff exports, release-note snippets, and local tag coordination in `loop --finish --commit` will reuse that version state.
 
+When OpenPrd itself publishes a new version to GitHub, the release should also include a matching version tag and GitHub Release. You can preview the body with `node scripts/openprd-github-release-notes.mjs /path/to/project --version 0.1.23 --tag v0.1.23 --out /tmp/openprd-release.md`; the repo `github-release` workflow will create or update the GitHub Release from the same `release-ledger` on tag push or manual dispatch.
+
 ### 3. Clarify with the user
 
 ```bash

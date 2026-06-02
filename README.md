@@ -207,6 +207,8 @@ openprd release /path/to/project
 
 `release` 维护的是项目级版本账本，不是 OpenPrd 内部 PRD 的 `v0004` 这类版本号。启用后，后续 handoff、版本说明和 `loop --finish --commit` 的本地 tag 协同都会优先复用这里的版本信息。
 
+如果 OpenPrd 自身要把新版本发布到 GitHub，默认还要推送匹配的版本 tag，并配套 GitHub Release。可以先用 `node scripts/openprd-github-release-notes.mjs /path/to/project --version 0.1.23 --tag v0.1.23 --out /tmp/openprd-release.md` 预览发布文案；仓库内的 `github-release` workflow 会在 tag push 或手动触发时，基于同一份 `release-ledger` 自动创建或更新 GitHub Release。
+
 ### 3. 先向用户澄清
 
 ```bash

@@ -32,6 +32,7 @@
   },
   "scripts": {
     "start": "node ./bin/openprd.js",
+    "release:notes": "node scripts/openprd-github-release-notes.mjs",
     "test": "node --test",
     "test:smoke": "node --test --test-name-pattern \"quality requires current smoke evidence|run exposes hook-stable\"",
     "test:perf": "node scripts/quality-perf-check.mjs --mode normal",

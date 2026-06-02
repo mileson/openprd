@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "enabled": true,
+  "strategy": "semver",
+  "currentVersion": "0.1.2",
+  "versions": [
+    {
+      "version": "0.1.2",
+      "status": "current",
+      "createdAt": "2026-06-02 21:28:04",
+      "updatedAt": "2026-06-02 21:28:23",
+      "notes": null,
+      "items": [
+        {
+          "type": "新增",
+          "summary": "新增",
+          "detail": "首轮项目画像，让冷启动工作区先形成项目画像和需求入口自省",
+          "sentence": "新增：首轮项目画像，让冷启动工作区先形成项目画像和需求入口自省",
+          "recordedAt": "2026-06-02 21:28:22",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1780406902463"
+          }
+        },
+        {
+          "type": "新增",
+          "summary": "新增",
+          "detail": "review-presentation 门禁，评审页文案必须先通过展示契约校验",
+          "sentence": "新增：review-presentation 门禁，评审页文案必须先通过展示契约校验",
+          "recordedAt": "2026-06-02 21:28:22",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1780406902656"
+          }
+        },
+        {
+          "type": "新增",
+          "summary": "新增",
+          "detail": "测试策略与执行策略联动，让任务可以直接携带 worker 合同和证据计划",
+          "sentence": "新增：测试策略与执行策略联动，让任务可以直接携带 worker 合同和证据计划",
+          "recordedAt": "2026-06-02 21:28:22",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1780406902835"
+          }
+        },
+        {
+          "type": "优化",
+          "summary": "优化",
+          "detail": "历史会话续接，先通过全局 session registry 恢复真实 workspace",
+          "sentence": "优化：历史会话续接，先通过全局 session registry 恢复真实 workspace",
+          "recordedAt": "2026-06-02 21:28:23",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1780406903019"
+          }
+        },
+        {
+          "type": "新增",
+          "summary": "新增",
+          "detail": "benchmark observe、knowledge draft skill 和 Codex repair 等成长闭环",
+          "sentence": "新增：benchmark observe、knowledge draft skill 和 Codex repair 等成长闭环",
+          "recordedAt": "2026-06-02 21:28:23",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1780406903180"
+          }
+        },
+        {
+          "type": "新增",
+          "summary": "新增",
+          "detail": "visual-compare 的 before/after 自检，方便无参考图界面改动做视觉回归",
+          "sentence": "新增：visual-compare 的 before/after 自检，方便无参考图界面改动做视觉回归",
+          "recordedAt": "2026-06-02 21:28:23",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1780406903337"
+          }
+        }
+      ],
+      "tag": null
+    }
+  ],
+  "createdAt": "2026-06-02 21:28:04",
+  "updatedAt": "2026-06-02 21:28:23"
+}

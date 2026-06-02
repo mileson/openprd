@@ -755,6 +755,12 @@ function renderCommandCatalog() {
     '- `openprd learn . --topic <text> --open`：生成当前项目的学习包骨架和 HTML 阅读器。',
     '- `openprd learn . --content-json <file> --open`：让 Agent 写完 `learning-content.json` 后重新渲染最终图文阅读器。',
     '',
+    '## 发布与版本',
+    '',
+    '- `openprd release . --set <0.1.23>`：设置当前项目版本，并启用 release-ledger。',
+    '- `openprd release . --notes "<新增 / 修复 / 优化 ...>"`：把本轮用户可感知变化累计到当前项目版本。',
+    '- `node scripts/openprd-github-release-notes.mjs . --version <0.1.23> --tag <0.1.23|v0.1.23> --out <file>`：从当前 release-ledger 渲染 GitHub Release 文案；缺少匹配版本或版本条目时直接失败。',
+    '',
     '## 视觉与质量',
     '',
     '- `openprd visual-compare . --reference <效果图> --actual <实现截图>`：实现阶段已有参考图后，输出左右对比 JPG。',
@@ -777,6 +783,7 @@ function renderCommandCatalog() {
     '- 规划、分析、评审、解释影响范围时，保持只读；不要因为命令存在就直接执行写入。',
     '- 只有用户明确要求实现、继续任务、深度调研、对标复刻或提交时，才进入 `tasks --advance`、`loop --run`、commit、push 等执行动作。',
     '- 高风险动作前先过 `openprd standards . --verify`、`openprd quality . --verify` 和 `openprd run . --verify`；`openprd doctor .` 主要用于集成漂移、生成引导 drift，或 commit/push/freeze/handoff 前的最终健康检查。',
+    '- OpenPrd 自身发布到 GitHub 的新版本，默认要同时具备匹配的项目版本、版本 tag 和 GitHub Release；只有 push/tag 没有 Release 不算发布闭环。',
     '',
   ].join('\n');
 }
