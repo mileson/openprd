@@ -15,6 +15,7 @@ const REQUIRED_PRODUCT_TYPES = ['consumer', 'b2b', 'agent'];
 const REQUIRED_SECTIONS = ['meta', 'problem', 'users', 'goals', 'scope', 'scenarios', 'requirements', 'constraints', 'risks', 'handoff'];
 const CORE_TEMPLATE_FILES = [
   'README.md',
+  'README_EN.md',
   'config.yaml',
   'schema/prd.schema.yaml',
   'schema/diagram-architecture.schema.yaml',
@@ -31,9 +32,13 @@ const CORE_TEMPLATE_FILES = [
   'templates/agent/prd.md',
   'templates/agent/intake.md',
   'templates/company/README.md',
+  'templates/company/README_EN.md',
   'templates/industry/README.md',
+  'templates/industry/README_EN.md',
   'templates/project/README.md',
+  'templates/project/README_EN.md',
   'templates/session/README.md',
+  'templates/session/README_EN.md',
   'standards/config.json',
   'standards/file-manual-template.md',
   'standards/folder-readme-template.md',
@@ -51,6 +56,7 @@ const CORE_TEMPLATE_FILES = [
 ];
 const WORKSPACE_SEED_REFRESH_FILES = [
   'README.md',
+  'README_EN.md',
   'schema/prd.schema.yaml',
   'schema/diagram-architecture.schema.yaml',
   'schema/diagram-product-flow.schema.yaml',
@@ -66,9 +72,13 @@ const WORKSPACE_SEED_REFRESH_FILES = [
   'templates/agent/prd.md',
   'templates/agent/intake.md',
   'templates/company/README.md',
+  'templates/company/README_EN.md',
   'templates/industry/README.md',
+  'templates/industry/README_EN.md',
   'templates/project/README.md',
+  'templates/project/README_EN.md',
   'templates/session/README.md',
+  'templates/session/README_EN.md',
   'standards/file-manual-template.md',
   'standards/folder-readme-template.md',
 ];

@@ -1,16 +1,18 @@
-# Industry Template Layer
+# 行业模板层
 
-This layer is where industry-specific defaults live.
+简体中文 | [English](./README_EN.md)
 
-Examples:
+这一层用于沉淀行业默认值。
+
+示例：
 
 - SaaS
-- E-commerce
-- Fintech
-- Internal tools
+- 电商
+- 金融科技
+- 内部工具
 
-Rules:
+规则：
 
-- May add or reorder sections.
-- May not remove core schema fields.
-- Must keep validation compatible with `prd-core`.
+- 可以新增或重排章节。
+- 不能移除核心 schema 字段。
+- 必须保持与 `prd-core` 的校验兼容。

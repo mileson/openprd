@@ -1,14 +1,16 @@
-# Session Template Layer
+# 会话模板层
 
-This layer captures temporary per-session overrides.
+简体中文 | [English](./README_EN.md)
 
-Use cases:
+这一层用于记录每次会话的临时覆盖项。
 
-- Change the active review tone.
-- Add a temporary checklist.
-- Capture one-off stakeholder notes.
+适用场景：
 
-Rules:
+- 调整当前评审语气。
+- 增加临时 checklist。
+- 记录一次性的 stakeholder 备注。
 
-- Must be disposable.
-- Must not mutate the canonical schema.
+规则：
+
+- 必须可丢弃。
+- 不能修改标准 schema。

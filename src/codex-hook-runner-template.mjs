@@ -1761,7 +1761,7 @@ function visualMockupMessage(intent) {
 }
 
 function codexConfirmationReplyRule() {
-  return 'Codex UI 规则: 只有当前 approval policy 仍然需要人类对稳定 review artifact 做决定时，才在 final answer 里停下来请求确认；如果当前 lane 已进入 silent-record 策略，就继续记录精确 review artifact 并推进，不要为了同一个需求再额外停顿。';
+  return 'Codex UI 规则: 只有当前 approval policy 仍然需要人类对稳定 review artifact 做决定时，才在 final answer 里停下来请求确认；如果 review 已确认且 tasks 已就绪，但还需要执行授权，必须先用“执行确认清单”列出本轮目标、将执行内容、不做事项、验证方式和已知风险，再请求明确确认；不要只要求用户回复一句确认。如果用户刚刚已经确认了 L1 mini-plan、范围边界或正式产品边界，后续承接要写成“已确认，我按这个继续”这类确认已收到的语气，不要写成“确认，我们就按这个……”这种看起来像再次向用户索要确认的句子。如果当前 lane 已进入 silent-record 策略，就继续记录精确 review artifact 并推进，不要为了同一个需求再额外停顿。';
 }
 
 function confirmationGateMessage(gate) {
@@ -1797,7 +1797,7 @@ function currentRequirementStatusLine(gate, progress) {
     case 'task-breakdown-required':
       return '当前卡点: change 已存在，但还缺任务拆解，不能直接进入实现。';
     case 'implementation-ready':
-      return '当前卡点: review 已确认且 tasks 已就绪；如果当前需求原本就明确要求实现，可直接进入实现，否则等待一句明确的执行指令。';
+      return '当前卡点: review 已确认且 tasks 已就绪；如果当前需求原本就明确要求实现，可直接进入实现；否则先展示执行确认清单，再请求用户确认执行。若用户刚刚确认的是 L1 范围边界或 mini-plan，承接话术要写成“已确认，我按这个继续”，不要再写成像二次索取确认的句子。';
     default:
       return '当前卡点: 继续按“澄清 -> 评审 -> change -> tasks -> 实现”的顺序推进。';
   }
@@ -1812,7 +1812,10 @@ function currentRequirementMessage(intent, gate, progress) {
   const lines = [
     'OpenPrd 当前需求入口',
     gateStatus,
-    '当前输入看起来是一个 L2 新产品、模块或流程需求。本轮只围绕这个新需求推进需求入口，不自动继续历史 active change。',
+    '当前输入命中了需求入口安全通道。不要按固定关键词判断；先用 $openprd-requirement-intake 按影响面、未知数、决策成本和验证成本判断用户可见需求类型。',
+    '内部审查保留固定对照：快速修正=L0，现有功能优化=L1，新功能/新流程方案=L2。',
+    '如果用户刚刚已经确认了现有功能优化（L1）的 mini-plan、范围边界或正式产品边界，下一句要明确写成“已确认，我按这个继续/收口/落地”；不要只写一个“确认”，更不要写成“确认，我们就按这个……”这种容易让用户误以为还要再表态的句子。',
+    '如果需求类型是新功能/新流程方案（L2），本轮只围绕这个新需求推进 PRD/review/change/tasks，并选择 base/consumer/b2b/agent PRD lens，不自动继续历史 active change。',
     prompt ? '本轮需求: ' + prompt : '',
     gate?.intakeMode === 'deep-reflection'
       ? '需求入口: 先运行需求自省，再输出对话内澄清摘要或简短清单。'

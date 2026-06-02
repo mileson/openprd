@@ -1,10 +1,12 @@
-# Company Template Layer
+# 公司模板层
 
-This layer captures company-specific PRD habits and terminology.
+简体中文 | [English](./README_EN.md)
 
-Rules:
+这一层用于沉淀公司级的 PRD 习惯、术语和固定约束。
 
-- May rename section labels for display.
-- May add company-only fields.
-- May not delete canonical fields.
-- May not change required semantics.
+规则：
+
+- 可以为了展示重命名章节标题。
+- 可以新增公司特有字段。
+- 不能删除标准字段。
+- 不能改变必需语义。

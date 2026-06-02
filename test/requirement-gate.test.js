@@ -205,6 +205,8 @@ describe('Codex requirement gate', () => {
     assert.ok(requirementPromptPayload.hookSpecificOutput.additionalContext.includes('target, scope, out-of-scope, acceptance'));
     assert.ok(requirementPromptPayload.hookSpecificOutput.additionalContext.includes('final answer'));
     assert.ok(requirementPromptPayload.hookSpecificOutput.additionalContext.includes('approval policy'));
+    assert.ok(requirementPromptPayload.hookSpecificOutput.additionalContext.includes('已确认，我按这个继续'));
+    assert.ok(requirementPromptPayload.hookSpecificOutput.additionalContext.includes('确认，我们就按这个'));
     assert.ok(
       requirementPromptPayload.hookSpecificOutput.additionalContext.includes('Do not open clarification HTML')
         || requirementPromptPayload.hookSpecificOutput.additionalContext.includes('Do not open a clarification HTML page')
@@ -317,6 +319,29 @@ describe('Codex requirement gate', () => {
     const executionAuthorizedGate = JSON.parse(await fs.readFile(path.join(project, '.openprd', 'harness', 'requirement-gate.json'), 'utf8'));
     assert.equal(executionAuthorizedGate.active, false);
     assert.equal(executionAuthorizedGate.status, 'execution-authorized');
+  });
+
+  test('init seeds Chinese-default workspace READMEs with English switch files', async () => {
+    const project = await makeTempProject();
+    await initWorkspace(project, { templatePack: 'agent' });
+
+    const workspaceReadme = await fs.readFile(path.join(project, '.openprd', 'README.md'), 'utf8');
+    const workspaceReadmeEn = await fs.readFile(path.join(project, '.openprd', 'README_EN.md'), 'utf8');
+
+    assert.match(workspaceReadme, /^# OpenPrd 工作区/m);
+    assert.ok(workspaceReadme.includes('[English](./README_EN.md)'));
+    assert.match(workspaceReadmeEn, /^# OpenPrd Workspace/m);
+    assert.ok(workspaceReadmeEn.includes('[简体中文](./README.md) | English'));
+
+    for (const layer of ['company', 'industry', 'project', 'session']) {
+      const zhPath = path.join(project, '.openprd', 'templates', layer, 'README.md');
+      const enPath = path.join(project, '.openprd', 'templates', layer, 'README_EN.md');
+      const zh = await fs.readFile(zhPath, 'utf8');
+      const en = await fs.readFile(enPath, 'utf8');
+
+      assert.ok(zh.includes('[English](./README_EN.md)'));
+      assert.ok(en.includes('[简体中文](./README.md) | English'));
+    }
   });
 
   test('Codex hook supports silent-record review lanes when the user opts out of extra review confirmation', async () => {

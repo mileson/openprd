@@ -1,14 +1,16 @@
-# Project Template Layer
+# 项目模板层
 
-This layer captures project-specific PRD adjustments.
+简体中文 | [English](./README_EN.md)
 
-Use cases:
+这一层用于沉淀项目级的 PRD 调整。
 
-- Add rollout notes.
-- Add project-specific assumptions.
-- Add extra review gates.
+适用场景：
 
-Rules:
+- 补充 rollout 说明。
+- 补充项目级假设。
+- 补充额外 review gate。
 
-- Must inherit from company and core layers.
-- Must remain freeze-compatible.
+规则：
+
+- 必须继承 company 和 core 层。
+- 必须保持 freeze 兼容。
