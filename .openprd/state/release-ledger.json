@@ -2,7 +2,7 @@
   "version": 1,
   "enabled": true,
   "strategy": "semver",
-  "currentVersion": "0.1.8",
+  "currentVersion": "0.1.9",
   "versions": [
     {
       "version": "0.1.2",
@@ -286,9 +286,9 @@
     },
     {
       "version": "0.1.8",
-      "status": "current",
+      "status": "released",
       "createdAt": "2026-06-06 14:06:15",
-      "updatedAt": "2026-06-06 14:06:53",
+      "updatedAt": "2026-06-06 15:46:43",
       "notes": null,
       "items": [
         {
@@ -337,8 +337,51 @@
         }
       ],
       "tag": null
+    },
+    {
+      "version": "0.1.9",
+      "status": "current",
+      "createdAt": "2026-06-06 15:46:43",
+      "updatedAt": "2026-06-06 15:46:44",
+      "notes": null,
+      "items": [
+        {
+          "type": "优化",
+          "summary": "优化",
+          "detail": "收工时发现可复用经验后，会先用更好懂的说法说明这次情况、后续怎么复用，再询问是否保留",
+          "sentence": "优化：收工时发现可复用经验后，会先用更好懂的说法说明这次情况、后续怎么复用，再询问是否保留",
+          "recordedAt": "2026-06-06 15:46:44",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1780732004017"
+          }
+        },
+        {
+          "type": "新增",
+          "summary": "新增",
+          "detail": "项目经验回顾会同步生成面向用户的说明内容，减少只剩内部术语、用户看不懂的情况",
+          "sentence": "新增：项目经验回顾会同步生成面向用户的说明内容，减少只剩内部术语、用户看不懂的情况",
+          "recordedAt": "2026-06-06 15:46:44",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1780732004151"
+          }
+        },
+        {
+          "type": "新增",
+          "summary": "新增",
+          "detail": "README 补充内置最佳实践能力说明，覆盖 DeepWiki、Context7 和图标资源等默认增强能力",
+          "sentence": "新增：README 补充内置最佳实践能力说明，覆盖 DeepWiki、Context7 和图标资源等默认增强能力",
+          "recordedAt": "2026-06-06 15:46:44",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1780732004293"
+          }
+        }
+      ],
+      "tag": null
     }
   ],
   "createdAt": "2026-06-02 21:28:04",
-  "updatedAt": "2026-06-06 14:06:53"
+  "updatedAt": "2026-06-06 15:46:44"
 }

@@ -1000,10 +1000,11 @@ function buildKnowledgeCandidateMeta({
   existingCandidate,
   abstraction,
 }) {
+  const existingStatus = normalizeCandidateStatus(existingCandidate?.status);
   return {
     version: 1,
     candidateId,
-    status: existingCandidate?.status === 'promoted' ? 'promoted' : 'pending-review',
+    status: isReviewedKnowledgeCandidateStatus(existingStatus) ? existingStatus : 'pending-review',
     createdAt: existingCandidate?.createdAt ?? timestamp(),
     updatedAt: timestamp(),
     sourceKind: source.kind,
@@ -1022,6 +1023,140 @@ function buildKnowledgeCandidateMeta({
       draftSkill: draftSkillPath,
     },
     suggestedLearnCommand: `openprd quality . --learn --from ${path.relative(projectRoot, candidateDir) || '.'}`,
+  };
+}
+
+function cleanUserFacingExperienceText(value, fallback = null, max = 160) {
+  let text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) {
+    return fallback;
+  }
+  const replacements = [
+    [/\bknowledge candidate\b/gi, '候选经验'],
+    [/\bdraft skill\b/gi, '项目经验'],
+    [/\bskill\b/gi, '经验'],
+    [/\bpromote\b/gi, '保留'],
+    [/\breject\b/gi, '暂不保留'],
+    [/\barchive\b/gi, '先归档'],
+    [/\bhook\b/gi, '收尾流程'],
+    [/\bharness\b/gi, '项目流程'],
+    [/\bturn-state\b/gi, '本轮记录'],
+    [/\brun-state\b/gi, '当前状态'],
+    [/\bOpenPrd\b/gi, '当前流程'],
+    [/\.openprd\/[^\s，。；]+/g, ''],
+    [/[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+/g, ''],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    text = text.replace(pattern, replacement);
+  }
+  text = text
+    .replace(/[()]/g, '')
+    .replace(/[;；]+/g, '，')
+    .replace(/\s+,/g, '，')
+    .replace(/,+/g, '，')
+    .replace(/\s+/g, ' ')
+    .replace(/^[，,。\s]+|[，,。\s]+$/g, '')
+    .trim();
+  if (!text) {
+    return fallback;
+  }
+  return trimPreview(text, max) ?? fallback;
+}
+
+function observedSituationFromSource({ source, reviewSignals, touchedFiles }) {
+  const direct = [
+    source.symptoms[0],
+    reviewSignals.find((signal) => signal.summary)?.summary,
+    source.abstractPattern,
+    source.title,
+  ]
+    .map((item) => cleanUserFacingExperienceText(item))
+    .find(Boolean);
+  if (direct) {
+    return direct;
+  }
+  if (touchedFiles.length > 0) {
+    return `这次任务在 ${touchedFiles.slice(0, 3).join('、')} 这些位置形成了一套后续可能会重复用到的处理方式。`;
+  }
+  return '这次任务里已经形成了一种以后可能重复出现的处理方式。';
+}
+
+function plannedExperienceFromContext({ source, categories, touchedFiles }) {
+  const touchesDocs = touchedFiles.some((file) => String(file).startsWith('docs/basic/'));
+  const touchesTests = touchedFiles.some((file) => /^(test|tests)\//.test(String(file)));
+  if (categories.includes('agent-misjudgment')) {
+    return '以后做类似任务收尾时，我会先把本次情况、准备保留的经验和适用场景整理清楚，再用人话确认是否保留为当前项目经验。';
+  }
+  if (categories.includes('hidden-debug-knowledge')) {
+    return '以后再遇到类似问题时，我会优先复用这次已经验证过的判断依据、排查顺序和收尾检查方式，而不是从零开始重新摸索。';
+  }
+  if (touchesDocs && touchesTests) {
+    return '以后再遇到类似任务时，我会把处理方式、相关说明和验证方式一起整理成可复用经验，减少重复补充。';
+  }
+  if (touchesTests) {
+    return '以后再遇到类似任务时，我会连同这次已经跑通的验证方式一起复用，避免只记住改法、忘记检查方式。';
+  }
+  const prevention = cleanUserFacingExperienceText(source.prevention[0]);
+  if (prevention) {
+    return prevention;
+  }
+  return '以后再遇到类似任务时，我会把这次已经验证过的处理顺序和注意事项保留下来，作为当前项目的默认经验。';
+}
+
+function futureHandlingFromContext({ categories, touchedFiles }) {
+  const touchesDocs = touchedFiles.some((file) => String(file).startsWith('docs/basic/'));
+  if (categories.includes('agent-misjudgment')) {
+    return '以后如果再遇到类似任务，我会优先按这套说法和处理顺序来收尾，减少重复解释和重复判断。';
+  }
+  if (touchesDocs) {
+    return '以后如果再遇到类似任务，我会优先把处理方式和相关说明一起整理，减少来回补充。';
+  }
+  return '以后如果再遇到类似任务，我会优先按这套经验来处理，减少重复解释和重复判断。';
+}
+
+function knowledgeReviewStateNote(status) {
+  const normalized = normalizeCandidateStatus(status);
+  if (normalized === 'rejected') {
+    return '这条经验之前已经标记为暂不保留，本轮不会再次向用户追问。';
+  }
+  if (normalized === 'archived') {
+    return '这条经验之前已经先归档，本轮不会再次向用户追问。';
+  }
+  if (normalized === 'promoted' || normalized === 'merged') {
+    return '这条经验已经保留为当前项目经验，本轮不需要再次确认。';
+  }
+  return null;
+}
+
+function buildKnowledgeUserFacingExperience({ candidate, source, touchedFiles, reviewSignals, categories }) {
+  const observedSituation = observedSituationFromSource({ source, reviewSignals, touchedFiles });
+  const plannedExperience = plannedExperienceFromContext({ source, categories, touchedFiles });
+  const futureHandling = futureHandlingFromContext({ categories, touchedFiles });
+  const scopeNote = '这条经验只会保留在当前项目里。';
+  const reviewStateNote = knowledgeReviewStateNote(candidate.status);
+  const shouldAskUser = normalizeCandidateStatus(candidate.status) === 'pending-review';
+  const question = shouldAskUser ? '要我把它一起保留下来吗？' : null;
+  const messageLines = [
+    '这次我观察到一个以后可能重复出现的情况：',
+    observedSituation,
+    '',
+    '我计划保留一条项目经验：',
+    plannedExperience,
+    '',
+    futureHandling,
+    scopeNote,
+    question ?? reviewStateNote,
+  ].filter(Boolean);
+  return {
+    observedSituation,
+    plannedExperience,
+    futureHandling,
+    scopeNote,
+    question,
+    reviewStateNote,
+    shouldAskUser,
+    projectOnly: true,
+    message: messageLines.join('\n'),
   };
 }
 
@@ -1202,6 +1337,13 @@ export async function reviewKnowledgeWorkspace(projectRoot, options = {}) {
     ...draftCandidate,
     abstraction,
   };
+  const userFacingExperience = buildKnowledgeUserFacingExperience({
+    candidate,
+    source,
+    touchedFiles: substantiveTouchedFiles,
+    reviewSignals,
+    categories,
+  });
   await writeJson(candidatePath, candidate);
   await writeJson(diagnosticReportPath, buildCandidateDiagnosticReport({
     candidateId,
@@ -1257,7 +1399,9 @@ export async function reviewKnowledgeWorkspace(projectRoot, options = {}) {
     skillName: names.skillName,
     categories,
     reasons,
+    status: candidate.status,
     summary: reviewSummary,
+    userFacingExperience,
     suggestedLearnCommand: candidate.suggestedLearnCommand,
     files: {
       candidate: candidatePath,

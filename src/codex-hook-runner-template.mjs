@@ -1946,7 +1946,7 @@ function runOpenPrd(args, cwd) {
   const result = spawnSync(command, commandArgs, {
     cwd,
     encoding: 'utf8',
-    timeout: 15000,
+    timeout: 30000,
     env: process.env,
   });
   return {
@@ -2557,7 +2557,7 @@ function runGateChecks(cwd, payload, risk) {
       output: change.stdout || change.stderr,
     });
   }
-  if (risk.level === 'high' && shouldRunDoctorForHighRisk(payload)) {
+  if (risk.level === 'high' && shouldRunDoctorForHighRisk(payload) && runWorkspaceReady) {
     const doctor = runOpenPrd(['doctor', '.', '--tools', 'codex', '--json'], cwd);
     const doctorParsed = parseJsonOutput(doctor.stdout);
     checks.push({
@@ -2902,6 +2902,7 @@ function handle(eventName, cwd, payload) {
             && !parsedReview.skipped
             && parsedReview.ok !== false
             && parsedReview.candidateId
+            && parsedReview.status === 'pending-review'
             && parsedReview.candidateId !== turnState.lastKnowledgePromptCandidateId
           ) {
             writeTurnState(root, {
@@ -2909,14 +2910,26 @@ function handle(eventName, cwd, payload) {
               lastKnowledgePromptCandidateId: parsedReview.candidateId,
               lastKnowledgePromptAt: now(),
             });
+            const userFacingMessage = String(parsedReview.userFacingExperience?.message || '').trim();
             return allowHook([
-              'OpenPrd 在本轮 Stop 回顾里发现了可沉淀的项目经验草案。',
-              `Draft Skill: ${parsedReview.files?.draftSkill ?? 'unknown'}`,
-              `候选目录: ${parsedReview.files?.candidateDir ?? 'unknown'}`,
+              'OpenPrd 在本轮收工回顾里发现了一条适合沉淀为当前项目经验的内容。',
+              '请在最终回复结尾主动用下面这段结构化人话询问用户，不要改成内部术语，也不要提 Draft Skill、candidate、promote、路径或命令：',
+              userFacingMessage || [
+                '这次我观察到一个以后可能重复出现的情况：',
+                '这次任务里已经形成了一种以后可能重复出现的处理方式。',
+                '',
+                '我计划保留一条项目经验：',
+                '以后再遇到类似任务时，我会优先复用这次已经验证过的处理顺序和注意事项。',
+                '',
+                '以后如果再遇到类似任务，我会优先按这套经验来处理，减少重复解释和重复判断。',
+                '这条经验只会保留在当前项目里。',
+                '要我把它一起保留下来吗？',
+              ].join('\n'),
               parsedReview.suggestedLearnCommand
-                ? `后续 promote: ${parsedReview.suggestedLearnCommand}`
+                ? `如果用户明确同意，再执行：${parsedReview.suggestedLearnCommand}`
                 : null,
-              '在最终回复里说明这次修复是否值得沉淀，以及草案已写到哪里。',
+              `如果用户明确表示暂不保留，执行：openprd knowledge reject --path . --id ${parsedReview.candidateId} --reason "<用户原话>"`,
+              `如果用户表示先不处理、以后再说，执行：openprd knowledge archive --path . --id ${parsedReview.candidateId} --reason "<用户原话>"`,
             ].filter(Boolean).join('\n'));
           }
         } catch {}
