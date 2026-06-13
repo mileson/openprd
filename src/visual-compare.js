@@ -12,6 +12,7 @@ const DEFAULT_BEFORE_LABEL = '修改前';
 const DEFAULT_AFTER_LABEL = '修改后';
 const DEFAULT_FOCUS_TITLE = '局部焦点证据板';
 const DEFAULT_PARALLEL_TITLE = '并行实验证据板';
+const DEFAULT_VERIFICATION_TITLE = '截图实测证据板';
 const DEFAULT_PARALLEL_CARD_WIDTH = 380;
 const DEFAULT_PARALLEL_COLUMNS = 3;
 const OUTPUT_FORMATS = new Set(['jpg', 'jpeg', 'png', 'webp']);
@@ -21,6 +22,7 @@ const MODE_PREFIX = {
   'before-after': 'visual-before-after',
   'focus-board': 'visual-focus-board',
   'parallel-board': 'visual-parallel-board',
+  'verification-board': 'visual-verification-board',
 };
 const BOARD_MODE_ALIASES = new Map([
   ['focus', 'focus-board'],
@@ -31,6 +33,11 @@ const BOARD_MODE_ALIASES = new Map([
   ['parallel-board', 'parallel-board'],
   ['parallel-experiment-board', 'parallel-board'],
   ['experiment-board', 'parallel-board'],
+  ['verification', 'verification-board'],
+  ['verification-board', 'verification-board'],
+  ['screenshot-board', 'verification-board'],
+  ['screenshot-evidence-board', 'verification-board'],
+  ['visual-verification-board', 'verification-board'],
 ]);
 
 function normalizeFormat(format, outPath) {
@@ -415,7 +422,7 @@ async function readBoardSpec(projectRoot, boardPath) {
   const payload = JSON.parse(await fs.readFile(sourcePath, 'utf8'));
   const mode = normalizeBoardMode(payload.mode);
   if (!mode) {
-    throw new Error(`Unsupported board mode in ${boardPath}. Use focus-board or parallel-board.`);
+    throw new Error(`Unsupported board mode in ${boardPath}. Use focus-board, parallel-board, or verification-board.`);
   }
   return {
     mode,
@@ -490,6 +497,47 @@ function normalizeMediaList(projectRoot, media) {
         label: String(entry.label ?? `素材 ${index + 1}`),
       };
     });
+}
+
+function normalizeVerificationItems(projectRoot, payload) {
+  let rawItems = Array.isArray(payload.items) ? payload.items : [];
+  if (rawItems.length === 0 && Array.isArray(payload.screenshots)) {
+    rawItems = payload.screenshots;
+  }
+  if (rawItems.length === 0) {
+    const singlePath = payload.screenshot ?? payload.actual ?? payload.path;
+    if (singlePath) {
+      rawItems = [{
+        path: singlePath,
+        label: payload.label ?? '实测截图',
+        notes: payload.notes ?? payload.note ?? payload.summary,
+        checks: payload.checks ?? payload.checkpoints,
+      }];
+    }
+  }
+  return rawItems.map((item, index) => {
+    if (typeof item === 'string') {
+      return {
+        label: `实测截图 ${index + 1}`,
+        subtitle: '',
+        verdict: '',
+        media: [{ path: item, label: '实测截图' }],
+        metrics: [],
+        notes: '',
+      };
+    }
+    const media = Array.isArray(item.media) && item.media.length > 0
+      ? item.media
+      : (item.path ? [{ path: item.path, label: item.mediaLabel ?? item.label ?? `截图 ${index + 1}` }] : []);
+    return {
+      label: String(item.label ?? item.title ?? `实测截图 ${index + 1}`),
+      subtitle: String(item.subtitle ?? item.route ?? item.step ?? '').trim(),
+      verdict: String(item.verdict ?? item.status ?? '').trim(),
+      media,
+      metrics: item.metrics ?? item.checks ?? item.checkpoints,
+      notes: String(item.notes ?? item.note ?? item.expected ?? '').trim(),
+    };
+  });
 }
 
 function parseCropDimension(box, key, alias) {
@@ -902,7 +950,7 @@ async function renderParallelCard(projectRoot, item, index, options = {}) {
     contentWidth,
     `${index + 1}. ${title}`,
     subtitle,
-    verdict ? `结论：${verdict}` : '并行实验',
+    verdict ? `结论：${verdict}` : (options.eyebrow ?? '并行实验'),
   );
   const composites = [
     { input: header.input, left: 18, top: 18 },
@@ -1079,6 +1127,115 @@ async function renderParallelBoard(projectRoot, board, options = {}) {
   };
 }
 
+async function renderVerificationBoard(projectRoot, board, options = {}) {
+  const format = normalizeFormat(options.format, options.out);
+  const outputPath = options.out
+    ? path.resolve(projectRoot, options.out)
+    : defaultOutputPath(projectRoot, format, 'verification-board');
+  const quality = parseQuality(options.quality);
+  const items = normalizeVerificationItems(projectRoot, board.payload);
+  if (items.length === 0) {
+    throw new Error('Verification board requires screenshots, items, or a single screenshot/path entry.');
+  }
+  const cardWidth = parsePositiveInteger(board.payload.cardWidth ?? options.maxPanelWidth, DEFAULT_PARALLEL_CARD_WIDTH, 'cardWidth');
+  const columns = Math.max(1, Math.min(parsePositiveInteger(board.payload.columns, Math.min(DEFAULT_PARALLEL_COLUMNS, items.length), 'columns'), 4));
+  const margin = 24;
+  const gap = 24;
+  const route = String(board.payload.route ?? board.payload.flow ?? board.payload.method ?? '').trim();
+  const summary = String(board.payload.summary
+    ?? (route ? `实测路径：${route}` : '把普通截图、Computer/Browser 实测路径和检查点拼到同一张板里，避免只用单张截图口头收口。'));
+  const titleBlock = titleBlockSvg(
+    columns * cardWidth + (columns - 1) * gap,
+    String(board.payload.title ?? DEFAULT_VERIFICATION_TITLE),
+    summary,
+    '视觉验收 / 截图实测',
+  );
+
+  const renderedCards = [];
+  for (const [index, item] of items.entries()) {
+    renderedCards.push(await renderParallelCard(projectRoot, item, index, {
+      cardWidth,
+      eyebrow: '截图实测',
+    }));
+  }
+
+  const rowHeights = [];
+  for (let index = 0; index < renderedCards.length; index += columns) {
+    rowHeights.push(Math.max(...renderedCards.slice(index, index + columns).map((card) => card.height)));
+  }
+  const canvasWidth = margin * 2 + columns * cardWidth + (columns - 1) * gap;
+  const canvasHeight = margin * 2 + titleBlock.height + 18 + rowHeights.reduce((sum, value) => sum + value, 0) + Math.max(0, rowHeights.length - 1) * gap;
+  const composites = [
+    { input: titleBlock.input, left: margin, top: margin },
+  ];
+  let currentTop = margin + titleBlock.height + 18;
+  for (let row = 0; row < rowHeights.length; row += 1) {
+    const rowCards = renderedCards.slice(row * columns, row * columns + columns);
+    for (const [column, card] of rowCards.entries()) {
+      composites.push({
+        input: card.image,
+        left: margin + column * (cardWidth + gap),
+        top: currentTop,
+      });
+    }
+    currentTop += rowHeights[row] + gap;
+  }
+
+  const canvas = sharp({
+    create: {
+      width: canvasWidth,
+      height: canvasHeight,
+      channels: 3,
+      background: '#111827',
+    },
+  }).composite(composites);
+
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await encodePipeline(canvas, format, quality).toFile(outputPath);
+  const metadataPath = metadataPathForOutput(outputPath);
+  const reviewArtifact = {
+    version: 1,
+    schema: VISUAL_REVIEW_SCHEMA,
+    generatedAt: timestamp(),
+    mode: 'verification-board',
+    outputPath: toWorkspacePath(projectRoot, outputPath),
+    format,
+    boardSource: toWorkspacePath(projectRoot, board.sourcePath),
+    title: String(board.payload.title ?? DEFAULT_VERIFICATION_TITLE),
+    route: route || null,
+    layout: {
+      columns,
+      cardWidth,
+      rowCount: rowHeights.length,
+    },
+    items: renderedCards.map((card) => card.item),
+    canvas: {
+      width: canvasWidth,
+      height: canvasHeight,
+    },
+  };
+  await fs.writeFile(metadataPath, `${JSON.stringify(reviewArtifact, null, 2)}\n`, 'utf8');
+
+  return {
+    ok: true,
+    action: 'visual-compare',
+    mode: 'verification-board',
+    projectRoot,
+    outputPath,
+    metadataPath,
+    format,
+    quality: format === 'png' ? null : quality,
+    canvas: reviewArtifact.canvas,
+    reviewArtifact,
+    items: reviewArtifact.items,
+    nextActions: [
+      '先核对实测路径和每张截图对应的检查点，再判断是否能声明视觉或运行态验收完成。',
+      '普通截图只能作为原始素材；最终收口请引用这张截图实测证据板。',
+      '如果发现局部差异，再补一张局部焦点证据板或重新生成本证据板。',
+    ],
+  };
+}
+
 async function visualCompareWorkspace(projectRoot, options = {}) {
   const request = resolveComparisonInputs(options);
   if (request.mode === 'board') {
@@ -1088,6 +1245,9 @@ async function visualCompareWorkspace(projectRoot, options = {}) {
     }
     if (board.mode === 'parallel-board') {
       return renderParallelBoard(projectRoot, board, options);
+    }
+    if (board.mode === 'verification-board') {
+      return renderVerificationBoard(projectRoot, board, options);
     }
     throw new Error(`Unsupported board mode: ${board.mode}`);
   }

@@ -276,6 +276,7 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.ok(generatedCommandCatalog.includes('openprd visual-compare . --reference <效果图> --actual <实现截图>'));
     assert.ok(generatedCommandCatalog.includes('openprd visual-compare . --before <修改前截图> --after <修改后截图>'));
     assert.ok(generatedCommandCatalog.includes('openprd visual-compare . --board <board.json>'));
+    assert.ok(generatedCommandCatalog.includes('截图实测证据板'));
     assert.ok(generatedCommandCatalog.includes('openprd visual-prepare . --reference <效果图> --grid <列>x<行>'));
     assert.ok(generatedCommandCatalog.includes('$openprd-frontend-design'));
     assert.ok(generatedCommandCatalog.includes('.openprd/design/active/facts-sheet.md'));
@@ -338,6 +339,7 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.ok(generatedQualitySkill.includes('视觉评审证据'));
     assert.ok(generatedQualitySkill.includes('visual-prepare'));
     assert.ok(generatedQualitySkill.includes('visual-compare'));
+    assert.ok(generatedQualitySkill.includes('截图实测证据板'));
     assert.ok(generatedQualitySkill.includes('用户目标、信息架构变化、视觉决策成本和验证风险'));
     assert.ok(generatedQualitySkill.includes('新建界面确认实现前 3 方向方案评审已完成'));
     assert.ok(generatedQualitySkill.includes('本次情况 / 计划保留的经验 / 以后怎么复用 / 只保留在当前项目里'));
@@ -388,6 +390,7 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.ok(generatedSharedSkill.includes('候选效果图'));
     assert.ok(generatedSharedSkill.includes('纳入后续对比'));
     assert.ok(generatedSharedSkill.includes('修改前 / 修改后'));
+    assert.ok(generatedSharedSkill.includes('普通截图和 Computer/Browser/Playwright 实测截图只能作为原始素材'));
     assert.ok(generatedSharedSkill.includes('先判断新建界面还是修改既有界面'));
     assert.ok(generatedSharedSkill.includes('冷启动没有现有界面'));
     assert.ok(generatedHarnessSkill.includes('代码修改完成后、最终回复前'));
@@ -402,6 +405,7 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.ok(generatedHarnessSkill.includes('视觉决策成本和验证风险'));
     assert.ok(generatedHarnessSkill.includes('同一张证据板'));
     assert.ok(generatedHarnessSkill.includes('focus-board'));
+    assert.ok(generatedHarnessSkill.includes('verification-board'));
     assert.ok(generatedHarnessSkill.includes('候选效果图'));
     assert.ok(generatedHarnessSkill.includes('contact sheet'));
     assert.ok(generatedHarnessSkill.includes('visual-prepare'));
@@ -432,7 +436,8 @@ test('setup enables Codex hooks while preserving user hook groups', async () => 
     assert.ok(generatedCodexHook.includes('是否纳入后续效果图/实现截图对比'));
     assert.ok(generatedCodexHook.includes('visual-prepare'));
     assert.ok(generatedCodexHook.includes('contact sheet'));
-    assert.ok(generatedCodexHook.includes('至少产出一份 visual-compare / focus-board / parallel-board 证据图'));
+    assert.ok(generatedCodexHook.includes('至少产出一份 visual-compare / focus-board / parallel-board / verification-board 证据图'));
+    assert.ok(generatedCodexHook.includes('截图实测证据板'));
     assert.ok(generatedCodexHook.includes('先整理需求摘要给你确认'));
     assert.ok(generatedCodexHook.includes('你回我一句我就开始实现'));
     assert.ok(generatedCodexHook.includes('这次我观察到一个以后可能重复出现的情况：'));

@@ -1686,9 +1686,47 @@ test('visual-compare writes focus and parallel review boards and quality can det
   assert.equal(parallelResult.items.length, 2);
   assert.equal((await sharp(parallelResult.outputPath).metadata()).format, 'jpeg');
 
+  const verificationBoardPath = path.join(project, 'verification-board.json');
+  await fs.writeFile(verificationBoardPath, `${JSON.stringify({
+    mode: 'verification-board',
+    title: '设置页截图实测',
+    route: 'Computer Use 打开设置页并检查保存状态',
+    columns: 2,
+    cardWidth: 240,
+    screenshots: [
+      {
+        path: experimentA,
+        label: '初始状态截图',
+        status: '通过',
+        checks: [
+          { label: '入口', value: '设置页可打开' },
+          { label: '按钮', value: '保存按钮可见' },
+        ],
+      },
+      {
+        path: experimentB,
+        label: '保存后截图',
+        status: '通过',
+        checks: [
+          { label: '反馈', value: '保存状态可见' },
+          { label: '布局', value: '未出现明显漂移' },
+        ],
+      },
+    ],
+  }, null, 2)}\n`);
+  const verificationResult = await visualCompareWorkspace(project, {
+    board: verificationBoardPath,
+    maxPanelWidth: 180,
+  });
+  assert.equal(verificationResult.mode, 'verification-board');
+  assert.equal(verificationResult.items.length, 2);
+  assert.equal(verificationResult.reviewArtifact.mode, 'verification-board');
+  assert.equal((await sharp(verificationResult.outputPath).metadata()).format, 'jpeg');
+
   const visualArtifacts = await listVisualReviewArtifacts(project);
   assert.ok(visualArtifacts.some((artifact) => artifact.mode === 'focus-board'));
   assert.ok(visualArtifacts.some((artifact) => artifact.mode === 'parallel-board'));
+  assert.ok(visualArtifacts.some((artifact) => artifact.mode === 'verification-board'));
 
   const includesAny = (text, patterns) => {
     const haystack = String(text ?? '').toLowerCase();
@@ -1733,6 +1771,23 @@ test('visual-compare writes focus and parallel review boards and quality can det
   assert.equal(parallelReview.status, 'pass');
   assert.equal(parallelReview.expectsParallelBoard, true);
   assert.ok(parallelReview.matchingArtifacts.some((artifact) => artifact.mode === 'parallel-board'));
+
+  const verificationReview = detectVisualReview({
+    policy: {
+      requiredGates: ['visual-review'],
+    },
+    activeChangeContext: {
+      text: '这次用普通截图和 Computer 实测截图做验收，需要截图实测证据板。',
+    },
+    activeTasks: {
+      tasks: [],
+    },
+    visualArtifacts,
+    includesAny,
+  });
+  assert.equal(verificationReview.status, 'pass');
+  assert.equal(verificationReview.expectsVerificationBoard, true);
+  assert.ok(verificationReview.matchingArtifacts.some((artifact) => artifact.mode === 'verification-board'));
 });
 
 test('dev-check auto-applies detected unknown code extensions', async () => {

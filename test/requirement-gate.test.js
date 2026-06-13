@@ -2168,6 +2168,57 @@ test('Codex hook supports silent-record review lanes when the user opts out of e
     assert.equal(copyStopReminder.hookSpecificOutput?.additionalContext?.includes('小程序运行态验证仍未完成') ?? false, false);
   });
 
+  test('Codex hook requires a visual evidence board for raw screenshot validation', async () => {
+    const { project } = await makeCodexHookProject();
+    await seedReadyFrontendDesignArtifacts(project);
+
+    const prompt = runCodexHook(project, 'UserPromptSubmit', {
+      prompt: '把设置页面卡片间距调一下，并用 Computer 实测截图验证。',
+    });
+    assert.equal(prompt.continue, true);
+
+    const patch = runCodexHook(project, 'PreToolUse', {
+      tool_name: 'apply_patch',
+      tool_input: [
+        '*** Begin Patch',
+        '*** Update File: src/App.tsx',
+        '@@',
+        '+export const settingsCardGap = 12;',
+        '*** End Patch',
+      ].join('\n'),
+    });
+    assert.equal(patch.continue, true);
+
+    const rawScreenshot = runCodexHook(project, 'PostToolUse', {
+      tool_name: 'computer_screenshot',
+      tool_input: { path: 'actual-settings.png' },
+      tool_response: 'Computer 实测截图已保存 actual-settings.png',
+    });
+    assert.deepEqual(rawScreenshot, { continue: true });
+
+    const missingBoardStop = runCodexHook(project, 'Stop', {});
+    assert.equal(missingBoardStop.continue, true);
+    assert.ok(missingBoardStop.hookSpecificOutput.additionalContext.includes('截图实测证据板'));
+    assert.ok(missingBoardStop.hookSpecificOutput.additionalContext.includes('普通截图和 Computer 实测截图只能作为原始素材'));
+    assert.ok(missingBoardStop.hookSpecificOutput.additionalContext.includes('verification-board.json'));
+
+    const boardSignal = runCodexHook(project, 'PostToolUse', {
+      tool_name: 'Bash',
+      tool_input: {
+        cmd: 'openprd visual-compare . --board verification-board.json --json',
+      },
+      tool_response: '{"mode":"verification-board","outputPath":".openprd/harness/visual-reviews/visual-verification-board-test.jpg"}',
+    });
+    assert.deepEqual(boardSignal, { continue: true });
+
+    const afterBoardStop = runCodexHook(project, 'Stop', {});
+    assert.equal(afterBoardStop.continue, true);
+    assert.equal(
+      afterBoardStop.hookSpecificOutput?.additionalContext.includes('普通截图和 Computer 实测截图只能作为原始素材') ?? false,
+      false
+    );
+  });
+
   test('Stop hook reminds about project-level closeout when final verification artifacts are missing', async () => {
     const project = await makeTempProject();
     await initWorkspace(project, { templatePack: 'consumer' });

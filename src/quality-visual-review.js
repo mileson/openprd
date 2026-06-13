@@ -18,6 +18,9 @@ function inferVisualReviewMode(value) {
   if (normalized.includes('visual-parallel-board') || normalized.includes('parallel-board') || normalized.includes('experiment-board')) {
     return 'parallel-board';
   }
+  if (normalized.includes('visual-verification-board') || normalized.includes('verification-board') || normalized.includes('screenshot-evidence-board') || normalized.includes('screenshot-board')) {
+    return 'verification-board';
+  }
   if (normalized.includes('visual-before-after') || normalized.includes('before-after')) {
     return 'before-after';
   }
@@ -138,29 +141,51 @@ export function detectVisualReview({ policy, activeChangeContext, activeTasks, v
     'parallel board',
     'parallel experiment',
     'experiment board',
-    'evidence board',
     '并行实验',
     '并行方向',
     '多方向实验',
     '方案对比板',
-    '证据板',
+  ];
+  const verificationTokens = [
+    'verification board',
+    'verification-board',
+    'screenshot board',
+    'screenshot-evidence-board',
+    'visual-verification-board',
+    'computer screenshot',
+    'computer use screenshot',
+    'browser screenshot',
+    'playwright screenshot',
+    'screencapture',
+    '普通截图',
+    '实测截图',
+    '截图实测',
+    '截图证据',
+    '截图验收',
+    'Computer 实测',
+    'Browser 实测',
+    '运行态截图',
   ];
   const expectsReferenceCompare = includesAny(haystack, referenceTokens);
   const expectsFocusBoard = includesAny(haystack, focusTokens);
   const expectsParallelBoard = includesAny(haystack, parallelTokens);
+  const expectsVerificationBoard = includesAny(haystack, verificationTokens);
   const referenceArtifacts = visualArtifacts.filter((artifact) => artifact.mode === 'reference-actual');
   const beforeAfterArtifacts = visualArtifacts.filter((artifact) => artifact.mode === 'before-after');
   const focusArtifacts = visualArtifacts.filter((artifact) => artifact.mode === 'focus-board');
   const parallelArtifacts = visualArtifacts.filter((artifact) => artifact.mode === 'parallel-board');
+  const verificationArtifacts = visualArtifacts.filter((artifact) => artifact.mode === 'verification-board');
   let matchingArtifacts;
-  if (expectsParallelBoard) {
+  if (expectsVerificationBoard) {
+    matchingArtifacts = verificationArtifacts;
+  } else if (expectsParallelBoard) {
     matchingArtifacts = parallelArtifacts;
   } else if (expectsFocusBoard) {
     matchingArtifacts = focusArtifacts;
   } else if (expectsReferenceCompare) {
     matchingArtifacts = referenceArtifacts;
   } else {
-    matchingArtifacts = [...referenceArtifacts, ...beforeAfterArtifacts, ...focusArtifacts, ...parallelArtifacts];
+    matchingArtifacts = [...referenceArtifacts, ...beforeAfterArtifacts, ...focusArtifacts, ...parallelArtifacts, ...verificationArtifacts];
   }
   const evidenceSources = matchingArtifacts.slice(0, 12).map((artifact) => ({
     path: artifact.path,
@@ -170,7 +195,9 @@ export function detectVisualReview({ policy, activeChangeContext, activeTasks, v
         ? 'visual-review/before-after'
         : artifact.mode === 'focus-board'
           ? 'visual-review/focus-board'
-          : 'visual-review/parallel-board',
+          : artifact.mode === 'parallel-board'
+            ? 'visual-review/parallel-board'
+            : 'visual-review/verification-board',
   }));
   const warnings = [];
 
@@ -178,7 +205,9 @@ export function detectVisualReview({ policy, activeChangeContext, activeTasks, v
     warnings.push(
       expectsParallelBoard
         ? '检测到界面视觉改动且用户在比较多方向实验，但未看到本次并行实验证据板。'
-        : expectsFocusBoard
+        : expectsVerificationBoard
+          ? '检测到普通截图、Computer/Browser 实测或运行态截图语义，但未看到本次截图实测证据板。普通截图只能作为原始素材，不能单独替代视觉收口拼图。'
+          : expectsFocusBoard
           ? '检测到界面视觉改动且用户在关注局部细节，但未看到本次局部焦点证据板。'
           : expectsReferenceCompare
         ? '检测到界面视觉改动且已有参考图/设计稿语义，但未看到本次“效果图 / 实现截图”对比证据。'
@@ -190,6 +219,8 @@ export function detectVisualReview({ policy, activeChangeContext, activeTasks, v
     warnings.push('当前有视觉证据，但局部细节仍建议补一份局部焦点证据板，方便围绕编号区域复核。');
   } else if (relevant && expectsParallelBoard && parallelArtifacts.length === 0 && matchingArtifacts.length > 0) {
     warnings.push('当前有视觉证据，但多方向实验仍建议补一份并行实验证据板，把方案和指标放到同一板里审查。');
+  } else if (relevant && expectsVerificationBoard && verificationArtifacts.length === 0 && matchingArtifacts.length > 0) {
+    warnings.push('当前有视觉证据，但普通截图或 Computer 实测仍建议补一份截图实测证据板，把截图、实测路径和检查点拼到同一张图里。');
   }
 
   const summary = !relevant
@@ -198,16 +229,20 @@ export function detectVisualReview({ policy, activeChangeContext, activeTasks, v
       ? (
           expectsParallelBoard
             ? `已找到 ${matchingArtifacts.length} 份并行实验证据板`
-            : expectsFocusBoard
+            : expectsVerificationBoard
+              ? `已找到 ${matchingArtifacts.length} 份截图实测证据板`
+              : expectsFocusBoard
               ? `已找到 ${matchingArtifacts.length} 份局部焦点证据板`
               : expectsReferenceCompare
             ? `已找到 ${matchingArtifacts.length} 份效果图 / 实现截图对比证据`
-            : `已找到 ${matchingArtifacts.length} 份视觉对比、局部焦点或修改前后自检证据`
+            : `已找到 ${matchingArtifacts.length} 份视觉对比、局部焦点、截图实测或修改前后自检证据`
         )
       : (
           expectsParallelBoard
             ? '未找到本次并行实验证据板'
-            : expectsFocusBoard
+            : expectsVerificationBoard
+              ? '未找到本次截图实测证据板'
+              : expectsFocusBoard
               ? '未找到本次局部焦点证据板'
               : expectsReferenceCompare
             ? '未找到本次效果图 / 实现截图对比证据'
@@ -220,6 +255,7 @@ export function detectVisualReview({ policy, activeChangeContext, activeTasks, v
     expectsReferenceCompare,
     expectsFocusBoard,
     expectsParallelBoard,
+    expectsVerificationBoard,
     artifacts: visualArtifacts,
     matchingArtifacts,
     warnings,

@@ -231,6 +231,82 @@ function recordTouchedFiles(root, payload) {
   return touchedFiles;
 }
 
+function appendTurnReviewSignals(root, signals) {
+  const normalizedSignals = (Array.isArray(signals) ? signals : [signals])
+    .filter(Boolean)
+    .map((signal) => ({
+      at: now(),
+      ...signal,
+    }));
+  if (normalizedSignals.length === 0) {
+    return [];
+  }
+  const state = readTurnState(root);
+  const existing = Array.isArray(state.reviewSignals) ? state.reviewSignals : [];
+  writeTurnState(root, {
+    ...state,
+    reviewSignals: [...existing, ...normalizedSignals].slice(-80),
+    timeline: [
+      ...(Array.isArray(state.timeline) ? state.timeline : []),
+      ...normalizedSignals.map((signal) => ({
+        event: signal.kind,
+        status: 'pass',
+        message: signal.message ?? signal.preview ?? signal.kind,
+        at: signal.at,
+      })),
+    ].slice(-120),
+  });
+  return normalizedSignals;
+}
+
+function detectVisualEvidenceSignals(payload) {
+  const tool = toolName(payload).toLowerCase();
+  const command = commandText(payload);
+  const text = payloadText(payload);
+  const haystack = `${tool}\n${command}\n${text}`;
+  const signals = [];
+  if (/openprd\s+visual-prepare\b/i.test(haystack)) {
+    signals.push({
+      kind: 'visual-reference-prepared',
+      message: 'visual-prepare reference-set/contact sheet observed',
+      preview: preview(command || text, 180),
+    });
+  }
+  if (/openprd\s+visual-compare\b/i.test(haystack)
+    || /\.openprd\/harness\/visual-reviews\/(?:visual-|reference-sets\/)/i.test(haystack)
+    || /visual-(?:compare|before-after|focus-board|parallel-board|verification-board)/i.test(haystack)
+    || /\b(?:reference-actual|before-after|focus-board|parallel-board|verification-board)\b/i.test(haystack)) {
+    signals.push({
+      kind: 'visual-review-artifact',
+      message: 'visual-compare artifact observed',
+      preview: preview(command || text, 180),
+    });
+  }
+  if (/\bverification-board\b|截图实测证据板|visual-verification-board/i.test(haystack)) {
+    signals.push({
+      kind: 'visual-verification-board',
+      message: 'verification-board artifact observed',
+      preview: preview(command || text, 180),
+    });
+  }
+  const screenshotTool = /(?:^|[_-])(?:screenshot|view_image)(?:$|[_-])/i.test(tool)
+    || /(?:computer|browser|playwright|page|mp|miniprogram|weapp).*screenshot/i.test(tool);
+  const screenshotCommand = /\bscreencapture\b|page\.screenshot|\.screenshot\(|mp_screenshot|browser.*screenshot|computer.*screenshot|playwright.*screenshot/i.test(command);
+  const screenshotText = /(?:普通截图|实测截图|运行态截图|Computer\s*实测|Browser\s*实测|截图证据|screenshot captured|captured screenshot)/i.test(text);
+  if ((screenshotTool || screenshotCommand || screenshotText) && !/openprd\s+visual-compare\b/i.test(haystack)) {
+    signals.push({
+      kind: 'visual-raw-screenshot',
+      message: 'raw screenshot or Computer/Browser visual evidence observed',
+      preview: preview(command || text || tool, 180),
+    });
+  }
+  return signals;
+}
+
+function recordVisualEvidenceSignals(root, payload) {
+  return appendTurnReviewSignals(root, detectVisualEvidenceSignals(payload));
+}
+
 function updateHookState(root, event) {
   ensureHarness(root);
   const statePath = path.join(harnessDir(root), 'hook-state.json');
@@ -2806,9 +2882,9 @@ function visualLocalAdjustmentMessage() {
   return [
     '如果这轮验收重点在局部变化，不要只改代码后凭主观判断收尾。',
     '先判断这是新建界面还是修改既有界面：新建界面走实现前 3 方向方案评审；修改既有界面先保留修改前截图。完成后从同一入口、视口、账号和数据状态截修改后截图，再运行 `openprd visual-compare . --before <修改前截图> --after <修改后截图>`。',
-    '如果局部细节需要放到同一张证据板里审阅，再补一份 `openprd visual-compare . --board <focus-board.json>` 的局部焦点证据板，把局部变化组合到同一张证据板里统一验收。',
+    '如果局部细节需要放到同一张证据板里审阅，再补一份 `openprd visual-compare . --board <focus-board.json>` 的局部焦点证据板，把局部变化组合到同一张证据板里统一验收；如果只是普通截图、Computer/Browser/Playwright 实测截图，也要用 `openprd visual-compare . --board <verification-board.json>` 拼成截图实测证据板，不能把单张截图当最终视觉证据。',
     '如果参考图是一张整板、网格图或多对象组合图，先运行 `openprd visual-prepare . --reference <效果图> --grid <列>x<行>` 或 `--boxes <plan.json>`，确认 contact sheet 后，再决定是逐项 `--reference/--actual` 还是统一做 `focus-board` / `parallel-board`。',
-    '当用户后续说“跟效果图”“不一致”“好丑”“复刻”“没对齐”这类反馈时，不能只口头说已经对比过了；至少先产出一份 `openprd visual-compare`、`focus-board` 或 `parallel-board` 证据图再下结论。'
+    '当用户后续说“跟效果图”“不一致”“好丑”“复刻”“没对齐”这类反馈时，不能只口头说已经对比过了；至少先产出一份 `openprd visual-compare`、`focus-board`、`parallel-board` 或 `verification-board` 证据图再下结论。'
   ].join('\n');
 }
 
@@ -2826,7 +2902,7 @@ function confirmationGateMessage(gate) {
   return [
     intro,
     'Implementation may proceed only within the confirmed scope, with docs/basic, file manuals, folder README docs, standards verification, and OpenPrd run verification kept up to date. For backend, script, agent, tooling, service, or data-processing changes, keep CLI and API surface review current in docs/basic/backend-structure.md.',
-    'For UI or visual work with an existing reference image, first confirm the user has accepted that image as a later comparison reference; if one image contains multiple sub-images, grid cells, or objects, run openprd visual-prepare . --reference <effect-image> --grid <columns>x<rows> or --boxes <plan.json>, inspect the contact sheet, and use the generated reference-set / compare-plan before comparing. Then capture the implemented UI and run openprd visual-compare . --reference <effect-image> --actual <implementation-screenshot>; if local detail matters more than the whole screen, add openprd visual-compare . --board <focus-board.json> so the agent can review numbered zoom regions. When there is no reference image, capture the before screenshot first, implement, capture the after screenshot from the same entry, viewport, account, and data state, then run openprd visual-compare . --before <before-screenshot> --after <after-screenshot>; if the agent explored multiple optimization directions, add openprd visual-compare . --board <parallel-board.json> and inspect expected changes plus unintended drift before claiming completion.',
+    'For UI or visual work with an existing reference image, first confirm the user has accepted that image as a later comparison reference; if one image contains multiple sub-images, grid cells, or objects, run openprd visual-prepare . --reference <effect-image> --grid <columns>x<rows> or --boxes <plan.json>, inspect the contact sheet, and use the generated reference-set / compare-plan before comparing. Then capture the implemented UI and run openprd visual-compare . --reference <effect-image> --actual <implementation-screenshot>; if local detail matters more than the whole screen, add openprd visual-compare . --board <focus-board.json> so the agent can review numbered zoom regions. When there is no reference image, capture the before screenshot first, implement, capture the after screenshot from the same entry, viewport, account, and data state, then run openprd visual-compare . --before <before-screenshot> --after <after-screenshot>; if the agent explored multiple optimization directions, add openprd visual-compare . --board <parallel-board.json>. If ordinary screenshots or Computer/Browser/Playwright checks are used as evidence, assemble them with the checked path and checkpoints through openprd visual-compare . --board <verification-board.json> before claiming visual completion.',
     'If the user later says the implementation does not match the effect image, looks wrong, or asks for replication, do not rely on subjective narration alone; produce at least one visual evidence artifact before claiming completion.',
   ].join('\n');
 }
@@ -2966,7 +3042,7 @@ function contextMessage(cwd, intent = null, gate = null, progress = null) {
         '只有当用户当前明确要求开发、实现、修复、继续任务、深度调研、对标复刻或提交时，才运行 openprd loop --run、openprd tasks --advance、openprd discovery --advance、commit/push 等执行命令。',
         '代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 openprd dev-check . <file...>；若出现需要关注的文件，最终回复必须以 **后续建议** 为标题，直接复用 dev-check 生成的 Markdown 表格，列出影响对象、关注程度、规模信号、预警原因、本次处理结果和后续建议，并按 🔴 → 🟠 → 🟡 排序；不要把“关注程度”列改写成纯 emoji，必须保留例如“🟠 中风险｜建议优先关注”这类完整标签；如果你改写了“预警原因 / 本次处理结果 / 后续建议”，先用 `node scripts/dev-check-wrapup-copy.mjs --validate` 校验每格不超过 20 字；若报错，按提示缩短后重试。',
         '大界面改动的效果图先当候选效果图；出图后主动确认是否符合预期、是否纳入后续效果图/实现截图对比、是否按此继续实现。只有确认后，才把选定方向、整张图或其中子图整理到 `.openprd/harness/visual-reviews/` 并进入大 UI 实现。',
-        '涉及界面、页面、视觉、样式或前端体验时，已有确认参考图才运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；如果一张参考图里有多个子图/对象/网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。没有明确参考图时先判断新建还是修改：新建界面走实现前 3 方向方案评审；修改既有界面则动手前先截修改前截图，完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图>；如果并行试了多个优化方向，再补一份 openprd visual-compare . --board <parallel-board.json>。用户后续如果说“跟效果图”“不一致”“好丑”“复刻”，不能只口头说对比过了，至少产出一份 visual-compare / focus-board / parallel-board 证据图。',
+        '涉及界面、页面、视觉、样式或前端体验时，已有确认参考图才运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；如果一张参考图里有多个子图/对象/网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。没有明确参考图时先判断新建还是修改：新建界面走实现前 3 方向方案评审；修改既有界面则动手前先截修改前截图，完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图>；如果并行试了多个优化方向，再补一份 openprd visual-compare . --board <parallel-board.json>。普通截图、Computer/Browser/Playwright 实测截图只能作为原始素材，收口前要补 openprd visual-compare . --board <verification-board.json> 的截图实测证据板。用户后续如果说“跟效果图”“不一致”“好丑”“复刻”，不能只口头说对比过了，至少产出一份 visual-compare / focus-board / parallel-board / verification-board 证据图。',
         '发现可沉淀项时不要中途打断任务：代码扩展识别这类白名单工具补全会自动应用并记录；用户偏好、项目协作规矩和 OpenPrd 默认行为先记录为候选，收工时运行 openprd grow . --review 集中确认。',
         '维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；高置信可成长默认纳入，不确定则主动询问用户。',
         '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、help/doctor/dry-run/status 与接口协议、返回结构、身份边界是否受影响，并更新 docs/basic/backend-structure.md 或明确写不适用原因。',
@@ -2988,7 +3064,7 @@ function contextMessage(cwd, intent = null, gate = null, progress = null) {
       '只有当用户当前明确要求开发、实现、修复、继续任务、深度调研、对标复刻或提交时，才运行 openprd loop --run、openprd tasks --advance、openprd discovery --advance、commit/push 等执行命令。',
       '代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 openprd dev-check . <file...>；若出现需要关注的文件，最终回复必须以 **后续建议** 为标题，直接复用 dev-check 生成的 Markdown 表格，列出影响对象、关注程度、规模信号、预警原因、本次处理结果和后续建议，并按 🔴 → 🟠 → 🟡 排序；不要把“关注程度”列改写成纯 emoji，必须保留例如“🟠 中风险｜建议优先关注”这类完整标签；如果你改写了“预警原因 / 本次处理结果 / 后续建议”，先用 `node scripts/dev-check-wrapup-copy.mjs --validate` 校验每格不超过 20 字；若报错，按提示缩短后重试。',
       '大界面改动的效果图先当候选效果图；出图后主动确认是否符合预期、是否纳入后续效果图/实现截图对比、是否按此继续实现。只有确认后，才把选定方向、整张图或其中子图整理到 `.openprd/harness/visual-reviews/` 并进入大 UI 实现。',
-      '涉及界面、页面、视觉、样式或前端体验时，已有确认参考图才运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；如果一张参考图里有多个子图/对象/网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。没有明确参考图时先判断新建还是修改：新建界面走实现前 3 方向方案评审；修改既有界面则动手前先截修改前截图，完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图>；如果并行试了多个优化方向，再补一份 openprd visual-compare . --board <parallel-board.json>。用户后续如果说“跟效果图”“不一致”“好丑”“复刻”，不能只口头说对比过了，至少产出一份 visual-compare / focus-board / parallel-board 证据图。',
+      '涉及界面、页面、视觉、样式或前端体验时，已有确认参考图才运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；如果一张参考图里有多个子图/对象/网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。没有明确参考图时先判断新建还是修改：新建界面走实现前 3 方向方案评审；修改既有界面则动手前先截修改前截图，完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图>；如果并行试了多个优化方向，再补一份 openprd visual-compare . --board <parallel-board.json>。普通截图、Computer/Browser/Playwright 实测截图只能作为原始素材，收口前要补 openprd visual-compare . --board <verification-board.json> 的截图实测证据板。用户后续如果说“跟效果图”“不一致”“好丑”“复刻”，不能只口头说对比过了，至少产出一份 visual-compare / focus-board / parallel-board / verification-board 证据图。',
       '发现可沉淀项时不要中途打断任务：代码扩展识别这类白名单工具补全会自动应用并记录；用户偏好、项目协作规矩和 OpenPrd 默认行为先记录为候选，收工时运行 openprd grow . --review 集中确认。',
       '维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；高置信可成长默认纳入，不确定则主动询问用户。',
       '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、help/doctor/dry-run/status 与接口协议、返回结构、身份边界是否受影响，并更新 docs/basic/backend-structure.md 或明确写不适用原因。',
@@ -3222,6 +3298,45 @@ function hasRecentArtifacts(root, relativeDir, turnState, matcher) {
   const dir = path.join(root, relativeDir);
   const startedAtMs = parseShanghaiTimestamp(turnState?.startedAt);
   return collectRecentArtifactPaths(dir, startedAtMs, matcher, []).length > 0;
+}
+
+function hasRecentVisualReviewArtifact(root, turnState) {
+  return hasRecentArtifacts(root, '.openprd/harness/visual-reviews', turnState, (artifactPath) => {
+    const normalized = artifactPath.split(path.sep).join('/');
+    return /\.(?:jpe?g|png|webp|json)$/i.test(normalized)
+      && /visual-(?:compare|before-after|focus-board|parallel-board|verification-board)|reference-actual|before-after|focus-board|parallel-board|verification-board/i.test(normalized);
+  });
+}
+
+function isVisualEvidenceIntent(intent = null) {
+  const text = String(intent?.promptText || '');
+  return isFrontendTaskIntent(intent)
+    || /(界面|页面|前端|视觉|样式|布局|信息架构|效果图|设计稿|参考图|实现截图|视觉对比|视觉评审|截图|实测|Computer\s*Use|Browser|Playwright|复刻|不一致|好丑|没对齐|对不上|不像)/i.test(text);
+}
+
+function visualEvidenceStopReminder(root, turnState, stopIntent) {
+  if (stopIntent?.visualMockupRequest) {
+    return null;
+  }
+  const touchedFiles = Array.isArray(turnState?.touchedFiles) ? turnState.touchedFiles : [];
+  const frontendTouched = touchedFiles.some((file) => looksLikeFrontendImplementationFile(file));
+  const rawScreenshotObserved = hasTurnReviewSignal(turnState, 'visual-raw-screenshot');
+  const visualArtifactObserved = hasTurnReviewSignal(turnState, 'visual-review-artifact')
+    || hasTurnReviewSignal(turnState, 'visual-verification-board')
+    || hasRecentVisualReviewArtifact(root, turnState);
+  const needsVisualEvidence = isVisualEvidenceIntent(stopIntent)
+    && (rawScreenshotObserved || frontendTouched || /截图|实测|Computer\s*Use|Browser|Playwright/i.test(String(stopIntent?.promptText || '')));
+  if (!needsVisualEvidence || visualArtifactObserved) {
+    return null;
+  }
+  const preferred = rawScreenshotObserved
+    ? '`openprd visual-compare . --board <verification-board.json>`，把普通截图、Computer/Browser/Playwright 实测路径和检查点拼成截图实测证据板'
+    : '有参考图时用 `--reference/--actual`，无参考且改既有界面用 `--before/--after`，普通截图实测用 `--board <verification-board.json>`';
+  return [
+    'OpenPrd 在本轮收工回顾里发现 UI/视觉任务已有截图、实测或前端改动，但还没有本轮拼图证据。',
+    `普通截图和 Computer 实测截图只能作为原始素材，不能单独替代视觉收口。请先运行 ${preferred}。`,
+    '补齐前不要宣称界面视觉已经完成；可以如实说功能或代码已改，但视觉拼图证据还没补齐。',
+  ].join('\n');
 }
 
 function closeoutVerificationReminder(root, turnState, stopIntent) {
@@ -3598,7 +3713,7 @@ function handle(eventName, cwd, payload) {
       recordRunHook(root, baseEvent, 'allowed-medium-risk');
       updateHookState(root, baseEvent);
       recordTouchedFiles(root, payload);
-      return allowHook('OpenPrd 检测到写入动作。本轮写入完成后、最终回复前，请针对实际 touched code files 运行 openprd dev-check . <file...>；如出现需要关注的文件，最终回复必须以 **后续建议** 为标题，直接复用 dev-check 生成的 Markdown 表格，说明影响对象、关注程度、规模信号、预警原因、本次处理结果和后续建议，并按 🔴 → 🟠 → 🟡 排序；不要把“关注程度”列改写成纯 emoji，必须保留例如“🟠 中风险｜建议优先关注”这类完整标签；如果你改写了“预警原因 / 本次处理结果 / 后续建议”，先用 `node scripts/dev-check-wrapup-copy.mjs --validate` 校验每格不超过 20 字；若报错，按提示缩短后重试；如涉及界面视觉且已有参考效果图并进入实现阶段，阶段性完成后运行 openprd visual-compare . --reference <效果图> --actual <实现截图> 并查看 JPG 对比图；如果参考图来自本轮或前序 `imagegen`，先确认用户已接受它作为后续对比参考；若一张图里有多个子图、对象或网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。若局部细节更重要，再补 openprd visual-compare . --board <focus-board.json>；如无参考图，先判断新建界面还是修改既有界面：新建界面应先完成 3 方向方案评审，修改既有界面确认已先截修改前截图，并在完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图> 查看 JPG 自检图；若并行试了多个优化方向，再补 openprd visual-compare . --board <parallel-board.json>；当用户说“跟效果图”“不一致”“好丑”“复刻”时，至少给出一份视觉证据图，不要只口头判断。发现可沉淀项时不要中途打断任务，代码扩展识别这类白名单工具补全会自动应用并记录，用户偏好、项目协作规矩和 OpenPrd 默认行为留到收工时用 openprd grow . --review 集中确认；维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；声明就绪前，请同步维护 docs/basic、文件说明书、文件夹 README，以及相关 OpenPrd change/task 状态；如果涉及后端、脚本、Agent、工具链、服务或数据处理变更，还要把 CLI 与 API 视为同级接入面并更新 docs/basic/backend-structure.md。');
+      return allowHook('OpenPrd 检测到写入动作。本轮写入完成后、最终回复前，请针对实际 touched code files 运行 openprd dev-check . <file...>；如出现需要关注的文件，最终回复必须以 **后续建议** 为标题，直接复用 dev-check 生成的 Markdown 表格，说明影响对象、关注程度、规模信号、预警原因、本次处理结果和后续建议，并按 🔴 → 🟠 → 🟡 排序；不要把“关注程度”列改写成纯 emoji，必须保留例如“🟠 中风险｜建议优先关注”这类完整标签；如果你改写了“预警原因 / 本次处理结果 / 后续建议”，先用 `node scripts/dev-check-wrapup-copy.mjs --validate` 校验每格不超过 20 字；若报错，按提示缩短后重试；如涉及界面视觉且已有参考效果图并进入实现阶段，阶段性完成后运行 openprd visual-compare . --reference <效果图> --actual <实现截图> 并查看 JPG 对比图；如果参考图来自本轮或前序 `imagegen`，先确认用户已接受它作为后续对比参考；若一张图里有多个子图、对象或网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。若局部细节更重要，再补 openprd visual-compare . --board <focus-board.json>；如无参考图，先判断新建界面还是修改既有界面：新建界面应先完成 3 方向方案评审，修改既有界面确认已先截修改前截图，并在完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图> 查看 JPG 自检图；若并行试了多个优化方向，再补 openprd visual-compare . --board <parallel-board.json>；若普通截图、Computer/Browser/Playwright 实测截图被用作证据，再补 openprd visual-compare . --board <verification-board.json> 的截图实测证据板；当用户说“跟效果图”“不一致”“好丑”“复刻”时，至少给出一份视觉证据图，不要只口头判断。发现可沉淀项时不要中途打断任务，代码扩展识别这类白名单工具补全会自动应用并记录，用户偏好、项目协作规矩和 OpenPrd 默认行为留到收工时用 openprd grow . --review 集中确认；维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；声明就绪前，请同步维护 docs/basic、文件说明书、文件夹 README，以及相关 OpenPrd change/task 状态；如果涉及后端、脚本、Agent、工具链、服务或数据处理变更，还要把 CLI 与 API 视为同级接入面并更新 docs/basic/backend-structure.md。');
     }
     return allowHook();
   }
@@ -3606,6 +3721,9 @@ function handle(eventName, cwd, payload) {
   if (eventName === 'PostToolUse') {
     const text = payloadText(payload);
     const failed = /command not found|no such file|permission denied|failed|error|exception/i.test(text);
+    if (!failed) {
+      recordVisualEvidenceSignals(root, payload);
+    }
     if (!failed) {
       return allowHook();
     }
@@ -3663,6 +3781,10 @@ function handle(eventName, cwd, payload) {
           '如果用户给了效果图或参考图，继续以它为准，但这个判断必须落实在实际页面写入里；只补说明、只补合同、只下载素材或只说“准备开始改”都不算完成。',
         ].join('\n'));
       }
+    }
+    const visualReminder = visualEvidenceStopReminder(root, turnState, stopIntent);
+    if (visualReminder) {
+      return allowHook(visualReminder);
     }
     const devCheckMessage = devCheckWrapUpMessage(root, turnState);
     if (devCheckMessage) {
