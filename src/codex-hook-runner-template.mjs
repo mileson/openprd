@@ -274,8 +274,8 @@ function detectVisualEvidenceSignals(payload) {
   }
   if (/openprd\s+visual-compare\b/i.test(haystack)
     || /\.openprd\/harness\/visual-reviews\/(?:visual-|reference-sets\/)/i.test(haystack)
-    || /visual-(?:compare|before-after|focus-board|parallel-board|verification-board)/i.test(haystack)
-    || /\b(?:reference-actual|before-after|focus-board|parallel-board|verification-board)\b/i.test(haystack)) {
+    || /visual-(?:compare|before-after|focus-board|parallel-board|verification-board|alignment-board|centering-board)/i.test(haystack)
+    || /\b(?:reference-actual|before-after|focus-board|parallel-board|verification-board|alignment-board|centering-board|center-board)\b/i.test(haystack)) {
     signals.push({
       kind: 'visual-review-artifact',
       message: 'visual-compare artifact observed',
@@ -286,6 +286,20 @@ function detectVisualEvidenceSignals(payload) {
     signals.push({
       kind: 'visual-verification-board',
       message: 'verification-board artifact observed',
+      preview: preview(command || text, 180),
+    });
+  }
+  if (/\balignment-board\b|对齐辅助线证据板|visual-alignment-board/i.test(haystack)) {
+    signals.push({
+      kind: 'visual-alignment-board',
+      message: 'alignment-board artifact observed',
+      preview: preview(command || text, 180),
+    });
+  }
+  if (/\b(?:centering-board|center-board)\b|内部居中证据板|visual-centering-board/i.test(haystack)) {
+    signals.push({
+      kind: 'visual-centering-board',
+      message: 'centering-board artifact observed',
       preview: preview(command || text, 180),
     });
   }
@@ -2217,7 +2231,7 @@ function isMutationPayload(payload, risk) {
     || /\*\*\* Begin Patch/.test(text);
 }
 
-const LIGHTWEIGHT_UI_VISUAL_SIGNAL_PATTERN = /(按钮|文案|颜色|圆角|位置|间距|留白|边距|内边距|外边距|宽度|高度|卡片|字号|字体|行高|图标|标题|空格|标点|对齐|密度|阴影|边框|层级|组件|输入框|菜单|侧栏|表格|列表|头像|badge|label|copy|toast|placeholder|padding|margin|spacing|gap|太宽|太窄|太挤|拥挤|松散|留得多|留着有点多|没对齐|好看|美观)/i;
+const LIGHTWEIGHT_UI_VISUAL_SIGNAL_PATTERN = /(按钮|文案|颜色|圆角|位置|间距|留白|边距|内边距|外边距|宽度|高度|卡片|字号|字体|行高|图标|标题|空格|标点|对齐|密度|阴影|边框|层级|组件|输入框|菜单|侧栏|表格|列表|头像|badge|label|copy|toast|placeholder|padding|margin|spacing|gap|太宽|太窄|太挤|拥挤|松散|留得多|留着有点多|没对齐|好看|美观|审美|气质|记忆点|高级|太丑|丑|视觉风格|上架图|截图优化)/i;
 
 function hasLightweightUiVisualSignal(text = '') {
   return LIGHTWEIGHT_UI_VISUAL_SIGNAL_PATTERN.test(String(text || ''));
@@ -2857,7 +2871,8 @@ function requirementGateMessage(intent, gate) {
       'The user is asking for an image asset such as a cover image, poster, illustration, icon, sticker, visual mockup, or effect image, not code implementation.',
       'For logo, icon, avatar, badge, and similar development assets, default to a standalone asset: full-frame single subject with no extra UI frame, card shell, device mockup, or presentation container unless the user explicitly asked for one.',
       'Do not create temporary HTML/SVG/CSS files for this image unless the user explicitly requested that format.',
-      'Use `imagegen`, which is Codex native Image 2, to generate the image; keep implementation, PRD review, and visual-compare for later explicit confirmation of whether this generated image should become a reference.',
+      'Use `imagegen`, which is Codex native Image 2, to generate the image; Image 2 is the tool path, not an aesthetic exemption, so first state the purpose, audience, intended tone, constraints, and memory point, then put them into the image prompt.',
+      'Before generation, do a quick anti-slop check: without brand or reference support, avoid default purple/blue-purple gradients, generic font taste, white card piles, and context-free decoration.',
     ].join('\n');
   }
   const status = gateBlocksImplementation ? 'active' : 'opened';
@@ -2908,14 +2923,16 @@ function visualMockupMessage(intent) {
   }
   return [
     '当前用户要的是图片内容生成，例如图片、封面图、配图、海报、插画、图标、贴纸、头像、banner、主视觉/KV、运营图、效果图、视觉稿或 mockup。',
-    '默认直接调用 `imagegen`，也就是 Codex 原生 Image 2，来生成图片；除非用户明确指定 HTML、SVG、CSS、Canvas、代码稿或可编辑矢量/source artifact，不要改用临时 HTML/SVG/CSS 再截图。',
+    '默认直接调用 `imagegen`，也就是 Codex 原生 Image 2，来生成图片；Image 2 是工具路径，不是审美豁免；生图前先写清用途、受众、气质、约束和记忆点，并把这些写进 prompt。',
+    '生图前用 `.openprd/design/anti-slop.md` 做快速自检：没有品牌或参考图依据时，不要默认紫白/蓝紫渐变、通用字体、白底卡片堆叠或无语境装饰。',
+    '除非用户明确指定 HTML、SVG、CSS、Canvas、代码稿或可编辑矢量/source artifact，不要改用临时 HTML/SVG/CSS 再截图。',
     '对 logo、icon、avatar、badge 等开发素材，如果用户没有明确要求 mockup、场景图、设备框、卡片承载、名片/包装展示或参考界面复刻，默认按独立素材输出（standalone asset）处理：使用全画布单主体，不额外添加 UI frame、卡片、设备壳、名片、桌面陈列、手持实拍或其他展示容器。',
     '只有当用户明确要求 mockup、场景化效果图、容器化呈现，或参考图本身就包含这些承载结构时，才生成对应的容器或场景。',
     '只有在实际发生 `imagegen` 调用后，才能汇报生图结果、失败或限流；未调用 `imagegen` 前，不要声称“生图限流”或“生图失败”。',
-    '把 `imagegen` 结果先当成候选效果图，不要默认登记到 `.openprd/harness/visual-reviews/`，也不要自动当成后续验收参考。',
+    '把 `imagegen` 结果先当成候选效果图，不要默认登记到 `.openprd/harness/visual-reviews/`，也不要自动当成后续验收参考；看图时不仅判断是否生成成功，还要判断气质、层级、字体/色彩/表面角色和记忆点是否成立。',
     '如果用户看完图后还要继续做实现，主动连问三件事：是否符合预期、是否纳入后续效果图/实现截图对比、是否按此继续后续实现。只有用户确认纳入对比或继续实现后，才把这张图、这组图或其中选定子图整理成后续 reference-set；如果用户只是认可图片但暂不实现，就继续把它当候选效果图。',
     '如果一张图里有多个子图、网格、多对象或多个方向，不要把整板直接当成单一参考图；先运行 `openprd visual-prepare . --reference <效果图> --grid <列>x<行>` 或 `--boxes <plan.json>` 生成 reference-set、contact sheet 和 compare-plan，确认 contact sheet 后再逐项对比或统一验收。',
-    'OpenPrd review.html 只用于需求评审，visual-compare 只用于实现阶段视觉证据：已有参考图时做效果图/实现截图对比；没有参考图时先判断新建界面还是修改既有界面，新建界面回到实现前 3 方向方案评审，修改既有界面做修改前/修改后自检；局部细节优先补局部焦点证据板，并行优化方向优先补并行实验证据板。',
+    'OpenPrd review.html 只用于需求评审，visual-compare 只用于实现阶段视觉证据：已有参考图时做效果图/实现截图对比；没有参考图时先判断新建界面还是修改既有界面，新建界面回到实现前 3 方向方案评审，修改既有界面做修改前/修改后自检；局部细节优先补局部焦点证据板，并行优化方向优先补并行实验证据板；同构列表、卡片、网格或表格需要补对齐辅助线证据板，并同时检查容器轨道和内部内容槽位轨道；单个 logo、icon、avatar、badge、按钮图形或图片内部需要居中判定、视觉重心评估或偏心排查时，需要补内部居中证据板，并同时检查画布中心、主体外接框中心和视觉重心偏移。',
   ].join('\n');
 }
 
@@ -2946,7 +2963,7 @@ function largeUiVisualDirectionMessage() {
     'OpenPrd 大界面改动视觉方案评审:',
     '位置: 需求分流之后、PRD 定稿或实现开工之前；它不同于 review.html，也不同于实现后的 visual-compare。',
     '判断: 先从用户目标、信息架构变化、视觉决策成本和验收风险判断是否需要方向评审，不用关键词触发。会决定首屏、核心布局、主视觉、关键路径、组件层级/密度，或用户需要先选设计方向时触发。',
-    '步骤: 已有界面时用 Codex Computer Use 进入产品内对应功能并截当前真实界面；冷启动没有现有界面时，基于已确认 PRD、用户画像、第一版切片和视觉目标写设计 brief。然后调用 `imagegen`（Codex 原生 Image 2）生成至少 3 个不同设计思想方向；把效果图横向拼成一张带 1/2/3 序号的大图，先作为候选效果图给用户评审，不要默认写入 `.openprd/harness/visual-reviews/` 当验收参考。',
+    '步骤: 已有界面时用 Codex Computer Use 进入产品内对应功能并截当前真实界面；冷启动没有现有界面时，基于已确认 PRD、用户画像、第一版切片和视觉目标写设计 brief。brief 必须写清用途、受众、气质端点、约束和记忆点，3 个方向要分别说明审美主张和主动避开的模板味。然后调用 `imagegen`（Codex 原生 Image 2）生成至少 3 个不同设计思想方向；把效果图横向拼成一张带 1/2/3 序号的大图，先作为候选效果图给用户评审，不要默认写入 `.openprd/harness/visual-reviews/` 当验收参考。',
     '交互: 主动追问三件事：是否符合预期、是否纳入后续效果图/实现截图对比、是否按此继续后续实现。只有用户确认纳入后续对比或继续实现后，才把选定方向、整张图或其中子图整理成 reference-set 并写入 `.openprd/harness/visual-reviews/`；用户确认前，不进入大 UI 实现，也不要声称界面方案已定。',
     '多对象参考处理: 如果候选效果图是一张图里包含多个子图、网格、多对象或多方向，不要拿整板直接硬比；先运行 `openprd visual-prepare . --reference <效果图> --grid <列>x<行>` 或 `--boxes <plan.json>`，检查 contact sheet，确认 reference-set 后再逐项进入实现和验收。',
   ].join('\n');
@@ -2955,10 +2972,11 @@ function largeUiVisualDirectionMessage() {
 function visualLocalAdjustmentMessage() {
   return [
     '如果这轮验收重点在局部变化，不要只改代码后凭主观判断收尾。',
-    '先判断这是新建界面还是修改既有界面：新建界面走实现前 3 方向方案评审；修改既有界面先保留修改前截图。完成后从同一入口、视口、账号和数据状态截修改后截图，再运行 `openprd visual-compare . --before <修改前截图> --after <修改后截图>`。',
-    '如果局部细节需要放到同一张证据板里审阅，再补一份 `openprd visual-compare . --board <focus-board.json>` 的局部焦点证据板，把局部变化组合到同一张证据板里统一验收；如果只是普通截图、Computer/Browser/Playwright 实测截图，也要用 `openprd visual-compare . --board <verification-board.json>` 拼成截图实测证据板，不能把单张截图当最终视觉证据。',
+    '修改前先用一句话锁定本次审美意图和记忆点；收口的 visual-compare/focus-board 不只看位置，也要看气质、层级、色彩、字号、间距和表面角色是否被保住。',
+    '先判断这是新建界面还是修改既有界面：新建界面走实现前 3 方向方案评审；修改既有界面先保留修改前截图。完成后从同一入口、视口、账号和数据状态截修改后截图，再运行 `openprd visual-compare . --before <修改前截图> --after <修改后截图> --locale <zh-CN|en>`。',
+    '如果局部细节需要放到同一张证据板里审阅，再补一份 `openprd visual-compare . --board <focus-board.json> --locale <zh-CN|en>` 的局部焦点证据板，把局部变化组合到同一张证据板里统一验收；如果只是普通截图、Computer/Browser/Playwright 实测截图，也要用 `openprd visual-compare . --board <verification-board.json> --locale <zh-CN|en>` 拼成截图实测证据板；如果界面存在同构列表、卡片、网格或表格，或用户反馈元素没有对齐，要用 `openprd visual-compare . --board <alignment-board.json> --locale <zh-CN|en>` 拼成对齐辅助线证据板，且同一张板里同时覆盖容器轨道和标题/副标题/描述/标签/状态/价格/按钮/图标等内部内容槽位；如果单个素材/图标/头像/徽标/按钮图形/图片内部需要居中或视觉重心判定，要用 `openprd visual-compare . --board <centering-board.json> --locale <zh-CN|en>` 拼成内部居中证据板，且同一张板里同时覆盖红色画布中心、绿色主体外接框和黄色视觉重心点，不能把单张截图当最终视觉证据。',
     '如果参考图是一张整板、网格图或多对象组合图，先运行 `openprd visual-prepare . --reference <效果图> --grid <列>x<行>` 或 `--boxes <plan.json>`，确认 contact sheet 后，再决定是逐项 `--reference/--actual` 还是统一做 `focus-board` / `parallel-board`。',
-    '当用户后续说“跟效果图”“不一致”“好丑”“复刻”“没对齐”这类反馈时，不能只口头说已经对比过了；至少先产出一份 `openprd visual-compare`、`focus-board`、`parallel-board` 或 `verification-board` 证据图再下结论。'
+    '当用户后续说“跟效果图”“不一致”“好丑”“复刻”“没对齐”“偏心”“不居中”这类反馈时，不能只口头说已经对比过了；至少先产出一份 `openprd visual-compare`、`focus-board`、`parallel-board`、`verification-board`、`alignment-board` 或 `centering-board` 证据图再下结论。'
   ].join('\n');
 }
 
@@ -2976,7 +2994,7 @@ function confirmationGateMessage(gate) {
   return [
     intro,
     'Implementation may proceed only within the confirmed scope, with docs/basic, file manuals, folder README docs, standards verification, and OpenPrd run verification kept up to date. For backend, script, agent, tooling, service, or data-processing changes, keep CLI and API surface review current in docs/basic/backend-structure.md.',
-    'For UI or visual work with an existing reference image, first confirm the user has accepted that image as a later comparison reference; if one image contains multiple sub-images, grid cells, or objects, run openprd visual-prepare . --reference <effect-image> --grid <columns>x<rows> or --boxes <plan.json>, inspect the contact sheet, and use the generated reference-set / compare-plan before comparing. Then capture the implemented UI and run openprd visual-compare . --reference <effect-image> --actual <implementation-screenshot>; if local detail matters more than the whole screen, add openprd visual-compare . --board <focus-board.json> so the agent can review numbered zoom regions. When there is no reference image, capture the before screenshot first, implement, capture the after screenshot from the same entry, viewport, account, and data state, then run openprd visual-compare . --before <before-screenshot> --after <after-screenshot>; if the agent explored multiple optimization directions, add openprd visual-compare . --board <parallel-board.json>. If ordinary screenshots or Computer/Browser/Playwright checks are used as evidence, assemble them with the checked path and checkpoints through openprd visual-compare . --board <verification-board.json> before claiming visual completion.',
+    'For UI or visual work with an existing reference image, first confirm the user has accepted that image as a later comparison reference; if one image contains multiple sub-images, grid cells, or objects, run openprd visual-prepare . --reference <effect-image> --grid <columns>x<rows> or --boxes <plan.json>, inspect the contact sheet, and use the generated reference-set / compare-plan before comparing. Then capture the implemented UI and run openprd visual-compare . --reference <effect-image> --actual <implementation-screenshot>; if local detail matters more than the whole screen, add openprd visual-compare . --board <focus-board.json> --locale <zh-CN|en> so the agent can review numbered zoom regions. When there is no reference image, capture the before screenshot first, implement, capture the after screenshot from the same entry, viewport, account, and data state, then run openprd visual-compare . --before <before-screenshot> --after <after-screenshot>; if the agent explored multiple optimization directions, add openprd visual-compare . --board <parallel-board.json> --locale <zh-CN|en>. If ordinary screenshots or Computer/Browser/Playwright checks are used as evidence, assemble them with the checked path and checkpoints through openprd visual-compare . --board <verification-board.json> --locale <zh-CN|en> before claiming visual completion. If the UI contains repeated homogeneous cards, lists, grids, or tables, or the user reports misalignment, capture the real screen, overlay guide lines, measure both container-track and internal content-slot x/y/size/baseline spread, and assemble an alignment-board through openprd visual-compare . --board <alignment-board.json> --locale <zh-CN|en>. If a single logo, icon, avatar, badge, button graphic, or image crop needs internal-centering or visual-centroid judgment, crop the target and assemble a centering-board through openprd visual-compare . --board <centering-board.json> --locale <zh-CN|en> before claiming it is centered.',
     'If the user later says the implementation does not match the effect image, looks wrong, or asks for replication, do not rely on subjective narration alone; produce at least one visual evidence artifact before claiming completion.',
   ].join('\n');
 }
@@ -3116,7 +3134,7 @@ function contextMessage(cwd, intent = null, gate = null, progress = null) {
         '只有当用户当前明确要求开发、实现、修复、继续任务、深度调研、对标复刻或提交时，才运行 openprd loop --run、openprd tasks --advance、openprd discovery --advance、commit/push 等执行命令。',
         '代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 openprd dev-check . <file...>；若出现需要关注的文件，最终回复必须以 **后续建议** 为标题，直接复用 dev-check 生成的 Markdown 表格，列出影响对象、关注程度、规模信号、预警原因、本次处理结果和后续建议，并按 🔴 → 🟠 → 🟡 排序；不要把“关注程度”列改写成纯 emoji，必须保留例如“🟠 中风险｜建议优先关注”这类完整标签；如果你改写了“预警原因 / 本次处理结果 / 后续建议”，先用 `node scripts/dev-check-wrapup-copy.mjs --validate` 校验每格不超过 20 字；若报错，按提示缩短后重试。',
         '大界面改动的效果图先当候选效果图；出图后主动确认是否符合预期、是否纳入后续效果图/实现截图对比、是否按此继续实现。只有确认后，才把选定方向、整张图或其中子图整理到 `.openprd/harness/visual-reviews/` 并进入大 UI 实现。',
-        '涉及界面、页面、视觉、样式或前端体验时，已有确认参考图才运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；如果一张参考图里有多个子图/对象/网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。没有明确参考图时先判断新建还是修改：新建界面走实现前 3 方向方案评审；修改既有界面则动手前先截修改前截图，完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图>；如果并行试了多个优化方向，再补一份 openprd visual-compare . --board <parallel-board.json>。普通截图、Computer/Browser/Playwright 实测截图只能作为原始素材，收口前要补 openprd visual-compare . --board <verification-board.json> 的截图实测证据板。用户后续如果说“跟效果图”“不一致”“好丑”“复刻”，不能只口头说对比过了，至少产出一份 visual-compare / focus-board / parallel-board / verification-board 证据图。',
+        '涉及界面、页面、视觉、样式或前端体验时，已有确认参考图才运行 openprd visual-compare . --reference <效果图> --actual <实现截图> --locale <zh-CN|en>；如果一张参考图里有多个子图/对象/网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。没有明确参考图时先判断新建还是修改：新建界面走实现前 3 方向方案评审；修改既有界面则动手前先截修改前截图，完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图> --locale <zh-CN|en>；如果并行试了多个优化方向，再补一份 openprd visual-compare . --board <parallel-board.json> --locale <zh-CN|en>。普通截图、Computer/Browser/Playwright 实测截图只能作为原始素材，收口前要补 openprd visual-compare . --board <verification-board.json> --locale <zh-CN|en> 的截图实测证据板。新开发或修改同构列表、卡片、网格、表格时，或用户反馈没对齐/排版漂移时，还要补 openprd visual-compare . --board <alignment-board.json> --locale <zh-CN|en> 的对齐辅助线证据板，同时量测容器轨道和标题/副标题/描述/标签/状态/价格/按钮/图标等内部内容槽位的 x/y/宽高/baseline spread。单个素材/图标/头像/徽标/按钮图形/图片内部居中、偏心或视觉重心判断时，还要补 openprd visual-compare . --board <centering-board.json> --locale <zh-CN|en> 的内部居中证据板，同时量测画布中心、主体外接框中心和视觉重心偏移。用户后续如果说“跟效果图”“不一致”“好丑”“复刻”，不能只口头说对比过了，至少产出一份 visual-compare / focus-board / parallel-board / verification-board / alignment-board / centering-board 证据图。',
         '发现可沉淀项时不要中途打断任务：代码扩展识别这类白名单工具补全会自动应用并记录；用户偏好、项目协作规矩和 OpenPrd 默认行为先记录为候选，收工时运行 openprd grow . --review 集中确认。',
         '维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；高置信可成长默认纳入，不确定则主动询问用户。',
         '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、help/doctor/dry-run/status 与接口协议、返回结构、身份边界是否受影响，并更新 docs/basic/backend-structure.md 或明确写不适用原因。',
@@ -3138,7 +3156,7 @@ function contextMessage(cwd, intent = null, gate = null, progress = null) {
       '只有当用户当前明确要求开发、实现、修复、继续任务、深度调研、对标复刻或提交时，才运行 openprd loop --run、openprd tasks --advance、openprd discovery --advance、commit/push 等执行命令。',
       '代码修改完成后、最终回复前，针对本轮实际 touched code files 运行 openprd dev-check . <file...>；若出现需要关注的文件，最终回复必须以 **后续建议** 为标题，直接复用 dev-check 生成的 Markdown 表格，列出影响对象、关注程度、规模信号、预警原因、本次处理结果和后续建议，并按 🔴 → 🟠 → 🟡 排序；不要把“关注程度”列改写成纯 emoji，必须保留例如“🟠 中风险｜建议优先关注”这类完整标签；如果你改写了“预警原因 / 本次处理结果 / 后续建议”，先用 `node scripts/dev-check-wrapup-copy.mjs --validate` 校验每格不超过 20 字；若报错，按提示缩短后重试。',
       '大界面改动的效果图先当候选效果图；出图后主动确认是否符合预期、是否纳入后续效果图/实现截图对比、是否按此继续实现。只有确认后，才把选定方向、整张图或其中子图整理到 `.openprd/harness/visual-reviews/` 并进入大 UI 实现。',
-      '涉及界面、页面、视觉、样式或前端体验时，已有确认参考图才运行 openprd visual-compare . --reference <效果图> --actual <实现截图>；如果一张参考图里有多个子图/对象/网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。没有明确参考图时先判断新建还是修改：新建界面走实现前 3 方向方案评审；修改既有界面则动手前先截修改前截图，完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图>；如果并行试了多个优化方向，再补一份 openprd visual-compare . --board <parallel-board.json>。普通截图、Computer/Browser/Playwright 实测截图只能作为原始素材，收口前要补 openprd visual-compare . --board <verification-board.json> 的截图实测证据板。用户后续如果说“跟效果图”“不一致”“好丑”“复刻”，不能只口头说对比过了，至少产出一份 visual-compare / focus-board / parallel-board / verification-board 证据图。',
+      '涉及界面、页面、视觉、样式或前端体验时，已有确认参考图才运行 openprd visual-compare . --reference <效果图> --actual <实现截图> --locale <zh-CN|en>；如果一张参考图里有多个子图/对象/网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。没有明确参考图时先判断新建还是修改：新建界面走实现前 3 方向方案评审；修改既有界面则动手前先截修改前截图，完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图> --locale <zh-CN|en>；如果并行试了多个优化方向，再补一份 openprd visual-compare . --board <parallel-board.json> --locale <zh-CN|en>。普通截图、Computer/Browser/Playwright 实测截图只能作为原始素材，收口前要补 openprd visual-compare . --board <verification-board.json> --locale <zh-CN|en> 的截图实测证据板。新开发或修改同构列表、卡片、网格、表格时，或用户反馈没对齐/排版漂移时，还要补 openprd visual-compare . --board <alignment-board.json> --locale <zh-CN|en> 的对齐辅助线证据板，同时量测容器轨道和标题/副标题/描述/标签/状态/价格/按钮/图标等内部内容槽位的 x/y/宽高/baseline spread。单个素材/图标/头像/徽标/按钮图形/图片内部居中、偏心或视觉重心判断时，还要补 openprd visual-compare . --board <centering-board.json> --locale <zh-CN|en> 的内部居中证据板，同时量测画布中心、主体外接框中心和视觉重心偏移。用户后续如果说“跟效果图”“不一致”“好丑”“复刻”，不能只口头说对比过了，至少产出一份 visual-compare / focus-board / parallel-board / verification-board / alignment-board / centering-board 证据图。',
       '发现可沉淀项时不要中途打断任务：代码扩展识别这类白名单工具补全会自动应用并记录；用户偏好、项目协作规矩和 OpenPrd 默认行为先记录为候选，收工时运行 openprd grow . --review 集中确认。',
       '维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；高置信可成长默认纳入，不确定则主动询问用户。',
       '涉及后端、脚本、Agent、工具链、服务或数据处理变更时，把 CLI 与 API 视为同级接入面：同步检查命令入口、参数、输出契约、help/doctor/dry-run/status 与接口协议、返回结构、身份边界是否受影响，并更新 docs/basic/backend-structure.md 或明确写不适用原因。',
@@ -3380,7 +3398,7 @@ function hasRecentVisualReviewArtifact(root, turnState) {
   return hasRecentArtifacts(root, '.openprd/harness/visual-reviews', turnState, (artifactPath) => {
     const normalized = artifactPath.split(path.sep).join('/');
     return /\.(?:jpe?g|png|webp|json)$/i.test(normalized)
-      && /visual-(?:compare|before-after|focus-board|parallel-board|verification-board)|reference-actual|before-after|focus-board|parallel-board|verification-board/i.test(normalized);
+      && /visual-(?:compare|before-after|focus-board|parallel-board|verification-board|alignment-board|centering-board)|reference-actual|before-after|focus-board|parallel-board|verification-board|alignment-board|centering-board|center-board/i.test(normalized);
   });
 }
 
@@ -3388,7 +3406,7 @@ function isVisualEvidenceIntent(intent = null) {
   const text = String(intent?.promptText || '');
   return isFrontendTaskIntent(intent)
     || hasLightweightUiVisualSignal(text)
-    || /(界面|页面|前端|视觉|样式|布局|信息架构|效果图|设计稿|参考图|实现截图|视觉对比|视觉评审|截图|实测|Computer\s*Use|Browser|Playwright|复刻|不一致|好丑|没对齐|对不上|不像)/i.test(text);
+    || /(界面|页面|前端|视觉|样式|布局|信息架构|效果图|设计稿|参考图|实现截图|视觉对比|视觉评审|截图|实测|Computer\s*Use|Browser|Playwright|复刻|不一致|好丑|没对齐|没有对齐|不对齐|对不齐|对不上|不像|对齐有问题|对齐问题|排版漂移|布局漂移|左右偏差|上下偏差|横向偏差|竖向偏差|同构|重复单元|列表卡片|卡片列表|卡片网格|网格卡片|网格列表|列表网格|对齐辅助线|内容槽位|内部槽位|内部居中|视觉重心|主体外接框|画布中心|偏心|不居中|没居中|图标内部|图片内部|素材内部)/i.test(text);
 }
 
 function visualEvidenceStopReminder(root, turnState, stopIntent) {
@@ -3400,6 +3418,8 @@ function visualEvidenceStopReminder(root, turnState, stopIntent) {
   const rawScreenshotObserved = hasTurnReviewSignal(turnState, 'visual-raw-screenshot');
   const visualArtifactObserved = hasTurnReviewSignal(turnState, 'visual-review-artifact')
     || hasTurnReviewSignal(turnState, 'visual-verification-board')
+    || hasTurnReviewSignal(turnState, 'visual-alignment-board')
+    || hasTurnReviewSignal(turnState, 'visual-centering-board')
     || hasRecentVisualReviewArtifact(root, turnState);
   const needsVisualEvidence = isVisualEvidenceIntent(stopIntent)
     && (rawScreenshotObserved || frontendTouched || /截图|实测|Computer\s*Use|Browser|Playwright/i.test(String(stopIntent?.promptText || '')));
@@ -3407,11 +3427,14 @@ function visualEvidenceStopReminder(root, turnState, stopIntent) {
     return null;
   }
   const preferred = rawScreenshotObserved
-    ? '`openprd visual-compare . --board <verification-board.json>`，把普通截图、Computer/Browser/Playwright 实测路径和检查点拼成截图实测证据板'
-    : '有参考图时用 `--reference/--actual`，无参考且改既有界面用 `--before/--after`，普通截图实测用 `--board <verification-board.json>`';
+    ? '`openprd visual-compare . --board <verification-board.json> --locale <zh-CN|en>`，把普通截图、Computer/Browser/Playwright 实测路径和检查点拼成截图实测证据板'
+    : '有参考图时用 `--reference/--actual`，无参考且改既有界面用 `--before/--after`，普通截图实测用 `--board <verification-board.json>`，同构列表/卡片/网格/表格用 `--board <alignment-board.json>`，单元素内部居中/视觉重心用 `--board <centering-board.json>`';
   return [
     'OpenPrd 在本轮收工回顾里发现 UI/视觉任务已有截图、实测或前端改动，但还没有本轮拼图证据。',
     '即便只是卡片宽度、间距、留白、对齐、颜色、圆角、字号这类轻量可视优化，也需要留下视觉证据；build、package 和 dev-check 不能替代视觉收口。',
+    '如果这轮新开发或修改了同构列表、卡片、网格、表格，或用户反馈元素没对齐，要截真实页面、叠辅助线，同时量容器轨道和标题/副标题/描述/标签/状态/价格/按钮/图标等内部内容槽位的 spread，并生成 alignment-board；只量外框、列宽或行顶不算完整对齐验收。',
+    '如果这轮判断的是单个素材、图标、头像、徽标、按钮图形或图片内部是否居中，要截取或裁出目标元素，用 centering-board 量画布中心、主体外接框中心和视觉重心偏移；单张截图或主观“看起来居中”不算完整居中验收。',
+    '视觉证据还要检查本轮审美意图是否成立：气质、层级、颜色、字号、间距、表面角色和记忆点不能只靠口头描述。',
     `普通截图和 Computer 实测截图只能作为原始素材，不能单独替代视觉收口。请先运行 ${preferred}。`,
     '补齐前不要宣称界面视觉已经完成；可以如实说功能或代码已改，但视觉拼图证据还没补齐。',
   ].join('\n');
@@ -3841,7 +3864,7 @@ function handle(eventName, cwd, payload) {
       recordRunHook(root, baseEvent, 'allowed-medium-risk');
       updateHookState(root, baseEvent);
       recordTouchedFiles(root, payload);
-      return allowHook('OpenPrd 检测到写入动作。本轮写入完成后、最终回复前，请针对实际 touched code files 运行 openprd dev-check . <file...>；如出现需要关注的文件，最终回复必须以 **后续建议** 为标题，直接复用 dev-check 生成的 Markdown 表格，说明影响对象、关注程度、规模信号、预警原因、本次处理结果和后续建议，并按 🔴 → 🟠 → 🟡 排序；不要把“关注程度”列改写成纯 emoji，必须保留例如“🟠 中风险｜建议优先关注”这类完整标签；如果你改写了“预警原因 / 本次处理结果 / 后续建议”，先用 `node scripts/dev-check-wrapup-copy.mjs --validate` 校验每格不超过 20 字；若报错，按提示缩短后重试；如涉及界面视觉，包括卡片宽度、间距、留白、对齐、颜色、圆角、字号等轻量可视优化，build、package 和 dev-check 只能证明代码或构建状态，不能替代视觉证据；已有参考效果图并进入实现阶段时，阶段性完成后运行 openprd visual-compare . --reference <效果图> --actual <实现截图> 并查看 JPG 对比图；如果参考图来自本轮或前序 `imagegen`，先确认用户已接受它作为后续对比参考；若一张图里有多个子图、对象或网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。若局部细节更重要，再补 openprd visual-compare . --board <focus-board.json>；如无参考图，先判断新建界面还是修改既有界面：新建界面应先完成 3 方向方案评审，修改既有界面确认已先截修改前截图，并在完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图> 查看 JPG 自检图；若并行试了多个优化方向，再补 openprd visual-compare . --board <parallel-board.json>；若普通截图、Computer/Browser/Playwright 实测截图被用作证据，再补 openprd visual-compare . --board <verification-board.json> 的截图实测证据板；当用户说“跟效果图”“不一致”“好丑”“复刻”时，至少给出一份视觉证据图，不要只口头判断。发现可沉淀项时不要中途打断任务，代码扩展识别这类白名单工具补全会自动应用并记录，用户偏好、项目协作规矩和 OpenPrd 默认行为留到收工时用 openprd grow . --review 集中确认；维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；声明就绪前，请同步维护 docs/basic、文件说明书、文件夹 README，以及相关 OpenPrd change/task 状态；如果涉及后端、脚本、Agent、工具链、服务或数据处理变更，还要把 CLI 与 API 视为同级接入面并更新 docs/basic/backend-structure.md。');
+      return allowHook('OpenPrd 检测到写入动作。本轮写入完成后、最终回复前，请针对实际 touched code files 运行 openprd dev-check . <file...>；如出现需要关注的文件，最终回复必须以 **后续建议** 为标题，直接复用 dev-check 生成的 Markdown 表格，说明影响对象、关注程度、规模信号、预警原因、本次处理结果和后续建议，并按 🔴 → 🟠 → 🟡 排序；不要把“关注程度”列改写成纯 emoji，必须保留例如“🟠 中风险｜建议优先关注”这类完整标签；如果你改写了“预警原因 / 本次处理结果 / 后续建议”，先用 `node scripts/dev-check-wrapup-copy.mjs --validate` 校验每格不超过 20 字；若报错，按提示缩短后重试；如涉及界面视觉，包括卡片宽度、间距、留白、对齐、颜色、圆角、字号等轻量可视优化，build、package 和 dev-check 只能证明代码或构建状态，不能替代视觉证据；写入前先说明本次审美意图和记忆点，视觉证据也要检查气质、层级、颜色、字号、间距和表面角色是否成立；已有参考效果图并进入实现阶段时，阶段性完成后运行 openprd visual-compare . --reference <效果图> --actual <实现截图> --locale <zh-CN|en> 并查看 JPG 对比图；如果参考图来自本轮或前序 `imagegen`，先确认用户已接受它作为后续对比参考；若一张图里有多个子图、对象或网格，先运行 openprd visual-prepare . --reference <效果图> --grid <列>x<行> 或 --boxes <plan.json>，确认 contact sheet 后再逐项对比。若局部细节更重要，再补 openprd visual-compare . --board <focus-board.json> --locale <zh-CN|en>；如无参考图，先判断新建界面还是修改既有界面：新建界面应先完成 3 方向方案评审，修改既有界面确认已先截修改前截图，并在完成后运行 openprd visual-compare . --before <修改前截图> --after <修改后截图> --locale <zh-CN|en> 查看 JPG 自检图；若并行试了多个优化方向，再补 openprd visual-compare . --board <parallel-board.json> --locale <zh-CN|en>；若普通截图、Computer/Browser/Playwright 实测截图被用作证据，再补 openprd visual-compare . --board <verification-board.json> --locale <zh-CN|en> 的截图实测证据板；若新开发或修改同构列表、卡片、网格、表格，或用户反馈没对齐/排版漂移，再补 openprd visual-compare . --board <alignment-board.json> --locale <zh-CN|en> 的对齐辅助线证据板，截真实页面、叠辅助线，同时量容器轨道和标题/副标题/描述/标签/状态/价格/按钮/图标等内部内容槽位的 x/y/宽高/baseline spread；只量外框、列宽或行顶不算完整对齐验收；当用户说“跟效果图”“不一致”“好丑”“复刻”时，至少给出一份视觉证据图，不要只口头判断。发现可沉淀项时不要中途打断任务，代码扩展识别这类白名单工具补全会自动应用并记录，用户偏好、项目协作规矩和 OpenPrd 默认行为留到收工时用 openprd grow . --review 集中确认；维护 OpenPrd 本身且涉及配置类能力时，先判断是否应纳入 openprd grow；声明就绪前，请同步维护 docs/basic、文件说明书、文件夹 README，以及相关 OpenPrd change/task 状态；如果涉及后端、脚本、Agent、工具链、服务或数据处理变更，还要把 CLI 与 API 视为同级接入面并更新 docs/basic/backend-structure.md。');
     }
     return allowHook();
   }

@@ -44,7 +44,7 @@ OpenPrd 的需求初始化默认不是重问卷，而是先建立一层轻量的
 - 包含：`.openprd/design/` 前端设计框架层，内置 lenses、themes、layouts、components、recipes、checklists、assets 和 `active/` 活动合同，用于界面实现前的审美框架、资产约束和模板骨架复用。
 - 包含：界面任务的设计前置门，要求按需补齐 `facts-sheet`、`asset-spec`、`image-preflight`、`direction-plan` 和 `selected-direction`，再进入真实编码。
 - 包含：参考图预处理工具，通过 `openprd visual-prepare --reference <效果图> --grid <列>x<行>` 或 `--boxes <plan.json>` 把确认后的整板、网格图或多对象效果图整理成 reference-set，并生成 crops、contact sheet、compare-plan 以及 board 模板。
-- 包含：界面视觉对比工具，通过 `openprd visual-compare --reference <效果图> --actual <实现截图>` 把两张图合成带“效果图 / 实现截图”简体中文标签的左右对比图；没有参考图但改动界面时，通过 `openprd visual-compare --before <修改前截图> --after <修改后截图>` 合成带“修改前 / 修改后”标签的自检图。默认输出 JPG 到 `.openprd/harness/visual-reviews/`；该工具只用于实现阶段视觉证据，不能替代实现前效果图方向评审。
+- 包含：界面视觉对比工具，通过 `openprd visual-compare --reference <效果图> --actual <实现截图> --locale <zh-CN|en>` 把两张图合成按当前用户主语言标注的左右对比图；没有参考图但改动界面时，通过 `openprd visual-compare --before <修改前截图> --after <修改后截图> --locale <zh-CN|en>` 合成同语言策略的自检图。默认输出 JPG 到 `.openprd/harness/visual-reviews/`；该工具只用于实现阶段视觉证据，不能替代实现前效果图方向评审。
 - 包含：研发期 touched code files 标准层，通过 `openprd dev-check` 或 `scripts/openprd-dev-check.mjs` 返回代码文件行数、状态和下一步动作建议；需要关注的文件会形成“后续建议”表格行，并按 🔴 → 🟠 → 🟡 的关注程度排序。
 - 包含：自我成长标准层，通过 `.openprd/growth/` 和 `openprd grow --review|--apply|--reject` 管理执行中发现的代码扩展名、豁免规则、命令习惯、项目约定和 user-local 偏好候选；代码扩展识别这类白名单工具补全可自动固化，用户偏好、项目协作规矩和 OpenPrd 默认行为留到收工复盘确认。
 - 包含：benchmark 信源观察层，通过 `openprd benchmark observe` 把被用户采纳的高质量外部来源写入 candidate，保留累计采纳证据，并按最近 7 天滚动统计决定是否提示用户 approve；达到阈值后只提示用户 approve，不自动进入 approved registry。
@@ -70,14 +70,14 @@ OpenPrd 的需求初始化默认不是重问卷，而是先建立一层轻量的
 - 无明确参考方向的界面任务，3 个候选方向必须来自不同生成逻辑，至少在 lens、theme、layout 或素材策略上显著拉开；不能只是同一种安全极简解的轻微变化。
 - `init/setup/update` 后，新工作区默认会带出 `.openprd/design/` 设计框架层和 `openprd-frontend-design` 生成 skill，`doctor` 能检查它们是否缺失或漂移。
 - 如果确认参考图是一张整板、网格图或多对象组合，Agent guidance 会要求先运行 `openprd visual-prepare` 并检查 contact sheet；未生成 reference-set、compare-plan 或 board 模板前，不得把整板盲比当成充分验收。
-- 界面、页面、视觉、样式或前端体验任务在已有参考图并进入实现阶段时，会先截实现图并运行 `openprd visual-compare --reference/--actual`；输出图左侧标注“效果图”、右侧标注“实现截图”。无参考图但改动界面时，Agent 会在动手前截修改前截图，完成后用同一入口、视口、账号和数据状态截修改后截图，并运行 `openprd visual-compare --before/--after`；输出图左侧标注“修改前”、右侧标注“修改后”。Agent 需查看合成图并继续复刻或自检到无明显差异/漂移后才宣称视觉完成。
+- 界面、页面、视觉、样式或前端体验任务在已有参考图并进入实现阶段时，会先截实现图并运行 `openprd visual-compare --reference/--actual --locale <zh-CN|en>`；输出图标签跟随用户当前主语言，中文语境默认“效果图 / 实现截图”，英文语境默认“Reference / Implementation”。无参考图但改动界面时，Agent 会在动手前截修改前截图，完成后用同一入口、视口、账号和数据状态截修改后截图，并运行 `openprd visual-compare --before/--after --locale <zh-CN|en>`；输出图标签也跟随同一语言策略。Agent 需查看合成图并继续复刻或自检到无明显差异/漂移后才宣称视觉完成。
 - 明确实现类请求在新增或修改代码文件前后，可以运行 `openprd dev-check <path> <file...>` 获取改动文件的关注程度和下一步建议；需要关注的文件必须在最终回复以 **后续建议** 为标题，用 Markdown 表格说明影响位置、关注程度、规模信号、为什么需要关注、本次处理和后续建议。
 - 当 dev-check 识别出未知代码扩展名时，本次检查会按候选代码文件给出行数建议，并自动补齐识别规则、记录证据；非工具识别类候选通过 `openprd grow --review` 在收工时集中确认。未确认候选不得被描述为已生效规则。
 - 当同一规范化外部信源被 `benchmark observe` 记录到采纳阈值时，`benchmark list` 和 `grow --review` 会给出 approve 建议；用户确认前该来源仍是 candidate，不能作为长期 approved benchmark 使用。
 - 修改 OpenPrd 本身且涉及配置类能力时，Agent 会说明该能力是否 grow-aware；高置信可成长的配置默认带候选类型、scope、review/apply 行为，不确定时主动询问用户。
 - 命中消耗型成本风险的 PRD 在业务护栏字段缺失时会回到 `clarify-user`，不会直接进入 freeze。
 - 合成 PRD 后会生成工具无关的 work unit id 和稳定评审 artifact；默认 approval policy 是 `decision-points`，用户确认时应使用带 `--version`、`--digest`、`--work-unit` 的 `openprd review --mark confirmed`，参数不匹配时必须阻断，避免多 Agent 或多对话把确认写到其他需求。实现授权和 review 记录不能互相替代；常规 lane 下仍需用户先评审当前 artifact，只有在用户明确表示“不需要进行任何确认”时，才允许以 `silent-record` policy 直接记录当前精确匹配的稳定评审稿，单纯的“请帮我实现/继续实现”不触发这个豁免。
-- 新需求入口打开后，`synthesize` 只能使用本轮已 `capture` 的需求状态或命令中显式传入的新 PRD 字段，不允许直接复用旧 `current.json` 伪造新的评审稿。Agent 在生成 `spec.md`、tasks 和对外说明时默认使用简体中文，但必要专有名词、品牌名、命令名、路径、字段名和 API 术语可以保留原文。已合成版本后再次 `capture` 用户确认或推导得到的内容，必须把旧评审状态标记为过期并清掉 active 版本指针；仅用于 `agent-normalized` 的内部措辞规范化或 `reviewPresentation` 展示层写回，不触发二次 review。
+- 新需求入口打开后，`synthesize` 只能使用本轮已 `capture` 的需求状态或命令中显式传入的新 PRD 字段，不允许直接复用旧 `current.json` 伪造新的评审稿。Agent 在生成 `spec.md`、tasks 和对外说明时跟随用户当前主语言；无法判断时使用简体中文兜底。必要专有名词、品牌名、命令名、路径、字段名和 API 术语可以保留原文。已合成版本后再次 `capture` 用户确认或推导得到的内容，必须把旧评审状态标记为过期并清掉 active 版本指针；仅用于 `agent-normalized` 的内部措辞规范化或 `reviewPresentation` 展示层写回，不触发二次 review。
 - 新 PRD 模板会单独保留“验证与创业闭环”章节，用来记录第一批先找谁、为什么算这个社区里的自己人、用户当前怎么替代、痛点证据、如何先手工或 no-code 交付、如果必须开始做产品也只自动化最重复的一步并先压成 forms / lists / CRUD 骨架、什么承诺算真需求、最低成本验证动作、达到什么条件才允许产品化、增长阶段守什么纪律，以及 default alive 约束，以及这是不是团队愿意长期住进去、不会反过来绑住自己的业务形态。
 - 命中消耗型成本风险的 change 会自动生成成本额度、滥用越权、监控报警和止损验证任务。
 - `openprd quality --verify` 会生成 `.openprd/quality/reports/<id>.html`，报告包含回归结论概览、回归流程图、测试覆盖图、本期必测结果、需要处理或确认的事项、验证材料、执行环境与覆盖、折叠明细和底部“需要补测 / 认可回归”操作栏。

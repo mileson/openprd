@@ -41,6 +41,8 @@ const STARTER_CATALOG = [
       lens: 'editorial-contrast',
       theme: 'warm-editorial',
       layout: 'story-map',
+      aesthetic: '温暖编辑式内容首页，用标题字体、图文节奏和章节停顿建立可长期阅读的气质。',
+      memoryPoint: '第一眼记住清楚的主题入口和像杂志目录一样的内容节奏。',
       components: ['editorial-hero', 'stat-row', 'story-section', 'feature-grid', 'timeline', 'cta-banner'],
     },
     directions: [
@@ -50,6 +52,8 @@ const STARTER_CATALOG = [
         lens: 'editorial-contrast',
         theme: 'warm-editorial',
         layout: 'story-map',
+        aesthetic: '温暖编辑感，靠标题字体和章节节奏组织内容。',
+        memoryPoint: '像一本打开的专题目录，用户知道从哪里开始读。',
         suitable: '长期写作首页、专题内容页、个人博客首页',
         risk: '如果信息密度控制不好，首屏会显得偏满。',
       },
@@ -59,6 +63,8 @@ const STARTER_CATALOG = [
         lens: 'catalog-clarity',
         theme: 'quiet-sand',
         layout: 'editorial-rail',
+        aesthetic: '克制资料库感，靠清楚分类和可比较信息单元建立秩序。',
+        memoryPoint: '用户能快速回到分类、筛选和上一次浏览位置。',
         suitable: '知识整理页、文章归档页、资源导航页',
         risk: '如果目录层级太重，会削弱阅读感。',
       },
@@ -68,6 +74,8 @@ const STARTER_CATALOG = [
         lens: 'immersive-showcase',
         theme: 'deep-launch',
         layout: 'story-map',
+        aesthetic: '沉浸展示感，靠强主视觉和少量文字信号制造记忆。',
+        memoryPoint: '首屏真实场景或关键视觉成为页面锚点。',
         suitable: '需要更强个人风格的内容展示页',
         risk: '容易更像展示页而不是稳定阅读首页。',
       },
@@ -84,6 +92,8 @@ const STARTER_CATALOG = [
       lens: 'product-launch',
       theme: 'deep-launch',
       layout: 'product-spec-runway',
+      aesthetic: '暗色发布叙事，用产品状态、规格跑道和强对比动作建立发布感。',
+      memoryPoint: '用户记住一个明确承诺和一个可验证的产品状态。',
       components: ['spec-hero', 'stat-row', 'feature-grid', 'logo-wall', 'cta-banner'],
     },
     directions: [
@@ -93,6 +103,8 @@ const STARTER_CATALOG = [
         lens: 'product-launch',
         theme: 'deep-launch',
         layout: 'product-spec-runway',
+        aesthetic: '深色电影感发布页，强调新能力、证明材料和决策动作。',
+        memoryPoint: '一个强主视觉承载发布承诺，而不是一组泛泛功能卡片。',
         suitable: '正式发布页、版本更新页、关键能力介绍页',
         risk: '如果证据不足，会只剩氛围没有事实。',
       },
@@ -102,6 +114,8 @@ const STARTER_CATALOG = [
         lens: 'editorial-contrast',
         theme: 'warm-editorial',
         layout: 'pricing-and-proof',
+        aesthetic: '编辑型解释页，降低销售感，用证据、价格或适用对象帮助决策。',
+        memoryPoint: '用户记住“为什么现在值得用”和“适合谁”。',
         suitable: '要兼顾解释与决策的介绍页',
         risk: '可能不够强势，发布感会偏弱。',
       },
@@ -111,6 +125,8 @@ const STARTER_CATALOG = [
         lens: 'immersive-showcase',
         theme: 'deep-launch',
         layout: 'immersive-hero-stack',
+        aesthetic: '沉浸式产品故事，靠媒体层级和少量强文本拉开情绪。',
+        memoryPoint: '首屏像一段产品片头，但仍保留下一步动作。',
         suitable: '视觉驱动型发布叙事',
         risk: '容易把页面做成纯展示而削弱可扫描性。',
       },
@@ -127,6 +143,8 @@ const STARTER_CATALOG = [
       lens: 'operational-density',
       theme: 'tool-neutral',
       layout: 'ops-density-grid',
+      aesthetic: '安静工作台，用稳定密度、清楚状态和短路径体现专业感。',
+      memoryPoint: '用户记住这是一个能反复使用、快速扫描的控制台。',
       components: ['filter-rail', 'summary-panel', 'dense-table', 'settings-group'],
     },
     directions: [
@@ -136,6 +154,8 @@ const STARTER_CATALOG = [
         lens: 'operational-density',
         theme: 'tool-neutral',
         layout: 'ops-density-grid',
+        aesthetic: '克制工具感，靠密度、对齐、状态和控件层级让用户快速完成工作。',
+        memoryPoint: '首屏一眼知道待处理、关键指标和下一步动作。',
         suitable: '后台首页、运营看板、任务工作台',
         risk: '如果主次不清，扫描效率会下降。',
       },
@@ -145,6 +165,8 @@ const STARTER_CATALOG = [
         lens: 'catalog-clarity',
         theme: 'quiet-sand',
         layout: 'catalog-browser',
+        aesthetic: '资料浏览器感，靠分类、筛选和可比较对象减少重复判断。',
+        memoryPoint: '用户记住清楚的浏览结构和稳定的回看路径。',
         suitable: '对象浏览与筛选更重的系统首页',
         risk: '容易太像列表页，动作感不足。',
       },
@@ -154,6 +176,8 @@ const STARTER_CATALOG = [
         lens: 'operational-density',
         theme: 'deep-launch',
         layout: 'settings-split',
+        aesthetic: '深色控制中心感，适合高风险配置和集中监控。',
+        memoryPoint: '关键状态像仪表盘一样醒目，但操作仍克制。',
         suitable: '偏控制中心与配置中枢的场景',
         risk: '暗色高密度更考验层级控制。',
       },
@@ -269,6 +293,7 @@ function buildStarterContext(starter, defaults, options = {}) {
     noRealImages: Boolean(options.noRealImages),
     themeConfig: null,
     imageBundle: null,
+    selectedDirection: starter.selectedDirection,
   };
 }
 
@@ -385,6 +410,9 @@ function buildGenericAssetSpec(context) {
 | UI 图 | ${normalizePathForMarkdown(context.starterId === 'ops-dashboard' ? '如需现有界面截图再补' : '无必需 UI 截图')} | ${context.starterId === 'ops-dashboard' ? '待确认' : 'n/a'} | ${context.starterId === 'ops-dashboard' ? 'defined' : 'not-needed'} |  |
 | 摄影 / 插图 | ${normalizePathForMarkdown(context.noRealImages ? '无' : '按任务需要补真实图片或插图')} | ${context.noRealImages ? 'n/a' : '待确认'} | ${context.noRealImages ? 'not-needed' : 'defined'} | ${normalizePathForMarkdown(imageLine)} |
 | 色板 / 字体 | ${normalizePathForMarkdown(`${context.defaults.theme ?? 'starter-default'} 对应的默认 tokens`)} | implementation | defined | 先锁定 starter 默认组合，再按页面细化 |
+| 动效节奏 | ${normalizePathForMarkdown('一段关键 reveal / 状态反馈 / 滚动节奏，按审美主张控制复杂度')} | implementation | defined | 不到处散落无意义 hover |
+| 背景 / 表面 | ${normalizePathForMarkdown(`${context.defaults.theme ?? 'starter-default'} 对应表面预设`)} | implementation | defined | 背景和纹理服务内容，不替代真实素材 |
+| 构图记忆点 | ${normalizePathForMarkdown(context.selectedDirection?.memoryPoint ?? '按当前方向继续补记忆点')} | implementation | defined | 进入 Patch Mode 时优先保住 |
 
 ${fetchedImageRows.length > 0 ? `
 ## 已补真实图片
@@ -399,6 +427,8 @@ ${fetchedImageRows.join('\n')}
 - lens: ${context.defaults.lens ?? context.starterId}
 - theme: ${context.defaults.theme ?? '待补'}
 - layout: ${context.defaults.layout ?? '待补'}
+- aesthetic: ${normalizePathForMarkdown(context.selectedDirection?.aesthetic ?? '待补')}
+- memory-point: ${normalizePathForMarkdown(context.selectedDirection?.memoryPoint ?? '待补')}
 ${imageBundle?.succeeded ? `- image-query: ${normalizePathForMarkdown(imageBundle.query)}\n- image-manifest: ${normalizePathForMarkdown(imageBundle.relativeManifestPath ?? '待补')}` : ''}
 `;
 }
@@ -456,11 +486,11 @@ function buildGenericImagePreflight(context) {
 }
 
 function buildGenericDirectionPlan(starter, context) {
-  const lines = starter.directions.map((direction) => `| ${direction.label} | ${direction.logic} | ${direction.lens} | ${direction.theme} | ${direction.layout} | ${normalizePathForMarkdown(`${context.brief} 下刻意拉开气质和信息组织方式`)} | ${normalizePathForMarkdown(direction.suitable)} | ${normalizePathForMarkdown(direction.risk)} |`);
+  const lines = starter.directions.map((direction) => `| ${direction.label} | ${direction.logic} | ${direction.lens} | ${direction.theme} | ${direction.layout} | ${normalizePathForMarkdown(direction.aesthetic ?? `${context.brief} 下刻意拉开气质和信息组织方式`)} | ${normalizePathForMarkdown(direction.memoryPoint ?? '当前方向的首屏视觉锚点和任务路径')} | ${normalizePathForMarkdown(`${context.brief} 下刻意拉开气质和信息组织方式`)} | ${normalizePathForMarkdown(direction.suitable)} | ${normalizePathForMarkdown(direction.risk)} |`);
   return `# Direction Plan
 
-| 方向 | 生成逻辑 | lens | theme | layout | 为什么不同 | 适用场景 | 主要风险 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
+| 方向 | 生成逻辑 | lens | theme | layout | 审美主张 | 记忆点 | 为什么不同 | 适用场景 | 主要风险 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 ${lines.join('\n')}
 `;
 }
@@ -474,11 +504,14 @@ function buildGenericSelectedDirection(starter) {
 - lens: ${selected.lens}
 - theme: ${selected.theme}
 - layout: ${selected.layout}
+- aesthetic: ${normalizePathForMarkdown(selected.aesthetic ?? '当前方向需要在实现前补充审美主张')}
+- memory-point: ${normalizePathForMarkdown(selected.memoryPoint ?? '当前方向需要在实现前补充记忆点')}
 - components:
 ${selected.components.map((component) => `  - ${component}`).join('\n')}
 - follow-up risks:
   - 进入实现时继续控制信息密度，避免局部突然换轨
   - 页面文案要保留当前任务语气，不要把模板示例话术原样带入交付
+  - 进入 Patch Mode 前用 anti-slop 自检，避免回到通用字体、紫白渐变或均匀卡片堆叠
 `;
 }
 
@@ -586,6 +619,8 @@ function buildBasicDocMap(projectRoot, starter, context, relativeOutputPath) {
 - 把最后一批必要的查事实、查图、读模板动作放在口头宣布之前做完；一旦已经说“开始覆盖入口文件”或“开始整页重写”，下一步必须是对 \`${relativeOutputPath}\` 或 sibling draft 的实际写入，不要继续只读扫描、压图或停在口头承诺；必要时 hook 会把这类非写入动作挡回去。
 - 主要区块固定为: ${sections.join('、')}。
 - 当前视觉方向锁定为 \`${context.defaults.lens ?? starter.id}\`，主题采用 \`${context.defaults.theme ?? 'starter-default'}\`，页面骨架采用 \`${context.defaults.layout ?? 'starter-layout'}\`。
+- 当前审美主张和记忆点记录在 \`.openprd/design/active/selected-direction.md\`；后续样式细化必须保住这个气质，而不是回到通用模板。
+- 进入样式细化前，用 \`.openprd/design/anti-slop.md\` 排除默认紫白渐变、通用字体栈、白底卡片堆叠和无语境装饰。
 - 优先使用稳定的信息层级、卡片、标签、导航锚点和纯文字表达；不通过花哨装饰替代真实结构。
 
 ## 交互规范

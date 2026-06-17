@@ -130,8 +130,17 @@ one human-readable quality surface before handoff, release, or publish.
 Put the reference and implementation into one side-by-side artifact for staged
 UI review, especially for auth-entry redesign, localized legal pages, and modal
 replication work.
+Visual evidence follows the current task language by default: Chinese requests
+produce Chinese labels, English requests produce English labels, and
+`--locale zh-CN` or `--locale en` can pin the output language for side-by-side labels,
+board titles, summaries, and checks.
 
 ![Auto-optimized reference-to-screenshot comparison](https://raw.githubusercontent.com/mileson/openprd/main/docs/assets/openprd-visual-compare-case-study-en.png)
+
+```bash
+openprd visual-compare . --reference ref.png --actual actual.png --locale zh-CN
+openprd visual-compare . --board verification-board.json --locale en
+```
 
 ## Self-Evolving Collaboration
 
@@ -172,6 +181,7 @@ automatically.
 - **Project-level benchmark registry**: support `benchmark add / observe / approve / verify` so repeatedly adopted external sources can become durable project references
 - **Diagram review artifacts**: generate both architecture and product-flow diagrams
 - **UI visual comparison artifacts**: combine reference images and implementation screenshots into side-by-side JPG reviews for visual replication work
+- **Language-aware visual evidence**: localize comparison labels and board copy from the active request language, with `--locale` / `--lang` overrides when a project needs a fixed output language
 - **Contract-driven diagrams**: render from validated JSON contracts
 - **Review status tracking**: use `pending-confirmation`, `confirmed`, and `needs-revision`
 - **Project release/version ledger**: optionally track project versions such as `0.1.23`, version-scoped change items, and local git tag coordination without mixing them with internal PRD `v000x` versions
@@ -547,6 +557,71 @@ obvious visual differences. The final response for reference-driven UI work
 should include the generated review image path and note whether differences
 remain.
 
+When a new feature or visible change contains repeated homogeneous lists, cards,
+grids, or tables, or when the user reports misalignment, the agent should also
+capture the real UI, overlay guide lines, and measure both container-track and
+internal content-slot coordinate spread in one alignment evidence board:
+
+```bash
+openprd visual-compare /path/to/project \
+  --board alignment-board.json
+```
+
+Use `mode: "alignment-board"` in the board JSON. Include the screenshot, guide
+lines, container groups, content-slot groups, and x/y/width/height/baseline
+spread. Container tracks include card edges, columns, row tops, and gaps.
+Internal content slots include titles, subtitles, tags, descriptions, status,
+prices, buttons, icons, and action areas. Repeated card lists, card grids, and
+tables are default triggers even when the user did not explicitly complain
+about alignment; measuring only outer frames, columns, or row tops is not enough.
+
+When a single logo, icon, avatar, badge, button graphic, or image crop needs
+internal centering review, or when the user reports that its visual weight feels
+off-center, crop the target if needed and generate a centering evidence board:
+
+```bash
+openprd visual-compare /path/to/project \
+  --board centering-board.json
+```
+
+Minimal syntax:
+
+```json
+{
+  "mode": "centering-board",
+  "title": "Logo internal centering check",
+  "image": ".openprd/harness/screenshots/logo.png",
+  "thresholdPx": 8,
+  "subject": {
+    "mode": "auto",
+    "weight": "contrast"
+  }
+}
+```
+
+If the automatic mask includes background, shadow, or transparent padding, use
+explicit color ranges:
+
+```json
+{
+  "mode": "centering-board",
+  "image": ".openprd/harness/screenshots/logo.png",
+  "subject": {
+    "mode": "range",
+    "ranges": [
+      { "r": [180, 255], "g": [140, 255], "b": [0, 120] },
+      { "r": [210, 255], "g": [210, 255], "b": [200, 255] }
+    ],
+    "weight": "luma"
+  }
+}
+```
+
+`centering-board` draws the red canvas center, green active subject bounds, and
+yellow visual centroid, then stores bounding-box center offset and
+visual-centroid offset in metadata. A raw screenshot or subjective “looks
+centered” note is not a substitute for this board.
+
 ## Quality Regression Reports
 
 `openprd init` also creates a quality contract:
@@ -584,8 +659,14 @@ scope for the scenario.
 
 For UI work with an existing reference image, visual readiness also requires a
 current `openprd visual-compare` artifact under `.openprd/harness/visual-reviews/`.
-If the combined image still shows obvious differences, the task should return to
-implementation instead of treating the gap as ready.
+Before/after UI changes require a before/after artifact, screenshot-based
+runtime checks require a verification board, and homogeneous lists, cards,
+grids, or tables require an alignment board that covers both container tracks
+and internal content slots. Single-logo, icon, avatar, badge, button graphic, or
+image-crop internal-centering reviews require a centering board. If the combined image still shows
+obvious differences, coordinate drift, or layout spread beyond the intended
+threshold, the task should return to implementation instead of treating the gap
+as ready.
 
 After a fix has been verified and reviewed, promote the abstract pattern into
 project knowledge:
@@ -688,7 +769,11 @@ task, and can commit that task before moving on.
 For UI tasks, the loop prompt and generated guidance require the agent to run
 `openprd visual-compare` before finishing: use `--reference/--actual` when a
 reference image exists, or `--before/--after` when the agent must verify a UI
-change without an explicit reference image.
+change without an explicit reference image. Use `--board <verification-board.json>`
+for screenshot-based runtime evidence, and `--board <alignment-board.json>` for
+homogeneous lists, cards, grids, or tables; the alignment board must cover both
+outer tracks and internal content slots. Use `--board <centering-board.json>` for
+single-element internal-centering or visual-centroid checks.
 
 `openprd run --context` may surface loop commands as execution commands, but they
 are not automatic instructions. Agents should run `openprd loop --run`,
@@ -735,6 +820,13 @@ Use `--dry-run` first when you want OpenPrd to prepare the prompt and exact comm
 without launching an agent. Use `--agent codex` or `--agent claude` for the default
 CLI integrations. Use `--agent-command "<custom command>"` only when you want to
 pipe the OpenPrd prompt into a project-specific wrapper.
+
+User-facing generated docs, progress logs, proposals, prompts, test reports, and
+agent-produced specs/tasks follow the primary language of the current request
+and PRD snapshot. Chinese contexts use Simplified Chinese, English contexts stay
+English, and ambiguous contexts fall back to `zh-CN`; command names, field names,
+paths, APIs, product names, and explicitly `zh-CN` diagram contracts remain
+unchanged.
 
 For historical projects, use `fleet` instead of hand-writing shell loops. By
 default it scans and reports only, while also telling you how many known

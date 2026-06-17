@@ -27,7 +27,7 @@
 - `node ./bin/openprd.js quality . --verify`: 生成 JSON 与 HTML 回归测试报告，展示整体回归结果、逐需求模块结果、测试块通过情况、本次执行证据、日志链路、业务成本与滥用护栏、冒烟覆盖、性能基线、极端场景和项目经验沉淀。
 - `node ./bin/openprd.js quality . --learn --from <report>`: 将审查过的问题修复抽象为 `.openprd/knowledge/skills/` 下的项目级经验 skill。
 - `node ./bin/openprd.js visual-prepare . --reference <效果图> --grid <列>x<行>` / `--boxes <plan.json>`: 把确认后的整板、网格图或多对象效果图整理成 reference-set，输出 crops、contact sheet、compare-plan 和 board 模板，供后续逐项视觉验收使用。
-- `node ./bin/openprd.js visual-compare . --reference <效果图> --actual <实现截图>`: 把参考图和实现截图合成左右对比图；`node ./bin/openprd.js visual-compare . --before <修改前截图> --after <修改后截图>` 会在无参考图界面改动中生成修改前后自检图；`node ./bin/openprd.js visual-compare . --board <board.json>` 则可生成局部焦点证据板或并行实验证据板。默认输出 JPG 到 `.openprd/harness/visual-reviews/`，可用 `--format jpg|png|webp`、`--quality` 和 `--max-panel-width` 调整。
+- `node ./bin/openprd.js visual-compare . --reference <效果图> --actual <实现截图> --locale <zh-CN|en>`: 把参考图和实现截图合成左右对比图；`node ./bin/openprd.js visual-compare . --before <修改前截图> --after <修改后截图> --locale <zh-CN|en>` 会在无参考图界面改动中生成修改前后自检图；`node ./bin/openprd.js visual-compare . --board <board.json> --locale <zh-CN|en>` 则可生成局部焦点证据板或并行实验证据板。默认输出 JPG 到 `.openprd/harness/visual-reviews/`，可用 `--format jpg|png|webp`、`--quality` 和 `--max-panel-width` 调整。
 - `node ./bin/openprd.js run . --context`: 生成 hook-stable 执行上下文。
 - `node ./bin/openprd.js update . --hook-profile lite|guarded|full`: 刷新 agent guidance 并选择 Codex hook 重量；默认 `lite` 保留需求澄清写入门禁但不启用完整遥测。
 

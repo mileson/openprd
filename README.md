@@ -100,8 +100,14 @@ OpenPrd 会生成可以直接分享的 HTML 面板，让产品、研发和 Agent
 ### 效果图与截图拼图对比，自动优化
 
 把效果图和实现截图放进同一张左右对比图里，适合登录入口改造、条款页本地化、弹窗复刻这类阶段性评审。
+视觉证据会跟随当前任务语境选择语言：中文需求默认输出中文标签，英文需求默认输出英文标签；需要固定语言时可显式传入 `--locale zh-CN` 或 `--locale en`，证据板里的标题、摘要和检查项也会一起跟随。
 
 ![效果图与截图拼图对比，自动优化](https://raw.githubusercontent.com/mileson/openprd/main/docs/assets/openprd-visual-compare-case-study-zh.png)
+
+```bash
+openprd visual-compare . --reference ref.png --actual actual.png --locale zh-CN
+openprd visual-compare . --board verification-board.json --locale en
+```
 
 ## 自我成长机制
 
@@ -482,6 +488,65 @@ openprd visual-compare /path/to/project \
 Agent 必须查看生成图并继续对标，直到没有明显视觉差异。最终回复里应给出本次
 生成的对比图路径，并说明对比后是否仍有差异。
 
+如果新功能或改动包含同构列表、卡片、网格或表格，或者用户反馈“没对齐”“排版
+漂移”，Agent 还要把真实截图、辅助线、容器轨道量测和内部内容槽位量测放到一张对齐证据板里：
+
+```bash
+openprd visual-compare /path/to/project \
+  --board alignment-board.json
+```
+
+`alignment-board.json` 使用 `mode: "alignment-board"`，记录截图、辅助线、
+容器分组和内容槽位分组。容器轨道包括卡片外框、列宽、行顶、间距等；
+内容槽位包括标题、副标题、标签、描述、状态、价格、按钮、图标和操作区等
+相同文案类型/相同组件槽位的 x/y/宽高/baseline spread。列表卡片、卡片网格和
+表格这类重复结构属于默认触发场景，不需要等用户先指出“没有对齐”；只量外框、
+列宽或行顶不算完整对齐验收。
+
+如果要判断单个 logo、icon、avatar、badge、按钮图形或图片裁切内部是否居中，
+或者用户反馈“偏心”“视觉重心不对”，Agent 应先裁出目标元素，再生成内部居中证据板：
+
+```bash
+openprd visual-compare /path/to/project \
+  --board centering-board.json
+```
+
+最小语法如下：
+
+```json
+{
+  "mode": "centering-board",
+  "title": "Logo 内部居中检查",
+  "image": ".openprd/harness/screenshots/logo.png",
+  "thresholdPx": 8,
+  "subject": {
+    "mode": "auto",
+    "weight": "contrast"
+  }
+}
+```
+
+如果自动 mask 把背景、阴影或透明边缘算进主体，可以显式指定颜色范围：
+
+```json
+{
+  "mode": "centering-board",
+  "image": ".openprd/harness/screenshots/logo.png",
+  "subject": {
+    "mode": "range",
+    "ranges": [
+      { "r": [180, 255], "g": [140, 255], "b": [0, 120] },
+      { "r": [210, 255], "g": [210, 255], "b": [200, 255] }
+    ],
+    "weight": "luma"
+  }
+}
+```
+
+`centering-board` 会输出红色画布中心线、绿色主体外接框、黄色视觉重心点，
+并在 metadata 里记录主体外接框中心偏移和视觉重心偏移。单张原始截图或
+“看起来居中”的主观判断不能替代这张证据板。
+
 ## 回归测试与质量评估报告
 
 `openprd init` 同时会创建质量契约：
@@ -510,7 +575,10 @@ openprd quality /path/to/project --verify
 `openprd run --verify` 会再次执行这个质量门禁。Agent 不得在本期必测块缺证据或需关注时宣称就绪。
 如果界面任务已有参考图，视觉就绪还需要 `.openprd/harness/visual-reviews/`
 下存在本次 `openprd visual-compare --reference/--actual` 产物；如果没有参考图但改动界面，
-还需要存在 `openprd visual-compare --before/--after` 修改前后产物。对比图仍有明显差异或漂移时，应回到实现继续调整。
+还需要存在 `openprd visual-compare --before/--after` 修改前后产物。普通截图实测需要截图实测证据板；
+同构列表、卡片、网格或表格还需要对齐辅助线证据板，并同时覆盖容器轨道和内部内容槽位；
+单个素材、图标、头像、徽标、按钮图形或图片内部居中/视觉重心判断需要内部居中证据板。
+对比图仍有明显差异、坐标偏差或漂移时，应回到实现继续调整。
 
 当一个问题已经修复并完成验证后，可以把抽象模式沉淀为项目级经验：
 
@@ -589,7 +657,9 @@ Claude Code 中优先用 Playwright、MCP 浏览器自动化或项目已有 e2e 
 通过后，`loop --finish` 会写入阶段性测试报告，并可在隔离 worktree 中为该任务生成独立 commit。
 界面任务完成前必须运行 `openprd visual-compare`：已有参考图时截实现图并走
 `--reference/--actual`，没有参考图但改动界面时先留修改前截图、完成后留修改后截图并走
-`--before/--after`，查看左右对比 JPG 后才能完成任务。
+`--before/--after`，普通截图实测走 `--board <verification-board.json>`，同构列表、卡片、网格或表格走
+`--board <alignment-board.json>`，单元素内部居中/视觉重心问题走
+`--board <centering-board.json>`，查看证据图后才能完成任务。
 
 `openprd run --context` 可能展示 loop 相关执行命令，但它不是自动执行指令。
 只有当用户当前明确要求开发、实现、继续任务、深度调研、深度对标、复刻落地或
@@ -636,8 +706,9 @@ Loop 状态会沉淀在 `.openprd/harness/`：
 OpenPrd 面向用户的时间统一使用上海时区的 `YYYY-MM-DD HH:mm:ss` 格式，不输出
 `T`、`Z` 或毫秒后缀。除命令、字段名、文件路径、API 名称、品牌名和产品名等必要
 专有术语外，生成文档、进度日志、proposal、prompt、测试报告，以及 Agent 产出的
-`spec.md` 与 tasks 默认使用简体中文。结构字段优先使用“新增需求”“需求”“场景”
-“当”“则”等中文表达，同时继续兼容历史 OpenSpec 英文结构字段。
+`spec.md` 与 tasks 默认跟随当前输入和 PRD 快照的主语言：中文语境使用简体中文，
+英文语境保持英文，无法判断时回退到简体中文。结构字段继续兼容历史 OpenSpec 英文
+结构字段；明确要求 `zh-CN` 的图示和合同场景仍会强制使用中文。
 
 历史项目不要手写 shell 循环批量改。使用 `fleet` 先扫描报告；它现在会顺带提示全局 registry 里已经登记了多少 OpenPrd 工作区、当前 root 外还有多少已知项目。`--sync-registry` 用来把当前 root 下已初始化的 `.openprd/` 工作区回填到 `~/.openprd/registry/workspaces.jsonl`。`--update-openprd` 只刷新已经有 `.openprd/` 的项目，项目自身 standards 或 validate 缺口会作为“项目健康需关注”报告，但不阻断生成引导更新；只有 agent 配置或普通项目默认保持不变，除非显式用 `--setup-missing` 接管。
 

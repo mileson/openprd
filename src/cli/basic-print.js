@@ -338,6 +338,9 @@ function printInitResult(result, json) {
 
   console.log(`已初始化 OpenPrd 工作区: ${result.ws.workspaceRoot}`);
   console.log(`场景模板: ${formatTemplatePackDisplay(result.currentState.templatePack, { fallback: '待确认' })}`);
+  if (result.templatePackGuidance?.message) {
+    console.log(`场景确认: ${result.templatePackGuidance.message}`);
+  }
   console.log(`已复制种子文件: ${result.created}`);
   if (result.standards) {
     console.log(`标准化文档: ${result.standards.docsRoot}`);

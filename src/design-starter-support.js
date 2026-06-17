@@ -157,8 +157,8 @@ function normalizeTheme(theme) {
   }
   return {
     ...theme,
-    bodyFont: String(theme.bodyFont ?? '"Inter", "PingFang SC", sans-serif'),
-    headlineFont: String(theme.headlineFont ?? '"Inter", "PingFang SC", sans-serif'),
+    bodyFont: String(theme.bodyFont ?? '"Avenir Next", "Noto Sans SC", "PingFang SC", sans-serif'),
+    headlineFont: String(theme.headlineFont ?? '"Avenir Next", "Noto Sans SC", "PingFang SC", sans-serif'),
     surfacePreset: String(theme.surfacePreset ?? 'paper-grid'),
   };
 }

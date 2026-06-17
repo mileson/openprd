@@ -415,13 +415,15 @@ test('openprd generates a change from the latest prd snapshot', async () => {
   assert.equal(result.validation.valid, true);
 
   const specText = await fs.readFile(path.join(project, 'openprd', 'changes', 'signup-flow', 'specs', 'consumer-requirements', 'spec.md'), 'utf8');
-  assert.match(specText, /^## 新增需求$/m);
-  assert.match(specText, /^### 需求：/m);
-  assert.match(specText, /^#### 场景：/m);
-  assert.match(specText, /^- \*\*当\*\*/m);
-  assert.match(specText, /^- \*\*则\*\*/m);
-  assert.doesNotMatch(specText, /ADDED Requirements|Requirement:|Scenario:|\*\*WHEN\*\*|\*\*THEN\*\*/);
+  assert.match(specText, /^## New Requirements$/m);
+  assert.match(specText, /^### Requirement: /m);
+  assert.match(specText, /^#### Scenario: /m);
+  assert.match(specText, /^- \*\*When\*\*/m);
+  assert.match(specText, /^- \*\*Then\*\*/m);
+  assert.doesNotMatch(specText, /^## 新增需求$|^### 需求：|^\- \*\*当\*\*|^\- \*\*则\*\*/m);
   const tasksText = await fs.readFile(path.join(project, 'openprd', 'changes', 'signup-flow', 'tasks.md'), 'utf8');
+  assert.match(tasksText, /^# Tasks$/m);
+  assert.match(tasksText, /Review Generated Spec Coverage/);
   assert.match(tasksText, /execution-mode: /);
   assert.match(tasksText, /parallel-group: /);
   assert.match(tasksText, /write-scope: /);
@@ -546,18 +548,19 @@ test('openprd exposes natural change task and specs cli commands', async () => {
   }
   assert.ok(logs.some((line) => line.includes('已生成 OpenPrd change: profile-settings')));
   const generatedProposal = await fs.readFile(path.join(project, 'openprd', 'changes', 'profile-settings', 'proposal.md'), 'utf8');
-  assert.ok(generatedProposal.includes('## 背景与原因'));
-  assert.ok(generatedProposal.includes('## 变更内容'));
-  assert.ok(generatedProposal.includes('## 影响范围'));
+  assert.ok(generatedProposal.includes('## Background And Rationale'));
+  assert.ok(generatedProposal.includes('## Change Scope'));
+  assert.ok(generatedProposal.includes('## Impact'));
   const generatedTasks = await fs.readFile(path.join(project, 'openprd', 'changes', 'profile-settings', 'tasks.md'), 'utf8');
   assert.ok(generatedTasks.includes('  - type: implementation'));
   assert.ok(generatedTasks.includes('  - type: documentation'));
   assert.ok(generatedTasks.includes('docs/basic'));
-  assert.ok(generatedTasks.includes('缺失的已补齐，过期的已更新'));
+  assert.ok(generatedTasks.includes('missing docs were added and stale docs were updated'));
   assert.ok(generatedTasks.includes('openprd standards . --verify'));
   assert.ok(generatedTasks.includes('--evidence-required'));
   assert.equal(generatedTasks.includes('openprd run . --verify'), false);
   assert.equal(/^(?:- \[ \] )?T\d{3}\.\d+\s+(实现主流程|实现需求|验证验收目标|验证非功能需求)\s*[:：]/m.test(generatedTasks), false);
+  assert.equal(/^(?:- \[ \] )?T\d{3}\.\d+\s+(Implement primary flow|Implement requirement|Validate acceptance goal|Validate non-functional requirement)\s*[:：]/m.test(generatedTasks), false);
   const taskState = await listOpenSpecTaskWorkspace(project, { change: 'profile-settings' });
   assert.ok(taskState.summary.implementation.total >= 2);
   assert.ok(taskState.tasks.some((task) => task.metadata.type === 'implementation' && /--evidence-required\b/.test(task.metadata.verify ?? '')));

@@ -1,4 +1,5 @@
 import { timestamp } from './time.js';
+import { isEnglishHeavyText, normalizeOutputLocale } from './language-policy.js';
 
 function escapeHtml(value) {
   return `${value ?? ''}`
@@ -120,26 +121,11 @@ function normalizePanel(panel, fallbackTitle = '评审备注', fallbackColor = '
 }
 
 function normalizeLocale(contract) {
-  return pickValue(contract?.locale, contract?.lang ?? 'zh-CN');
+  return normalizeOutputLocale(pickValue(contract?.locale, contract?.lang ?? 'zh-CN'));
 }
 
 function normalizeReviewStatus(value) {
   return pickValue(value, 'pending-confirmation');
-}
-
-function hasCjk(text) {
-  return /[\u3400-\u9fff]/.test(text);
-}
-
-function englishWords(text) {
-  return `${text ?? ''}`.match(/[A-Za-z][A-Za-z0-9+_.-]*/g) ?? [];
-}
-
-function isEnglishHeavyText(text) {
-  const value = `${text ?? ''}`.trim();
-  if (!value || hasCjk(value)) return false;
-  const words = englishWords(value);
-  return words.length >= 4;
 }
 
 function collectDiagramTexts(model) {
@@ -181,7 +167,7 @@ function collectDiagramTexts(model) {
 }
 
 export function validateDiagramLanguage(model) {
-  const locale = `${model?.locale ?? 'zh-CN'}`.toLowerCase();
+  const locale = normalizeOutputLocale(model?.locale ?? 'zh-CN').toLowerCase();
   if (!locale.startsWith('zh')) {
     return { valid: true, errors: [] };
   }

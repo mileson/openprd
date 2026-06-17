@@ -2,7 +2,7 @@
   "version": 1,
   "enabled": true,
   "strategy": "semver",
-  "currentVersion": "0.1.14",
+  "currentVersion": "0.1.15",
   "versions": [
     {
       "version": "0.1.2",
@@ -479,9 +479,9 @@
     },
     {
       "version": "0.1.14",
-      "status": "current",
+      "status": "released",
       "createdAt": "2026-06-15 11:00:13",
-      "updatedAt": "2026-06-15 11:00:13",
+      "updatedAt": "2026-06-17 15:04:20",
       "notes": null,
       "items": [
         {
@@ -519,8 +519,51 @@
         }
       ],
       "tag": null
+    },
+    {
+      "version": "0.1.15",
+      "status": "current",
+      "createdAt": "2026-06-17 15:04:20",
+      "updatedAt": "2026-06-17 15:04:21",
+      "notes": null,
+      "items": [
+        {
+          "type": "优化",
+          "summary": "优化",
+          "detail": "视觉证据跟随当前任务语境，visual-compare 支持 --locale/--lang 并在中文语境阻断重英文证据板文案",
+          "sentence": "优化：视觉证据跟随当前任务语境，visual-compare 支持 --locale/--lang 并在中文语境阻断重英文证据板文案",
+          "recordedAt": "2026-06-17 15:04:21",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1781679861068"
+          }
+        },
+        {
+          "type": "优化",
+          "summary": "优化",
+          "detail": "OpenSpec proposal、spec 与 tasks 跟随 PRD 主语言生成，英文需求保持英文产出",
+          "sentence": "优化：OpenSpec proposal、spec 与 tasks 跟随 PRD 主语言生成，英文需求保持英文产出",
+          "recordedAt": "2026-06-17 15:04:21",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1781679861290"
+          }
+        },
+        {
+          "type": "调整",
+          "summary": "调整",
+          "detail": "README 补充语境跟随的视觉证据说明和历史项目刷新入口",
+          "sentence": "调整：README 补充语境跟随的视觉证据说明和历史项目刷新入口",
+          "recordedAt": "2026-06-17 15:04:21",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1781679861487"
+          }
+        }
+      ],
+      "tag": null
     }
   ],
   "createdAt": "2026-06-02 21:28:04",
-  "updatedAt": "2026-06-15 11:00:13"
+  "updatedAt": "2026-06-17 15:04:21"
 }

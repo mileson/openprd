@@ -5,7 +5,7 @@
       "id": "quiet-sand",
       "useFor": ["editorial-contrast", "catalog-clarity"],
       "summary": "Warm neutral editorial theme with restrained contrast.",
-      "bodyFont": "\"Inter\", \"PingFang SC\", sans-serif",
+      "bodyFont": "\"Avenir Next\", \"Noto Sans SC\", \"PingFang SC\", sans-serif",
       "headlineFont": "\"Iowan Old Style\", \"Noto Serif SC\", \"Songti SC\", serif",
       "surfacePreset": "paper-grid",
       "tokens": {
@@ -23,8 +23,8 @@
       "id": "deep-launch",
       "useFor": ["product-launch", "immersive-showcase"],
       "summary": "Dark, cinematic launch theme with controlled highlight color.",
-      "bodyFont": "\"Inter\", \"PingFang SC\", sans-serif",
-      "headlineFont": "\"Inter\", \"PingFang SC\", sans-serif",
+      "bodyFont": "\"Avenir Next\", \"Noto Sans SC\", \"PingFang SC\", sans-serif",
+      "headlineFont": "\"DIN Condensed\", \"Avenir Next Condensed\", \"Noto Sans SC\", \"PingFang SC\", sans-serif",
       "surfacePreset": "dark-mesh",
       "tokens": {
         "background": "#0D1117",
@@ -56,11 +56,29 @@
       }
     },
     {
+      "id": "warm-invitation",
+      "useFor": ["warm-invitation", "editorial-contrast", "product-launch"],
+      "summary": "Welcoming paper-neutral theme with terracotta action color, brass support accents, serif-led headings, and soft-line surfaces.",
+      "bodyFont": "\"Noto Sans SC\", \"Avenir Next\", \"PingFang SC\", sans-serif",
+      "headlineFont": "\"Noto Serif SC\", \"Iowan Old Style\", \"Songti SC\", serif",
+      "surfacePreset": "paper-grid",
+      "tokens": {
+        "background": "#F7F5F2",
+        "surface": "#FFFDFB",
+        "text": "#2C2C2C",
+        "muted": "#6F6A63",
+        "accent": "#CC7D5E",
+        "border": "#E6E2DC",
+        "radius": "20px",
+        "shadow": "0 14px 34px rgba(44,44,44,0.08)"
+      }
+    },
+    {
       "id": "tool-neutral",
       "useFor": ["operational-density", "catalog-clarity"],
       "summary": "Quiet operational theme for work-focused interfaces.",
-      "bodyFont": "\"Avenir Next\", \"PingFang SC\", sans-serif",
-      "headlineFont": "\"Inter\", \"PingFang SC\", sans-serif",
+      "bodyFont": "\"Aptos\", \"Avenir Next\", \"Noto Sans SC\", \"PingFang SC\", sans-serif",
+      "headlineFont": "\"Aptos Display\", \"Avenir Next\", \"Noto Sans SC\", \"PingFang SC\", sans-serif",
       "surfacePreset": "workbench-grid",
       "tokens": {
         "background": "#F4F6F8",

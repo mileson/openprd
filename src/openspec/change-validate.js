@@ -60,7 +60,7 @@ function extractProposalCapabilities(text) {
   return capabilities;
 }
 
-const SPEC_SECTION_HEADING_RE = /^##\s+(?:(ADDED|MODIFIED|REMOVED)\s+Requirements|(?:新增|修改|移除)需求)\s*$/gim;
+const SPEC_SECTION_HEADING_RE = /^##\s+(?:(ADDED|MODIFIED|REMOVED|NEW|UPDATED|CHANGED)\s+Requirements|(?:新增|修改|移除)需求)\s*$/gim;
 const REQUIREMENT_HEADING_RE = /^###\s+(?:Requirement|需求)[：:]\s*(.+)$/gm;
 const SCENARIO_HEADING_RE = /^####\s+(?:Scenario|场景)[：:]\s*(.+)$/gm;
 const WHEN_STEP_RE = /^-\s+\*\*(?:WHEN|当)\*\*/im;

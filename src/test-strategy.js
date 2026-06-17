@@ -145,12 +145,15 @@ export function inferTestStrategyForTask(task = {}) {
     };
   }
 
-  if (includesAny(text, [/visual|视觉|截图|界面|页面|组件|样式|间距|留白|边距|宽度|高度|卡片|对齐|密度|圆角|颜色|字号|图标|按钮|padding|margin|spacing|gap|browser|playwright|cypress|e2e|端到端|用户主路径|主流程/])) {
+  const singleElementCentering = includesAny(text, [/centering-board|center-board|visual centroid|bbox center|canvas center|inside centered|internal centering|内部居中|视觉重心|主体外接框|外接框中心|画布中心|单元素|单个元素|偏心|不居中|没居中|图标内部|图片内部|素材内部|按钮图形|logo center|icon center/]);
+  if (includesAny(text, [/visual|视觉|截图|界面|页面|组件|样式|间距|留白|边距|宽度|高度|卡片|对齐|内容槽位|内部槽位|标题|副标题|标签|状态|价格|按钮|密度|圆角|颜色|字号|图标|按钮|padding|margin|spacing|gap|browser|playwright|cypress|e2e|端到端|用户主路径|主流程|内部居中|视觉重心|主体外接框|画布中心|偏心|不居中|没居中/])) {
     return {
       layers: ['integration', 'e2e'],
       size: 'large',
-      scope: includesAny(text, [/visual|视觉|截图|样式|间距|留白|边距|宽度|高度|卡片|对齐|密度|圆角|颜色|字号|图标|按钮|padding|margin|spacing|gap/]) ? 'visual-flow' : 'user-flow',
-      evidencePlan: '主流程自动化、截图或 visual-compare 证据 + 本任务 verify 命令；轻量 UI 可视优化也需要 before/after 或 verification-board 证据',
+      scope: includesAny(text, [/visual|视觉|截图|样式|间距|留白|边距|宽度|高度|卡片|对齐|内容槽位|内部槽位|标题|副标题|标签|状态|价格|按钮|密度|圆角|颜色|字号|图标|按钮|padding|margin|spacing|gap|内部居中|视觉重心|主体外接框|画布中心|偏心|不居中|没居中/]) ? 'visual-flow' : 'user-flow',
+      evidencePlan: singleElementCentering
+        ? '主流程自动化、截图或 visual-compare 证据 + 本任务 verify 命令；单元素内部居中要补 centering-board，量测画布中心、主体外接框中心和视觉重心偏移'
+        : '主流程自动化、截图或 visual-compare 证据 + 本任务 verify 命令；轻量 UI 可视优化也需要 before/after、verification-board 或 alignment-board 证据，同构卡片/列表要覆盖内部内容槽位',
       upgradeReason: '触达用户可见路径，需要端到端或视觉级证据；轻量 UI 可视优化不能只用构建或 dev-check 收口',
       inferred: true,
     };

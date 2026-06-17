@@ -1,6 +1,7 @@
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { buildChangeEntry, buildTaskCommitMessage, USER_CHANGE_SUMMARY_GUIDE } from '../src/change-summary.js';
+import { printInitResult } from '../src/cli/print.js';
 
 import {
   assert,
@@ -468,11 +469,39 @@ test('release workspace tracks current project version and version items', async
   assert.equal(ledger.versions.find((item) => item.version === '0.1.24').status, 'current');
 });
 
+test('init without template pack defaults to base and points scene confirmation later', async () => {
+  const project = await makeTempProject();
+
+  const initResult = await initWorkspace(project, {});
+  assert.equal(initResult.currentState.templatePack, 'base');
+  assert.equal(initResult.currentState.productType, null);
+  assert.equal(initResult.templatePackGuidance.source, 'default');
+  assert.ok(initResult.templatePackGuidance.message.includes('未指定场景模板'));
+  assert.ok(initResult.templatePackGuidance.message.includes('后续需求澄清或场景分类'));
+  assert.ok(initResult.templatePackGuidance.message.includes('个人消费者、企业服务或 Agent 场景'));
+
+  const progress = await fs.readFile(path.join(project, '.openprd', 'engagements', 'active', 'progress.md'), 'utf8');
+  assert.ok(progress.includes(initResult.templatePackGuidance.message));
+
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    printInitResult(initResult, false);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(logs.some((line) => line.includes(`场景确认: ${initResult.templatePackGuidance.message}`)));
+});
+
 test('init creates a workspace and validate passes', async () => {
   const project = await makeTempProject();
 
   const initResult = await initWorkspace(project, { templatePack: 'consumer' });
   assert.equal(initResult.currentState.templatePack, 'consumer');
+  assert.equal(initResult.templatePackGuidance.source, 'explicit');
+  assert.ok(initResult.templatePackGuidance.message.includes('已按指定场景模板'));
+  assert.ok(initResult.templatePackGuidance.message.includes('仍可按用户确认调整产品场景'));
   assert.equal(initResult.agentIntegration.ok, true);
   assert.deepEqual(initResult.agentIntegration.tools, ['codex', 'claude', 'cursor']);
 
@@ -675,8 +704,22 @@ test('design starter turns a bundled template into a real page entry', async () 
   const factsSheet = await fs.readFile(path.join(hydratedProject, '.openprd', 'design', 'active', 'facts-sheet.md'), 'utf8');
   assert.ok(factsSheet.includes('写给独立开发者的个人博客首页'));
   assert.equal(factsSheet.includes('待填写'), false);
+  const assetSpec = await fs.readFile(path.join(hydratedProject, '.openprd', 'design', 'active', 'asset-spec.md'), 'utf8');
+  assert.ok(assetSpec.includes('动效节奏'));
+  assert.ok(assetSpec.includes('构图记忆点'));
+  assert.ok(assetSpec.includes('memory-point'));
+  const directionPlan = await fs.readFile(path.join(hydratedProject, '.openprd', 'design', 'active', 'direction-plan.md'), 'utf8');
+  assert.ok(directionPlan.includes('审美主张'));
+  assert.ok(directionPlan.includes('记忆点'));
+  assert.ok(directionPlan.includes('温暖编辑感'));
+  const selectedDirection = await fs.readFile(path.join(hydratedProject, '.openprd', 'design', 'active', 'selected-direction.md'), 'utf8');
+  assert.ok(selectedDirection.includes('aesthetic:'));
+  assert.ok(selectedDirection.includes('memory-point:'));
+  assert.ok(selectedDirection.includes('anti-slop'));
   const frontendGuidelines = await fs.readFile(path.join(hydratedProject, 'docs', 'basic', 'frontend-guidelines.md'), 'utf8');
   assert.equal(frontendGuidelines.includes('待补充'), false);
+  assert.ok(frontendGuidelines.includes('审美主张'));
+  assert.ok(frontendGuidelines.includes('anti-slop'));
   const rootReadmes = (await fs.readdir(hydratedProject)).filter((name) => name.endsWith('_README.md'));
   assert.ok(rootReadmes.length > 0);
 

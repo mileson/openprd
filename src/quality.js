@@ -108,7 +108,7 @@ const EVIDENCE_TOKENS = {
   'test-strategy': ['test-layer', 'test-size', 'test-scope', 'evidence-plan', 'testing pyramid', '测试策略', '测试分流', '单元测试', '集成测试', '端到端'],
   smoke: ['smoke', 'e2e', 'playwright', 'cypress', 'main flow', 'happy path', '冒烟', '主流程'],
   'feature-coverage': ['feature coverage', 'acceptance', 'tasks done', 'openprd tasks', '验收', '功能覆盖', '任务完成'],
-  'visual-review': ['visual-compare', 'visual-before-after', 'visual-focus-board', 'visual-parallel-board', 'visual-verification-board', 'reference-actual', 'before-after', 'focus-board', 'parallel-board', 'verification-board', '效果图', '实现截图', '修改前', '修改后', '视觉对比', '局部焦点证据板', '并行实验证据板', '截图实测证据板'],
+  'visual-review': ['visual-compare', 'visual-before-after', 'visual-focus-board', 'visual-parallel-board', 'visual-verification-board', 'visual-alignment-board', 'visual-centering-board', 'reference-actual', 'before-after', 'focus-board', 'parallel-board', 'verification-board', 'alignment-board', 'centering-board', 'center-board', '效果图', '实现截图', '修改前', '修改后', '视觉对比', '局部焦点证据板', '并行实验证据板', '截图实测证据板', '对齐辅助线证据板', '内部居中证据板', '内容槽位', '内部槽位', '视觉重心', '主体外接框', '画布中心', '偏心'],
   'normal-performance': ['performance', 'perf', 'benchmark', 'latency', 'p95', 'lighthouse', 'k6', '性能', '耗时'],
   'extreme-performance': ['extreme', 'stress', 'load test', 'large-data', 'pressure', 'k6', '压力', '极端', '大数据'],
   knowledge: ['quality learn', 'incident', 'pattern', 'skill', '复盘', '经验', '沉淀'],

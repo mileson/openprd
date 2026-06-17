@@ -332,6 +332,17 @@ test('benchmark verify independently checks promotion control drift', async () =
 test('benchmark CLI commands add list approve verify', async () => {
   const project = await makeTempProject();
   await initWorkspace(project, { templatePack: 'agent' });
+  await fs.writeFile(
+    path.join(project, '.openprd', 'benchmarks', 'sources.yaml'),
+    [
+      'version: 1',
+      'schema: openprd.benchmarks.v1',
+      'updatedAt: 2026-01-01 00:00:00',
+      'sources: []',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
   await fs.writeFile(path.join(project, 'benchmark-cli-reference.md'), '# CLI Benchmark\n\n- doctor\n', 'utf8');
 
   const logs = [];

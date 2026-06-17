@@ -74,6 +74,22 @@ import { captureWorkspace, clarifyWorkspace, classifyWorkspace, computeWorkspace
 import { appendDecision, appendProgress, appendVerification, appendWorkflowEvent, buildCurrentStateSnapshot, buildWorkflowTaskGraph, computeWorkspaceDigest, CORE_TEMPLATE_FILES, ensureWorkspaceSkeleton, isSupportedProductType, loadCurrentLaneSnapshot, loadLatestVersionSnapshot, loadWorkspace, migrateWorkspaceSkeleton, normalizeVersionId, persistWorkspaceCurrentState, readVersionIndex, resolveActiveTemplatePack, resolveCurrentProductType, validateWorkspace } from './workspace-core.js';
 import { readWorkspaceRegistry } from './workspace-registry.js';
 
+function buildInitTemplatePackGuidance(templatePack, options = {}) {
+  const label = formatTemplatePackDisplay(templatePack, { fallback: '通用产品或工程场景' });
+  if (options.explicit) {
+    return {
+      source: 'explicit',
+      templatePack,
+      message: `已按指定场景模板使用${label}起步；后续需求澄清或场景分类时，仍可按用户确认调整产品场景。`,
+    };
+  }
+  return {
+    source: 'default',
+    templatePack,
+    message: `未指定场景模板，已使用${label}起步；后续需求澄清或场景分类时，可再锁定为个人消费者、企业服务或 Agent 场景。`,
+  };
+}
+
 async function initWorkspace(projectRoot, options) {
   const ws = await ensureWorkspaceSkeleton(projectRoot, options);
   const workspace = await loadWorkspace(projectRoot);
@@ -131,12 +147,16 @@ async function initWorkspace(projectRoot, options) {
     templatePack: currentState.templatePack,
     projectRoot,
   });
+  const templatePackGuidance = buildInitTemplatePackGuidance(currentState.templatePack, {
+    explicit: Boolean(options.templatePack),
+  });
   await appendProgress(workspace, [
     `已初始化工作区: ${workspace.workspaceRoot}。`,
     `场景模板: ${formatTemplatePackDisplay(currentState.templatePack, { fallback: '待确认' })}。`,
+    templatePackGuidance.message,
   ]);
 
-  return { ws: workspace, created: ws.created, currentState, standards, quality, growth, agentIntegration };
+  return { ws: workspace, created: ws.created, currentState, templatePackGuidance, standards, quality, growth, agentIntegration };
 }
 
 async function setupAgentIntegrationWorkspace(projectRoot, options = {}) {
@@ -980,6 +1000,7 @@ export async function main(argv = process.argv.slice(2)) {
         maxPanelWidth: flags.maxPanelWidth,
         referenceLabel: flags.referenceLabel,
         actualLabel: flags.actualLabel,
+        locale: flags.locale,
       });
       printVisualCompareResult(result, flags.json);
       return result.ok ? 0 : 1;

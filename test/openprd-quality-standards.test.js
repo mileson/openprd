@@ -1487,6 +1487,7 @@ test('visual-compare writes side-by-side review images', async () => {
   assert.equal(result.quality, 85);
   assert.equal(result.labels.reference, '效果图');
   assert.equal(result.labels.actual, '实现截图');
+  assert.equal(result.reviewArtifact.locale, 'zh-CN');
   assert.equal(result.outputPath.includes(path.join('.openprd', 'harness', 'visual-reviews')), true);
   assert.ok(result.metadataPath.endsWith('.json'));
   const metadata = JSON.parse(await fs.readFile(result.metadataPath, 'utf8'));
@@ -1531,6 +1532,17 @@ test('visual-compare writes side-by-side review images', async () => {
   assert.ok(path.basename(beforeAfterResult.outputPath).startsWith('visual-before-after-'));
   assert.ok(beforeAfterResult.nextActions.join('\n').includes('未改区域'));
 
+  const englishResult = await visualCompareWorkspace(project, {
+    reference,
+    actual,
+    locale: 'en',
+    maxPanelWidth: 100,
+  });
+  assert.equal(englishResult.labels.reference, 'Reference');
+  assert.equal(englishResult.labels.actual, 'Implementation');
+  assert.equal(englishResult.reviewArtifact.locale, 'en');
+  assert.ok(englishResult.nextActions.join('\n').includes('implementation'));
+
   const cliOut = path.join(project, '.openprd', 'harness', 'visual-reviews', 'cli.jpg');
   const logs = [];
   const originalLog = console.log;
@@ -1549,6 +1561,8 @@ test('visual-compare writes side-by-side review images', async () => {
       '82',
       '--max-panel-width',
       '100',
+      '--locale',
+      'en',
       '--json',
     ]), 0);
   } finally {
@@ -1558,6 +1572,8 @@ test('visual-compare writes side-by-side review images', async () => {
   assert.equal(cliResult.outputPath, cliOut);
   assert.equal(cliResult.mode, 'reference-actual');
   assert.equal(cliResult.quality, 82);
+  assert.equal(cliResult.labels.reference, 'Reference');
+  assert.equal(cliResult.labels.actual, 'Implementation');
   assert.equal((await sharp(cliOut).metadata()).format, 'jpeg');
 
   const beforeAfterCliOut = path.join(project, '.openprd', 'harness', 'visual-reviews', 'cli-before-after.jpg');
@@ -1756,12 +1772,154 @@ test('visual-compare writes focus and parallel review boards and quality can det
   assert.equal(verificationResult.mode, 'verification-board');
   assert.equal(verificationResult.items.length, 2);
   assert.equal(verificationResult.reviewArtifact.mode, 'verification-board');
+  assert.equal(verificationResult.reviewArtifact.locale, 'zh-CN');
   assert.equal((await sharp(verificationResult.outputPath).metadata()).format, 'jpeg');
+
+  const englishVerificationBoardPath = path.join(project, 'english-verification-board.json');
+  await fs.writeFile(englishVerificationBoardPath, `${JSON.stringify({
+    mode: 'verification-board',
+    title: 'Settings Screenshot Verification',
+    route: 'Open settings and confirm saved state',
+    screenshots: [
+      {
+        path: experimentA,
+        label: 'Initial State',
+        status: 'Pass',
+        checks: [
+          { label: 'Entry', value: 'Settings opens' },
+          { label: 'Button', value: 'Save button is visible' },
+        ],
+      },
+    ],
+  }, null, 2)}\n`);
+  const englishVerificationResult = await visualCompareWorkspace(project, {
+    board: englishVerificationBoardPath,
+    locale: 'en',
+    maxPanelWidth: 180,
+  });
+  assert.equal(englishVerificationResult.reviewArtifact.locale, 'en');
+  assert.equal(englishVerificationResult.reviewArtifact.title, 'Settings Screenshot Verification');
+  assert.ok(englishVerificationResult.nextActions.join('\n').includes('screenshot verification board'));
+
+  const invalidLanguageBoardPath = path.join(project, 'invalid-language-board.json');
+  await fs.writeFile(invalidLanguageBoardPath, `${JSON.stringify({
+    mode: 'verification-board',
+    title: 'Settings Screenshot Verification',
+    summary: 'Validate the settings page screenshot and saved state visually',
+    screenshot: experimentA,
+  }, null, 2)}\n`);
+  await assert.rejects(
+    () => visualCompareWorkspace(project, {
+      board: invalidLanguageBoardPath,
+      locale: 'zh-CN',
+      maxPanelWidth: 180,
+    }),
+    /Invalid visual board language for locale zh-CN[\s\S]*应跟随中文语境/,
+  );
+
+  const alignmentBoardPath = path.join(project, 'alignment-board.json');
+  await fs.writeFile(alignmentBoardPath, `${JSON.stringify({
+    mode: 'alignment-board',
+    title: '市场卡片对齐验收',
+    screenshot: actual,
+    screenshotLabel: '真实页面截图',
+    guides: [
+      { axis: 'x', position: 32, label: '卡片左边界' },
+      { axis: 'y', position: 44, label: '标题基线' },
+      { axis: 'y', position: 96, label: '描述基线' },
+    ],
+    boxes: [
+      { label: '第一张卡片', x: 24, y: 24, width: 86, height: 132 },
+      { label: '第二张卡片', x: 118, y: 24, width: 86, height: 132 },
+    ],
+    containerGroups: [
+      {
+        label: '卡片容器轨道',
+        pattern: '同构列表卡片外框',
+        expected: '卡片左边界、宽度和行顶对齐',
+        thresholdPx: 2,
+        metrics: [
+          { label: '卡片左边界 x', values: [32, 32, 32], thresholdPx: 2 },
+          { label: '卡片宽度', values: [86, 86, 86], thresholdPx: 2 },
+        ],
+      },
+    ],
+    contentSlots: [
+      {
+        label: '第一行列表卡片内部内容槽位',
+        pattern: '同构列表卡片',
+        expected: '标题、标签、描述、状态、价格和按钮相同槽位对齐',
+        thresholdPx: 2,
+        metrics: [
+          { label: '标题 y', values: [44, 44, 44], thresholdPx: 2 },
+          { label: '描述 y', values: [96, 97, 96], thresholdPx: 2 },
+          { label: '价格 y', values: [126, 126, 126], thresholdPx: 2 },
+          { label: '操作区 x', values: [248, 248, 248], thresholdPx: 2 },
+        ],
+      },
+    ],
+  }, null, 2)}\n`);
+  const alignmentResult = await visualCompareWorkspace(project, {
+    board: alignmentBoardPath,
+    maxPanelWidth: 180,
+  });
+  assert.equal(alignmentResult.mode, 'alignment-board');
+  assert.equal(alignmentResult.groups.length, 2);
+  assert.equal(alignmentResult.reviewArtifact.mode, 'alignment-board');
+  assert.deepEqual(alignmentResult.reviewArtifact.alignmentScope.contentSlotGroups, ['第一行列表卡片内部内容槽位']);
+  assert.ok(alignmentResult.groups.some((group) => group.level === 'container'));
+  assert.ok(alignmentResult.groups.some((group) => group.level === 'content-slot'));
+  assert.match(alignmentResult.groups.find((group) => group.level === 'content-slot').metrics[0].value, /spread=0px/);
+  assert.equal((await sharp(alignmentResult.outputPath).metadata()).format, 'jpeg');
+
+  const centeredIcon = path.join(project, 'centered-icon.png');
+  await sharp({
+    create: {
+      width: 120,
+      height: 120,
+      channels: 3,
+      background: '#ffffff',
+    },
+  }).composite([
+    {
+      input: Buffer.from(`
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <rect x="35" y="35" width="50" height="50" rx="10" fill="#111827"/>
+</svg>`),
+      left: 0,
+      top: 0,
+    },
+  ]).png().toFile(centeredIcon);
+
+  const centeringBoardPath = path.join(project, 'centering-board.json');
+  await fs.writeFile(centeringBoardPath, `${JSON.stringify({
+    mode: 'centering-board',
+    title: '图标内部居中验收',
+    image: centeredIcon,
+    imageLabel: '图标裁切',
+    thresholdPx: 2,
+    subject: {
+      mode: 'auto',
+      weight: 'contrast',
+    },
+  }, null, 2)}\n`);
+  const centeringResult = await visualCompareWorkspace(project, {
+    board: centeringBoardPath,
+    maxPanelWidth: 180,
+  });
+  assert.equal(centeringResult.mode, 'centering-board');
+  assert.equal(centeringResult.reviewArtifact.mode, 'centering-board');
+  assert.equal(centeringResult.centering.passed, true);
+  assert.deepEqual(centeringResult.centering.bboxCenterOffset, { x: 0, y: 0 });
+  assert.deepEqual(centeringResult.centering.visualCentroidOffset, { x: 0, y: 0 });
+  assert.equal((await sharp(centeringResult.outputPath).metadata()).format, 'jpeg');
 
   const visualArtifacts = await listVisualReviewArtifacts(project);
   assert.ok(visualArtifacts.some((artifact) => artifact.mode === 'focus-board'));
   assert.ok(visualArtifacts.some((artifact) => artifact.mode === 'parallel-board'));
   assert.ok(visualArtifacts.some((artifact) => artifact.mode === 'verification-board'));
+  assert.ok(visualArtifacts.some((artifact) => artifact.mode === 'alignment-board'));
+  assert.ok(visualArtifacts.some((artifact) => artifact.mode === 'centering-board'));
 
   const includesAny = (text, patterns) => {
     const haystack = String(text ?? '').toLowerCase();
@@ -1823,6 +1981,94 @@ test('visual-compare writes focus and parallel review boards and quality can det
   assert.equal(verificationReview.status, 'pass');
   assert.equal(verificationReview.expectsVerificationBoard, true);
   assert.ok(verificationReview.matchingArtifacts.some((artifact) => artifact.mode === 'verification-board'));
+
+  const alignmentReview = detectVisualReview({
+    policy: {
+      requiredGates: ['visual-review'],
+    },
+    activeChangeContext: {
+      text: '这次新开发列表卡片，包含同构重复单元，需要检查相同文案类型和相同槽位的对齐辅助线。',
+    },
+    activeTasks: {
+      tasks: [],
+    },
+    visualArtifacts,
+    includesAny,
+  });
+  assert.equal(alignmentReview.status, 'pass');
+  assert.equal(alignmentReview.expectsAlignmentBoard, true);
+  assert.equal(alignmentReview.expectsContentSlotAlignment, true);
+  assert.ok(alignmentReview.matchingArtifacts.some((artifact) => artifact.mode === 'alignment-board'));
+
+  const centeringReview = detectVisualReview({
+    policy: {
+      requiredGates: ['visual-review'],
+    },
+    activeChangeContext: {
+      text: '用户反馈这个单个图标内部不居中，需要检查画布中心、主体外接框和视觉重心是否偏心。',
+    },
+    activeTasks: {
+      tasks: [],
+    },
+    visualArtifacts,
+    includesAny,
+  });
+  assert.equal(centeringReview.status, 'pass');
+  assert.equal(centeringReview.expectsCenteringBoard, true);
+  assert.ok(centeringReview.matchingArtifacts.some((artifact) => artifact.mode === 'centering-board'));
+
+  const containerOnlyAlignmentReview = detectVisualReview({
+    policy: {
+      requiredGates: ['visual-review'],
+    },
+    activeChangeContext: {
+      text: '这次新开发卡片网格，需要检查标题、描述、价格和按钮这些内部内容槽位是否对齐。',
+    },
+    activeTasks: {
+      tasks: [],
+    },
+    visualArtifacts: [
+      {
+        mode: 'alignment-board',
+        path: '.openprd/harness/visual-reviews/container-only-alignment-board.jpg',
+        groups: [
+          {
+            label: '卡片外框轨道',
+            metrics: [
+              { label: '列间距 spread', value: '16, 16px / spread=0px / 阈值=2px / 通过' },
+            ],
+          },
+        ],
+      },
+    ],
+    includesAny,
+  });
+  assert.equal(containerOnlyAlignmentReview.status, 'needs-evidence');
+  assert.equal(containerOnlyAlignmentReview.expectsContentSlotAlignment, true);
+  assert.match(containerOnlyAlignmentReview.warnings.join('\n'), /内部内容槽位/);
+
+  for (const text of [
+    '这次新开发卡片网格，需要检查相同槽位对齐。',
+    '用户反馈页面排版漂移，需要对齐辅助线复核。',
+    '用户说这些元素对齐有问题，需要量坐标偏差。',
+  ]) {
+    const naturalLanguageAlignmentReview = detectVisualReview({
+      policy: {
+        requiredGates: ['visual-review'],
+      },
+      activeChangeContext: {
+        text,
+      },
+      activeTasks: {
+        tasks: [],
+      },
+      visualArtifacts,
+      includesAny,
+    });
+    assert.equal(naturalLanguageAlignmentReview.status, 'pass');
+    assert.equal(naturalLanguageAlignmentReview.expectsAlignmentBoard, true);
+    assert.ok(naturalLanguageAlignmentReview.matchingArtifacts.some((artifact) => artifact.mode === 'alignment-board'));
+  }
 });
 
 test('dev-check auto-applies detected unknown code extensions', async () => {

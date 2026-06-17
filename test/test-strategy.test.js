@@ -28,3 +28,14 @@ test('inferTestStrategyForTask treats lightweight visible UI fixes as visual flo
   assert.match(strategy.evidencePlan, /before\/after|verification-board/);
   assert.match(strategy.upgradeReason, /轻量 UI 可视优化/);
 });
+
+test('inferTestStrategyForTask routes single element internal centering to centering-board evidence', () => {
+  const strategy = inferTestStrategyForTask({
+    title: '这个图标内部不居中，视觉重心有点偏心，需要重新对齐',
+  });
+
+  assert.deepEqual(strategy.layers, ['integration', 'e2e']);
+  assert.equal(strategy.scope, 'visual-flow');
+  assert.match(strategy.evidencePlan, /centering-board/);
+  assert.match(strategy.evidencePlan, /视觉重心/);
+});
