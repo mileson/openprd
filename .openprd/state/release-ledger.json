@@ -2,7 +2,7 @@
   "version": 1,
   "enabled": true,
   "strategy": "semver",
-  "currentVersion": "0.1.15",
+  "currentVersion": "0.1.16",
   "versions": [
     {
       "version": "0.1.2",
@@ -522,9 +522,9 @@
     },
     {
       "version": "0.1.15",
-      "status": "current",
+      "status": "released",
       "createdAt": "2026-06-17 15:04:20",
-      "updatedAt": "2026-06-17 15:04:21",
+      "updatedAt": "2026-06-26 19:43:23",
       "notes": null,
       "items": [
         {
@@ -562,8 +562,29 @@
         }
       ],
       "tag": null
+    },
+    {
+      "version": "0.1.16",
+      "status": "current",
+      "createdAt": "2026-06-26 19:43:23",
+      "updatedAt": "2026-06-26 19:43:23",
+      "notes": null,
+      "items": [
+        {
+          "type": "优化",
+          "summary": "优化",
+          "detail": "图标、头像、徽标等透明素材默认先生成 3 个纯绿幕候选，用户选定后再抠透明、裁切居中、多尺寸导出并按真实 UI 场景接入",
+          "sentence": "优化：图标、头像、徽标等透明素材默认先生成 3 个纯绿幕候选，用户选定后再抠透明、裁切居中、多尺寸导出并按真实 UI 场景接入",
+          "recordedAt": "2026-06-26 19:43:23",
+          "source": {
+            "kind": "manual-note",
+            "manualId": "manual-note-1782474203126"
+          }
+        }
+      ],
+      "tag": null
     }
   ],
   "createdAt": "2026-06-02 21:28:04",
-  "updatedAt": "2026-06-17 15:04:21"
+  "updatedAt": "2026-06-26 19:43:23"
 }

@@ -40,6 +40,7 @@ OpenPrd 的需求初始化默认不是重问卷，而是先建立一层轻量的
 - 包含：Codex hook profile，默认 `lite` 安装 `UserPromptSubmit` 和只匹配直接编辑工具的轻量 `PreToolUse` 写入门禁，`guarded` 额外覆盖 shell 工具，`full` 作为完整 hook 遥测的显式开启选项。
 - 包含：实现阶段的文档影响判定规则，覆盖缺失文档补齐和已有文档过期检查。
 - 包含：生成图片内容的 agent guidance，要求用户说“生成图片 / 封面图 / 配图 / 海报 / 插画 / 图标 / 贴纸 / 头像 / banner / 主视觉/KV / 运营图 / 效果图 / 视觉稿 / mockup / 先看样子 / 确认设计方向”时默认走 `imagegen`（Codex 原生 Image 2）；只有用户明确指定 HTML、SVG、CSS、Canvas、代码稿或可编辑矢量/source artifact 时才使用代码绘图路径。
+- 包含：面向 UI 接入的图标资产链路，要求 logo、icon、avatar、badge、贴纸、空态插画、单物件 UI 位图等透明素材先生成 3 个异源候选方向，候选使用纯 `#00ff00` 绿幕、无文字、无 UI 容器并留足裁切边距；用户选定后再抠透明、裁切居中、导出 384px 或多尺寸资产，按真实 UI 位置调显示比例，并记录源图、透明产物、接入位置和验证结果。
 - 包含：大界面改动的实现前视觉方案评审，要求 Agent 使用 Codex Computer Use 截取产品内当前功能截图，再用 `imagegen`（Codex 原生 Image 2）基于截图生成至少 3 个不同设计方向，并横向拼接成带 1/2/3 序号的大图供用户确认。
 - 包含：`.openprd/design/` 前端设计框架层，内置 lenses、themes、layouts、components、recipes、checklists、assets 和 `active/` 活动合同，用于界面实现前的审美框架、资产约束和模板骨架复用。
 - 包含：界面任务的设计前置门，要求按需补齐 `facts-sheet`、`asset-spec`、`image-preflight`、`direction-plan` 和 `selected-direction`，再进入真实编码。
